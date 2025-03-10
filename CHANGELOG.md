@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [7.1.5](https://github.com/Cap-go/camera-preview/compare/7.1.4...7.1.5) (2025-03-10)
+
+
+### Bug Fixes
+
+* **deps:** update dependency androidx.coordinatorlayout:coordinatorlayout to v1.3.0 ([#181](https://github.com/Cap-go/camera-preview/issues/181)) ([f130d35](https://github.com/Cap-go/camera-preview/commit/f130d35f024a90eaf7592919d879b71b53681108))
+
 ### [7.1.4](https://github.com/Cap-go/camera-preview/compare/7.1.3...7.1.4) (2025-03-03)
 
 ### [7.1.3](https://github.com/Cap-go/camera-preview/compare/7.1.2...7.1.3) (2025-03-03)
