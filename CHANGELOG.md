@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [7.1.6](https://github.com/Cap-go/camera-preview/compare/7.1.5...7.1.6) (2025-03-10)
+
+
+### Bug Fixes
+
+* **deps:** update dependency androidx.exifinterface:exifinterface to v1.4.0 ([#182](https://github.com/Cap-go/camera-preview/issues/182)) ([ba4b673](https://github.com/Cap-go/camera-preview/commit/ba4b67356d19964c4b1200b66f4c13bd9506aab6))
+
 ### [7.1.5](https://github.com/Cap-go/camera-preview/compare/7.1.4...7.1.5) (2025-03-10)
 
 
