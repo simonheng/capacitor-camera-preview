@@ -12,9 +12,9 @@
 </p>
 <br>
 
-This plugin is compatible Capacitor 6 and above.
+This plugin is compatible Capacitor 7 and above.
 
-Use v5 for Capacitor 5 and below.
+Use v6 for Capacitor 6 and below.
 
 **PR's are greatly appreciated.**
 
@@ -68,6 +68,13 @@ If it don't work in dark mode here is issue who explain how to fix it: https://g
   <li>Set the focus mode, zoom, color effects, exposure mode, white balance mode and exposure compensation</li>
   <li>Tap to focus</li>
 </ul> -->
+
+## Good to know
+
+Video and photo taken with the plugin are never removed, so do not forget to remove them after used to not bloat the user phone.
+
+use https://capacitorjs.com/docs/apis/filesystem#deletefile for that
+
 
 # Installation
 
