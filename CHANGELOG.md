@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [7.2.0](https://github.com/Cap-go/camera-preview/compare/7.1.13...7.2.0) (2025-04-12)
+
+
+### Features
+
+* add includeSafeAreaInsets option for issue [#178](https://github.com/Cap-go/camera-preview/issues/178) ([ba34d89](https://github.com/Cap-go/camera-preview/commit/ba34d893467093cc49a213994289a5aa3af1e44f))
+
 ### [7.1.13](https://github.com/Cap-go/camera-preview/compare/7.1.12...7.1.13) (2025-04-07)
 
 ### [7.1.12](https://github.com/Cap-go/camera-preview/compare/7.1.11...7.1.12) (2025-04-07)
