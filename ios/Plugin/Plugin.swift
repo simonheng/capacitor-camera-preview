@@ -206,7 +206,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             self.height = UIScreen.main.bounds.size.height
         }
         self.posX = call.getInt("x") != nil ? CGFloat(call.getInt("x")!)/UIScreen.main.scale: 0
-        self.posY = call.getInt("y") != nil ? CGFloat(call.getInt("y")!)/UIScreen.main.scale: 0
+        self.posY = call.getInt("y") != nil ? CGFloat(call.getInt("y")!) / (call.getBool("includeSafeAreaInsets") ?? false ? 1.0 : UIScreen.main.scale) + (call.getBool("includeSafeAreaInsets") ?? false ? UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0 : 0) : 0
         if call.getInt("paddingBottom") != nil {
             self.paddingBottom = CGFloat(call.getInt("paddingBottom")!)
         }
