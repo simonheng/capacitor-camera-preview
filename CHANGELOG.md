@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [7.2.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.2.1...7.2.2) (2025-04-14)
+
+
+### Bug Fixes
+
+* package.json ([1479e79](https://github.com/Cap-go/capacitor-camera-preview/commit/1479e790f5854d173c66e4a1d35cee65a5248ba3))
+
 ### [7.2.1](https://github.com/Cap-go/camera-preview/compare/7.2.0...7.2.1) (2025-04-14)
 
 ## [7.2.0](https://github.com/Cap-go/camera-preview/compare/7.1.13...7.2.0) (2025-04-12)
