@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [7.2.5](https://github.com/Cap-go/capacitor-camera-preview/compare/7.2.4...7.2.5) (2025-04-28)
+
+
+### Bug Fixes
+
+* **deps:** update dependency androidx.exifinterface:exifinterface to v1.4.1 ([#188](https://github.com/Cap-go/capacitor-camera-preview/issues/188)) ([7dc10d1](https://github.com/Cap-go/capacitor-camera-preview/commit/7dc10d1bce315b0de597af65933d9b6536909f0d))
+
 ### [7.2.4](https://github.com/Cap-go/capacitor-camera-preview/compare/7.2.3...7.2.4) (2025-04-21)
 
 ### [7.2.3](https://github.com/Cap-go/capacitor-camera-preview/compare/7.2.2...7.2.3) (2025-04-14)
