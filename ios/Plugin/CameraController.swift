@@ -428,7 +428,32 @@ extension CameraController {
         } catch {
             throw CameraControllerError.invalidOperation
         }
+    }
 
+    func cleanup() {
+        if let captureSession = self.captureSession {
+            captureSession.stopRunning()
+            captureSession.inputs.forEach { captureSession.removeInput($0) }
+            captureSession.outputs.forEach { captureSession.removeOutput($0) }
+        }
+
+        self.previewLayer?.removeFromSuperlayer()
+        self.previewLayer = nil
+
+        self.frontCameraInput = nil
+        self.rearCameraInput = nil
+        self.audioInput = nil
+
+        self.frontCamera = nil
+        self.rearCamera = nil
+        self.audioDevice = nil
+
+        self.dataOutput = nil
+        self.photoOutput = nil
+        self.fileVideoOutput = nil
+
+        self.captureSession = nil
+        self.currentCameraPosition = nil
     }
 
     func captureVideo() throws {
