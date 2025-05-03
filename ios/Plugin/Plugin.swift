@@ -281,17 +281,19 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                 call.reject("camera not initialized")
                 return
             }
-            if self.cameraController.captureSession?.isRunning ?? false {
-                self.cameraController.captureSession?.stopRunning()
-                if let previewView = self.previewView {
-                    previewView.removeFromSuperview()
-                }
-                self.webView?.isOpaque = true
-                self.isInitialized = false
-                call.resolve()
-            } else {
-                call.reject("camera already stopped")
+            
+            // Always attempt to stop and clean up, regardless of captureSession state
+            if let previewView = self.previewView {
+                previewView.removeFromSuperview()
+                self.previewView = nil
             }
+            
+            self.webView?.isOpaque = true
+            self.isInitialized = false
+            self.isInitializing = false
+            self.cameraController.cleanup()
+            
+            call.resolve()
         }
     }
     // Get user's cache directory path
