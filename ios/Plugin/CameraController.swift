@@ -297,6 +297,13 @@ extension CameraController {
             guard let frontCamera = frontCamera else {
                 throw CameraControllerError.invalidOperation
             }
+
+            // Configure front camera 
+            try frontCamera.lockForConfiguration()
+            if frontCamera.isFocusModeSupported(.continuousAutoFocus) {
+                frontCamera.focusMode = .continuousAutoFocus
+            }
+            frontCamera.unlockForConfiguration()
             
             let newInput = try AVCaptureDeviceInput(device: frontCamera)
             if captureSession.canAddInput(newInput) {
