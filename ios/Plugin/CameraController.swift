@@ -269,8 +269,15 @@ extension CameraController {
             }
         }
         
-        // Remove all inputs
-        captureSession.inputs.forEach { captureSession.removeInput($0) }
+        // Store audio input if it exists
+        let audioInput = captureSession.inputs.first { ($0 as? AVCaptureDeviceInput)?.device.hasMediaType(.audio) ?? false }
+
+        // Remove only video inputs
+        captureSession.inputs.forEach { input in
+            if (input as? AVCaptureDeviceInput)?.device.hasMediaType(.video) ?? false {
+            captureSession.removeInput(input)
+            }
+        }
         
         // Configure new camera
         switch currentCameraPosition {
@@ -281,18 +288,19 @@ extension CameraController {
             
             // Configure rear camera
             try rearCamera.lockForConfiguration()
-            rearCamera.focusMode = .continuousAutoFocus
+            if rearCamera.isFocusModeSupported(.continuousAutoFocus) {
+                rearCamera.focusMode = .continuousAutoFocus
+            }
             rearCamera.unlockForConfiguration()
             
-            let newInput = try AVCaptureDeviceInput(device: rearCamera)
-            if captureSession.canAddInput(newInput) {
+            if let newInput = try? AVCaptureDeviceInput(device: rearCamera),
+                captureSession.canAddInput(newInput) {
                 captureSession.addInput(newInput)
                 rearCameraInput = newInput
                 self.currentCameraPosition = .rear
             } else {
                 throw CameraControllerError.invalidOperation
             }
-            
         case .rear:
             guard let frontCamera = frontCamera else {
                 throw CameraControllerError.invalidOperation
@@ -304,15 +312,20 @@ extension CameraController {
                 frontCamera.focusMode = .continuousAutoFocus
             }
             frontCamera.unlockForConfiguration()
-            
-            let newInput = try AVCaptureDeviceInput(device: frontCamera)
-            if captureSession.canAddInput(newInput) {
+    
+            if let newInput = try? AVCaptureDeviceInput(device: frontCamera),
+                captureSession.canAddInput(newInput) {
                 captureSession.addInput(newInput)
                 frontCameraInput = newInput
                 self.currentCameraPosition = .front
             } else {
                 throw CameraControllerError.invalidOperation
             }
+        }
+
+        // Re-add audio input if it existed
+        if let audioInput = audioInput, captureSession.canAddInput(audioInput) {
+            captureSession.addInput(audioInput)
         }
         
         // Update video orientation
