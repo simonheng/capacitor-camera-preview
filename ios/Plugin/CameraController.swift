@@ -240,7 +240,6 @@ extension CameraController {
     }
 
     func switchCameras() throws {
-        // Ensure we have a valid session and it's running
         guard let currentCameraPosition = currentCameraPosition,
               let captureSession = self.captureSession else {
             throw CameraControllerError.captureSessionIsMissing
@@ -265,17 +264,12 @@ extension CameraController {
             // Restart the session if it was running before
             if wasRunning {
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    guard let self = self else { return }
-                    do {
-                        try self.captureSession?.startRunning()
-                    } catch {
-                        print("Failed to restart capture session: \(error.localizedDescription)")
-                    }
+                    self?.captureSession?.startRunning()
                 }
             }
         }
         
-        // Remove all existing inputs
+        // Remove all inputs
         captureSession.inputs.forEach { captureSession.removeInput($0) }
         
         // Configure new camera
@@ -290,9 +284,10 @@ extension CameraController {
             rearCamera.focusMode = .continuousAutoFocus
             rearCamera.unlockForConfiguration()
             
-            rearCameraInput = try AVCaptureDeviceInput(device: rearCamera)
-            if captureSession.canAddInput(rearCameraInput!) {
-                captureSession.addInput(rearCameraInput!)
+            let newInput = try AVCaptureDeviceInput(device: rearCamera)
+            if captureSession.canAddInput(newInput) {
+                captureSession.addInput(newInput)
+                rearCameraInput = newInput
                 self.currentCameraPosition = .rear
             } else {
                 throw CameraControllerError.invalidOperation
@@ -303,9 +298,10 @@ extension CameraController {
                 throw CameraControllerError.invalidOperation
             }
             
-            frontCameraInput = try AVCaptureDeviceInput(device: frontCamera)
-            if captureSession.canAddInput(frontCameraInput!) {
-                captureSession.addInput(frontCameraInput!)
+            let newInput = try AVCaptureDeviceInput(device: frontCamera)
+            if captureSession.canAddInput(newInput) {
+                captureSession.addInput(newInput)
+                frontCameraInput = newInput
                 self.currentCameraPosition = .front
             } else {
                 throw CameraControllerError.invalidOperation
