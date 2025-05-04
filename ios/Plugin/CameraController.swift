@@ -202,21 +202,35 @@ extension CameraController {
     }
 
     func updateVideoOrientation() {
-        assert(Thread.isMainThread) // UIApplication.statusBarOrientation requires the main thread.
+        if Thread.isMainThread {
+            updateVideoOrientationOnMainThread()
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateVideoOrientationOnMainThread()
+            }
+        }
+    }
 
+    private func updateVideoOrientationOnMainThread() {
         let videoOrientation: AVCaptureVideoOrientation
-        switch UIApplication.shared.statusBarOrientation {
-        case .portrait:
-            videoOrientation = .portrait
-        case .landscapeLeft:
-            videoOrientation = .landscapeLeft
-        case .landscapeRight:
-            videoOrientation = .landscapeRight
-        case .portraitUpsideDown:
-            videoOrientation = .portraitUpsideDown
-        case .unknown:
-            fallthrough
-        @unknown default:
+        
+        // Use window scene interface orientation
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            switch windowScene.interfaceOrientation {
+            case .portrait:
+                videoOrientation = .portrait
+            case .landscapeLeft:
+                videoOrientation = .landscapeLeft
+            case .landscapeRight:
+                videoOrientation = .landscapeRight
+            case .portraitUpsideDown:
+                videoOrientation = .portraitUpsideDown
+            case .unknown:
+                fallthrough
+            @unknown default:
+                videoOrientation = .portrait
+            }
+        } else {
             videoOrientation = .portrait
         }
 
@@ -226,53 +240,82 @@ extension CameraController {
     }
 
     func switchCameras() throws {
-        guard let currentCameraPosition = currentCameraPosition, let captureSession = self.captureSession, captureSession.isRunning else { throw CameraControllerError.captureSessionIsMissing }
-
+        // Ensure we have a valid session and it's running
+        guard let currentCameraPosition = currentCameraPosition,
+              let captureSession = self.captureSession else {
+            throw CameraControllerError.captureSessionIsMissing
+        }
+        
+        // Ensure we have the necessary cameras
+        guard (currentCameraPosition == .front && rearCamera != nil) ||
+              (currentCameraPosition == .rear && frontCamera != nil) else {
+            throw CameraControllerError.noCamerasAvailable
+        }
+        
+        // Store the current running state
+        let wasRunning = captureSession.isRunning
+        if wasRunning {
+            captureSession.stopRunning()
+        }
+        
+        // Begin configuration
         captureSession.beginConfiguration()
-
-        func switchToFrontCamera() throws {
-
-            guard let rearCameraInput = self.rearCameraInput, captureSession.inputs.contains(rearCameraInput),
-                  let frontCamera = self.frontCamera else { throw CameraControllerError.invalidOperation }
-
-            self.frontCameraInput = try AVCaptureDeviceInput(device: frontCamera)
-
-            captureSession.removeInput(rearCameraInput)
-
-            if captureSession.canAddInput(self.frontCameraInput!) {
-                captureSession.addInput(self.frontCameraInput!)
-
+        defer {
+            captureSession.commitConfiguration()
+            // Restart the session if it was running before
+            if wasRunning {
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        try self.captureSession?.startRunning()
+                    } catch {
+                        print("Failed to restart capture session: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        
+        // Remove all existing inputs
+        captureSession.inputs.forEach { captureSession.removeInput($0) }
+        
+        // Configure new camera
+        switch currentCameraPosition {
+        case .front:
+            guard let rearCamera = rearCamera else {
+                throw CameraControllerError.invalidOperation
+            }
+            
+            // Configure rear camera
+            try rearCamera.lockForConfiguration()
+            rearCamera.focusMode = .continuousAutoFocus
+            rearCamera.unlockForConfiguration()
+            
+            rearCameraInput = try AVCaptureDeviceInput(device: rearCamera)
+            if captureSession.canAddInput(rearCameraInput!) {
+                captureSession.addInput(rearCameraInput!)
+                self.currentCameraPosition = .rear
+            } else {
+                throw CameraControllerError.invalidOperation
+            }
+            
+        case .rear:
+            guard let frontCamera = frontCamera else {
+                throw CameraControllerError.invalidOperation
+            }
+            
+            frontCameraInput = try AVCaptureDeviceInput(device: frontCamera)
+            if captureSession.canAddInput(frontCameraInput!) {
+                captureSession.addInput(frontCameraInput!)
                 self.currentCameraPosition = .front
             } else {
                 throw CameraControllerError.invalidOperation
             }
         }
-
-        func switchToRearCamera() throws {
-
-            guard let frontCameraInput = self.frontCameraInput, captureSession.inputs.contains(frontCameraInput),
-                  let rearCamera = self.rearCamera else { throw CameraControllerError.invalidOperation }
-
-            self.rearCameraInput = try AVCaptureDeviceInput(device: rearCamera)
-
-            captureSession.removeInput(frontCameraInput)
-
-            if captureSession.canAddInput(self.rearCameraInput!) {
-                captureSession.addInput(self.rearCameraInput!)
-
-                self.currentCameraPosition = .rear
-            } else { throw CameraControllerError.invalidOperation }
+        
+        // Update video orientation
+        DispatchQueue.main.async { [weak self] in
+            self?.updateVideoOrientation()
         }
-
-        switch currentCameraPosition {
-        case .front:
-            try switchToRearCamera()
-
-        case .rear:
-            try switchToFrontCamera()
-        }
-
-        captureSession.commitConfiguration()
     }
 
     func captureImage(completion: @escaping (UIImage?, Error?) -> Void) {
