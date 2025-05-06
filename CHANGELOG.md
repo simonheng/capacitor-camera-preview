@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [7.3.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.2.9...7.3.0) (2025-05-06)
+
+
+### Features
+
+* Flip camera IOS rewamp ([c396e79](https://github.com/Cap-go/capacitor-camera-preview/commit/c396e79cbe8c776b8839c5944b07a326be02e99a))
+
+
+### Bug Fixes
+
+* Fixed issue with video missing audio source ([30ce5b3](https://github.com/Cap-go/capacitor-camera-preview/commit/30ce5b3885b9e876febc559a4cce91c2e0e434f4))
+* Implement CodeRabbitAI suggestions ([6ad85ca](https://github.com/Cap-go/capacitor-camera-preview/commit/6ad85cad3d9b042830c901c72ffefa91b57efbdb))
+* More CodeRabbitAI fixes ([6b95d52](https://github.com/Cap-go/capacitor-camera-preview/commit/6b95d5223ca307062adb012b15ff7eee1a08a4d9))
+
 ### [7.2.9](https://github.com/Cap-go/capacitor-camera-preview/compare/7.2.8...7.2.9) (2025-05-05)
 
 ### [7.2.8](https://github.com/Cap-go/capacitor-camera-preview/compare/7.2.7...7.2.8) (2025-05-05)
