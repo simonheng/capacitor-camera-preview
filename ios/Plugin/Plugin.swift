@@ -263,11 +263,54 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func flip(_ call: CAPPluginCall) {
-        do {
-            try self.cameraController.switchCameras()
-            call.resolve()
-        } catch {
-            call.reject("failed to flip camera")
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else {
+                call.reject("Camera controller deallocated")
+                return
+            }
+            
+            // Disable user interaction during flip
+            self.previewView.isUserInteractionEnabled = false
+            
+            // Perform camera switch on background thread
+            DispatchQueue.global(qos: .userInitiated).async {
+                var retryCount = 0
+                let maxRetries = 3
+                
+                func attemptFlip() {
+                    do {
+                        try self.cameraController.switchCameras()
+                        
+                        DispatchQueue.main.async {
+                            self.cameraController.previewLayer?.frame = self.previewView.bounds
+                            self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+                            self.previewView.isUserInteractionEnabled = true
+                            call.resolve()
+                        }
+                    } catch {
+                        retryCount += 1
+                        
+                        if retryCount < maxRetries {
+                            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
+                                attemptFlip()
+                            }
+                        } else {
+                            DispatchQueue.main.async {
+                                self.previewView.isUserInteractionEnabled = true
+                                print("Failed to flip camera after \(maxRetries) attempts: \(error.localizedDescription)")
+                                call.reject("Failed to flip camera: \(error.localizedDescription)")
+                            }
+                        }
+                    }
+                }
+                
+                attemptFlip()
+            }
         }
     }
 
