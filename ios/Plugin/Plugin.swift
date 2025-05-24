@@ -69,18 +69,24 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     var disableAudio: Bool = false
 
     @objc func rotated() {
-        let height = self.paddingBottom != nil ? self.height! - self.paddingBottom!: self.height!
+        guard let previewView = self.previewView,
+              let posX = self.posX,
+              let posY = self.posY,
+              let width = self.width,
+              let heightValue = self.height else {
+            return
+        }
+        let paddingBottom = self.paddingBottom ?? 0
+        let height = heightValue - paddingBottom
 
         if UIWindow.isLandscape {
-            self.previewView.frame = CGRect(x: self.posY!, y: self.posX!, width: max(height, self.width!), height: min(height, self.width!))
-            self.cameraController.previewLayer?.frame = self.previewView.frame
+            previewView.frame = CGRect(x: posY, y: posX, width: max(height, width), height: min(height, width))
+            self.cameraController.previewLayer?.frame = previewView.frame
         }
 
         if UIWindow.isPortrait {
-            if self.previewView != nil && self.posX != nil && self.posY != nil && self.width != nil && self.height != nil {
-                self.previewView.frame = CGRect(x: self.posX!, y: self.posY!, width: min(height, self.width!), height: max(height, self.width!))
-            }
-            self.cameraController.previewLayer?.frame = self.previewView.frame
+            previewView.frame = CGRect(x: posX, y: posY, width: min(height, width), height: max(height, width))
+            self.cameraController.previewLayer?.frame = previewView.frame
         }
 
         if let connection = self.cameraController.fileVideoOutput?.connection(with: .video) {
