@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [7.3.3](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.2...7.3.3) (2025-05-24)
+
+
+### Bug Fixes
+
+* **ios:** Fixed issue that caused crash of app on destroy of preview. ([fd1a612](https://github.com/Cap-go/capacitor-camera-preview/commit/fd1a612f2d9f9731f6b5b8dad2855f3be57d4dca))
+
 ### [7.3.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.1...7.3.2) (2025-05-19)
 
 ### [7.3.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.0...7.3.1) (2025-05-12)
