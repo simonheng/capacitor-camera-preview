@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [7.3.8](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.7...7.3.8) (2025-06-23)
+
+
+### Bug Fixes
+
+* **deps:** update dependency androidx.appcompat:appcompat to v1.7.1 ([#198](https://github.com/Cap-go/capacitor-camera-preview/issues/198)) ([aad5624](https://github.com/Cap-go/capacitor-camera-preview/commit/aad5624135649c2fc6e449e8b3f00fd0cba96553))
+
 ### [7.3.7](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.6...7.3.7) (2025-06-09)
 
 ### [7.3.6](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.5...7.3.6) (2025-06-02)
