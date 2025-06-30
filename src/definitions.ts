@@ -35,7 +35,9 @@ export type CameraDeviceType =
   /** builtInTripleCamera - wide + ultraWide + telephoto */
   | 'triple'
   /** builtInTrueDepthCamera - front-facing camera with depth sensing */
-  | 'trueDepth';
+  | 'trueDepth'
+  /** Multi-camera logical device - Android only */
+  | 'multi';
 
 export type CameraSessionConfiguration = CameraPreviewOptions;
 

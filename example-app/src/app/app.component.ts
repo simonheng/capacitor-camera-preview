@@ -4,20 +4,25 @@ import { addIcons } from 'ionicons';
 import {
   add,
   aperture,
+  bugOutline,
   cameraOutline,
   cameraReverse,
   cameraSharp,
   close,
   closeCircle,
+  closeOutline,
   flash,
   flashOff,
   imagesSharp,
   qrCodeOutline,
+  refreshOutline,
   remove,
   search,
   searchOutline,
+  stop,
   sunny,
   sunnyOutline,
+  videocam,
 } from 'ionicons/icons';
 
 @Component({
@@ -30,20 +35,25 @@ export class AppComponent {
     addIcons({
       add,
       aperture,
+      bugOutline,
       cameraOutline,
       cameraReverse,
       cameraSharp,
       close,
       closeCircle,
+      closeOutline,
       flash,
       flashOff,
       imagesSharp,
       qrCodeOutline,
+      refreshOutline,
       remove,
       search,
       searchOutline,
+      stop,
       sunny,
       sunnyOutline,
+      videocam,
     });
   }
 }

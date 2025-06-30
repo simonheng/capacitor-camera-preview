@@ -126,8 +126,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         // Discover all available cameras
         let deviceTypes: [AVCaptureDevice.DeviceType] = [
             .builtInWideAngleCamera,
-            .builtInTelephotoCamera,
             .builtInUltraWideCamera,
+            .builtInTelephotoCamera,
+            .builtInDualCamera,
+            .builtInDualWideCamera,
+            .builtInTripleCamera,
             .builtInTrueDepthCamera
         ]
 
@@ -524,8 +527,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     @objc func getAvailableDevices(_ call: CAPPluginCall) {
         let deviceTypes: [AVCaptureDevice.DeviceType] = [
             .builtInWideAngleCamera,
-            .builtInTelephotoCamera,
             .builtInUltraWideCamera,
+            .builtInTelephotoCamera,
+            .builtInDualCamera,
+            .builtInDualWideCamera,
+            .builtInTripleCamera,
             .builtInTrueDepthCamera
         ]
 

@@ -57,32 +57,27 @@
     </ion-card>
   </div>
 
-  <!-- Floating Action Buttons -->
-  <ion-fab class="close-fab" slot="fixed" horizontal="start" vertical="top">
-    <ion-fab-button (click)="close()" color="dark" size="small">
-      <ion-icon name="close"></ion-icon>
+  <ion-fab
+    class="camera-actions"
+    slot="fixed"
+    horizontal="end"
+    vertical="center"
+  >
+    <!-- Control Actions -->
+    <ion-fab-button (click)="close()" size="small">
+      <ion-icon name="close-outline"></ion-icon>
     </ion-fab-button>
-  </ion-fab>
 
-  <ion-fab class="test-fab" slot="fixed" horizontal="end" vertical="top">
-    <ion-fab-button (click)="testAllFeatures()" color="primary" size="small">
-      <ion-icon name="bug"></ion-icon>
+    <ion-fab-button (click)="testAllFeatures()" size="small">
+      <ion-icon name="bug-outline"></ion-icon>
     </ion-fab-button>
-  </ion-fab>
 
-  <ion-fab class="refresh-fab" slot="fixed" horizontal="center" vertical="top">
-    <ion-fab-button (click)="refreshDeviceInfo()" color="secondary" size="small">
-      <ion-icon name="refresh"></ion-icon>
+    <ion-fab-button (click)="refreshDeviceInfo()" size="small">
+      <ion-icon name="refresh-outline"></ion-icon>
     </ion-fab-button>
-  </ion-fab>
 
-  @if (cameraStarted()) {
-    <ion-fab
-      class="camera-actions"
-      slot="fixed"
-      horizontal="end"
-      vertical="center"
-    >
+    <!-- Camera Actions -->
+    @if (cameraStarted()) {
       <ion-fab-button (click)="nextFlashMode()" size="small">
         @let fm = flashMode();
         @if (fm === "off") {
@@ -112,7 +107,10 @@
       >
         <ion-icon name="remove"></ion-icon>
       </ion-fab-button>
-    </ion-fab>
+    }
+  </ion-fab>
+
+  @if (cameraStarted()) {
 
     <!-- Video Recording Controls -->
     <ion-fab

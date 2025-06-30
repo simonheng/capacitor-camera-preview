@@ -84,11 +84,13 @@ public class CameraPreview
       return;
     }
     
+    Logger.debug(getLogTag(), "flip: Starting camera flip");
     try {
       camera2View.flipCamera();
+      Logger.debug(getLogTag(), "flip: Camera flip completed successfully");
       call.resolve();
     } catch (Exception e) {
-      Logger.debug(getLogTag(), "Camera flip exception: " + e);
+      Logger.debug(getLogTag(), "flip: Camera flip exception: " + e.getMessage());
       call.reject("failed to flip camera: " + e.getMessage());
     }
   }

@@ -29,6 +29,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
 import android.webkit.WebView;
+import android.app.Activity;
 
 import androidx.annotation.NonNull;
 
@@ -44,6 +45,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.io.FileOutputStream;
+import java.io.File;
 
 public class Camera2View {
     private static final String TAG = "Camera2View";
@@ -130,10 +133,12 @@ public class Camera2View {
     }
 
     public void stopSession() {
+        Log.d(TAG, "stopSession: Stopping camera session");
+        isRunning = false;
         closeCamera();
         stopBackgroundThread();
         removeSurfaceView();
-        isRunning = false;
+        Log.d(TAG, "stopSession: Camera session stopped");
     }
 
     private void startBackgroundThread() {
@@ -304,21 +309,30 @@ public class Camera2View {
     }
 
     private String getCameraIdByPosition(String position) {
+        Log.d(TAG, "getCameraIdByPosition: Looking for position: " + position);
         try {
-            for (String cameraId : cameraManager.getCameraIdList()) {
+            String[] cameraIdList = cameraManager.getCameraIdList();
+            Log.d(TAG, "getCameraIdByPosition: Found " + cameraIdList.length + " cameras");
+            
+            for (String cameraId : cameraIdList) {
                 CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
                 Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
                 
+                Log.d(TAG, "getCameraIdByPosition: Camera " + cameraId + " facing: " + facing);
+                
                 if (facing != null) {
                     if ("front".equals(position) && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                        Log.d(TAG, "getCameraIdByPosition: Found front camera: " + cameraId);
                         return cameraId;
                     } else if (("rear".equals(position) || "back".equals(position)) && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                        Log.d(TAG, "getCameraIdByPosition: Found rear camera: " + cameraId);
                         return cameraId;
                     }
                 }
             }
+            Log.w(TAG, "getCameraIdByPosition: No camera found for position: " + position);
         } catch (CameraAccessException e) {
-            Log.e(TAG, "Error getting camera ID by position", e);
+            Log.e(TAG, "getCameraIdByPosition: Error getting camera ID by position", e);
         }
         return null;
     }
@@ -607,6 +621,9 @@ public class Camera2View {
                     byte[] bytes = new byte[buffer.remaining()];
                     buffer.get(bytes);
                     
+                    // Apply rotation correction
+                    bytes = correctImageRotation(bytes);
+                    
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
                     if (listener != null) {
                         listener.onPictureTaken(base64);
@@ -635,6 +652,9 @@ public class Camera2View {
                     ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                     byte[] bytes = new byte[buffer.remaining()];
                     buffer.get(bytes);
+                    
+                    // Apply rotation correction
+                    bytes = correctImageRotation(bytes);
                     
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
                     if (listener != null) {
@@ -702,38 +722,46 @@ public class Camera2View {
                         int[] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
                         if (capabilities != null) {
                             Log.d(TAG, "getAvailableDevices: Camera " + cameraId + " capabilities count: " + capabilities.length);
+                            boolean isLogicalMultiCamera = false;
                             for (int capability : capabilities) {
                                 if (capability == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) {
-                                    deviceType = "dual";
-                                    Log.d(TAG, "getAvailableDevices: Camera " + cameraId + " detected as dual camera");
+                                    isLogicalMultiCamera = true;
+                                    Log.d(TAG, "getAvailableDevices: Camera " + cameraId + " is logical multi-camera");
                                     break;
                                 }
+                            }
+                            
+                            // For logical multi-cameras, also add their physical cameras
+                            if (isLogicalMultiCamera && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                                java.util.Set<String> physicalCameraIds = characteristics.getPhysicalCameraIds();
+                                Log.d(TAG, "getAvailableDevices: Logical camera " + cameraId + " has " + physicalCameraIds.size() + " physical cameras");
+                                
+                                for (String physicalId : physicalCameraIds) {
+                                    try {
+                                        CameraCharacteristics physicalCharacteristics = cameraManager.getCameraCharacteristics(physicalId);
+                                        String physicalDeviceType = detectDeviceType(physicalCharacteristics, physicalId);
+                                        String physicalLabel = createLabel(physicalId, position, physicalDeviceType);
+                                        
+                                        Log.d(TAG, "getAvailableDevices: Adding physical camera - ID: " + physicalId + 
+                                                 ", Label: " + physicalLabel + ", Type: " + physicalDeviceType);
+                                        
+                                        devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(physicalId, physicalLabel, position, physicalDeviceType));
+                                    } catch (Exception e) {
+                                        Log.e(TAG, "getAvailableDevices: Error processing physical camera " + physicalId, e);
+                                    }
+                                }
+                                
+                                // Also add the logical camera itself
+                                deviceType = "multi";
+                                label = createLabel(cameraId, position, deviceType);
                             }
                         }
                     }
 
-                    // Try to detect camera types based on focal length or other characteristics
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                        float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
-                        if (focalLengths != null && focalLengths.length > 0) {
-                            float focalLength = focalLengths[0];
-                            Log.d(TAG, "getAvailableDevices: Camera " + cameraId + " focal length: " + focalLength);
-                            
-                            // Typical focal lengths (in mm equivalent):
-                            // Ultra-wide: ~13-16mm (smartphone equivalent ~2.2-2.6mm)
-                            // Wide: ~24-28mm (smartphone equivalent ~4-5mm)  
-                            // Telephoto: ~52-85mm (smartphone equivalent ~8.5-14mm)
-                            if (focalLength < 3.0f) {
-                                deviceType = "ultraWide";
-                                label += " (Ultra-wide)";
-                            } else if (focalLength > 7.0f) {
-                                deviceType = "telephoto";
-                                label += " (Telephoto)";
-                            } else {
-                                deviceType = "wideAngle";
-                                label += " (Wide)";
-                            }
-                        }
+                    // Detect device type for regular cameras
+                    if (!deviceType.equals("multi")) {
+                        deviceType = detectDeviceType(characteristics, cameraId);
+                        label = createLabel(cameraId, position, deviceType);
                     }
 
                     Log.d(TAG, "getAvailableDevices: Adding device - ID: " + cameraId + 
@@ -755,6 +783,52 @@ public class Camera2View {
             Log.e(TAG, "getAvailableDevices: Unexpected error", e);
             return Collections.emptyList();
         }
+    }
+
+    private String detectDeviceType(CameraCharacteristics characteristics, String cameraId) {
+        // Try to detect camera types based on focal length
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+            if (focalLengths != null && focalLengths.length > 0) {
+                float focalLength = focalLengths[0];
+                Log.d(TAG, "detectDeviceType: Camera " + cameraId + " focal length: " + focalLength);
+                
+                // Typical focal lengths (in mm equivalent):
+                // Ultra-wide: ~13-16mm (smartphone equivalent ~2.2-2.6mm)
+                // Wide: ~24-28mm (smartphone equivalent ~4-5mm)  
+                // Telephoto: ~52-85mm (smartphone equivalent ~8.5-14mm)
+                if (focalLength < 3.0f) {
+                    return "ultraWide";
+                } else if (focalLength > 7.0f) {
+                    return "telephoto";
+                } else {
+                    return "wideAngle";
+                }
+            }
+        }
+        return "wideAngle";
+    }
+
+    private String createLabel(String cameraId, String position, String deviceType) {
+        String baseLabel = position.equals("front") ? "Front Camera" : "Rear Camera";
+        String typeLabel = "";
+        
+        switch (deviceType) {
+            case "ultraWide":
+                typeLabel = " (Ultra-wide)";
+                break;
+            case "telephoto":
+                typeLabel = " (Telephoto)";
+                break;
+            case "wideAngle":
+                typeLabel = " (Wide)";
+                break;
+            case "multi":
+                typeLabel = " (Multi)";
+                break;
+        }
+        
+        return baseLabel + " " + cameraId + typeLabel;
     }
 
     public ZoomFactors getZoomFactors() {
@@ -928,16 +1002,75 @@ public class Camera2View {
     }
 
     public void flipCamera() throws Exception {
-        String newCameraId = null;
+        Log.d(TAG, "flipCamera: Starting camera flip");
         String currentPosition = getCurrentPosition();
         String targetPosition = "front".equals(currentPosition) ? "rear" : "front";
         
-        newCameraId = getCameraIdByPosition(targetPosition);
+        Log.d(TAG, "flipCamera: Current position: " + currentPosition + ", target: " + targetPosition);
+        
+        String newCameraId = getCameraIdByPosition(targetPosition);
         if (newCameraId == null) {
+            Log.e(TAG, "flipCamera: No camera found for position: " + targetPosition);
             throw new Exception("No camera found for position: " + targetPosition);
         }
 
-        switchToDevice(newCameraId);
+        Log.d(TAG, "flipCamera: Found target camera ID: " + newCameraId);
+        
+        // Store current session config for restart
+        CameraSessionConfiguration currentConfig = sessionConfig;
+        if (currentConfig != null) {
+            // Update position in config
+            currentConfig = new CameraSessionConfiguration(
+                newCameraId,
+                targetPosition.equals("rear") ? "back" : targetPosition,
+                currentConfig.getX(),
+                currentConfig.getY(),
+                currentConfig.getWidth(),
+                currentConfig.getHeight(),
+                currentConfig.getPaddingBottom(),
+                currentConfig.isToBack(),
+                currentConfig.isStoreToFile(),
+                currentConfig.isEnableOpacity(),
+                currentConfig.isEnableZoom(),
+                currentConfig.isDisableExifHeaderStripping(),
+                currentConfig.isDisableAudio(),
+                currentConfig.getZoomFactor()
+            );
+        }
+
+        final CameraSessionConfiguration finalConfig = currentConfig;
+        
+        // Ensure UI operations run on main thread
+        if (context instanceof Activity) {
+            Activity activity = (Activity) context;
+            activity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Log.d(TAG, "flipCamera: Stopping current session on UI thread");
+                        stopSession();
+                        
+                        // Start new session after a brief delay
+                        android.os.Handler handler = new android.os.Handler();
+                        handler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                Log.d(TAG, "flipCamera: Starting new session with camera: " + newCameraId);
+                                startSession(finalConfig);
+                            }
+                        }, 150);
+                        
+                    } catch (Exception e) {
+                        Log.e(TAG, "flipCamera: Error during UI thread execution", e);
+                        if (listener != null) {
+                            listener.onCameraStartError("Failed to flip camera: " + e.getMessage());
+                        }
+                    }
+                }
+            });
+        } else {
+            throw new Exception("Context is not an Activity - cannot access UI thread");
+        }
     }
 
     private String getCurrentPosition() {
@@ -957,5 +1090,69 @@ public class Camera2View {
             }
         }
         return "rear";
+    }
+
+    private byte[] correctImageRotation(byte[] imageBytes) {
+        try {
+            if (cameraCharacteristics == null) {
+                return imageBytes;
+            }
+
+            // Get sensor orientation
+            Integer sensorOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+            if (sensorOrientation == null) {
+                return imageBytes;
+            }
+
+            // Decode bitmap
+            Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+            if (bitmap == null) {
+                return imageBytes;
+            }
+
+            // Calculate rotation needed
+            int rotation = 0;
+            boolean isFrontCamera = false;
+            Integer lensFacing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING);
+            
+            if (lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+                isFrontCamera = true;
+                // Front camera: mirror the sensor orientation
+                rotation = (360 - sensorOrientation) % 360;
+            } else {
+                // Back camera: use sensor orientation directly
+                rotation = sensorOrientation;
+            }
+
+            Log.d(TAG, "correctImageRotation: Sensor orientation=" + sensorOrientation + 
+                  ", front camera=" + isFrontCamera + ", applying rotation=" + rotation);
+
+            // Apply transformations
+            Matrix matrix = new Matrix();
+            
+            // Apply rotation
+            if (rotation != 0) {
+                matrix.postRotate(rotation);
+            }
+            
+            // Mirror front camera horizontally (like a mirror)
+            if (isFrontCamera) {
+                matrix.postScale(-1, 1);
+            }
+
+            // Apply transformations
+            if (!matrix.isIdentity()) {
+                bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+            }
+
+            // Convert back to byte array
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream);
+            return stream.toByteArray();
+
+        } catch (Exception e) {
+            Log.e(TAG, "correctImageRotation: Error correcting rotation", e);
+            return imageBytes; // Return original if correction fails
+        }
     }
 } 

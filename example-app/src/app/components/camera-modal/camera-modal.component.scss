@@ -93,33 +93,7 @@
   }
 }
 
-// Floating Action Buttons
-.close-fab, .test-fab, .refresh-fab {
-  margin: 16px;
-  
-  ion-fab-button {
-    --box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  }
-}
 
-.close-fab {
-  ion-fab-button {
-    --background: rgba(0, 0, 0, 0.8);
-    --color: white;
-  }
-}
-
-.test-fab {
-  ion-fab-button {
-    --background: var(--ion-color-primary);
-  }
-}
-
-.refresh-fab {
-  ion-fab-button {
-    --background: var(--ion-color-secondary);
-  }
-}
 
 // Toolbar and icons
 ion-toolbar {
@@ -264,31 +238,6 @@ ion-chip.barcode-detected {
 
 // Responsive adjustments
 @media (max-width: 768px) {
-  .developer-panel {
-    ion-item {
-      ion-label {
-        h3 {
-          font-size: 0.8rem;
-        }
-        
-        p {
-          font-size: 0.7rem;
-        }
-      }
-    }
-  }
-  
-  .advanced-panel {
-    ion-item {
-      ion-label {
-        font-size: 0.8rem;
-      }
-      
-      ion-button {
-        font-size: 0.8rem;
-      }
-    }
-  }
   
   .floating-info-panel {
     ion-card {
@@ -310,9 +259,7 @@ ion-chip.barcode-detected {
     }
   }
   
-  .close-fab, .test-fab, .refresh-fab {
-    margin: 12px;
-  }
+
   
   .test-results {
     left: 10px;
@@ -330,12 +277,6 @@ ion-chip.barcode-detected {
 
 // High contrast mode for better visibility
 @media (prefers-contrast: high) {
-  .developer-panel,
-  .advanced-panel {
-    background: rgba(0, 0, 0, 0.95);
-    border: 1px solid white;
-  }
-  
   .floating-info-panel ion-card {
     --background: black;
     border: 2px solid white;
