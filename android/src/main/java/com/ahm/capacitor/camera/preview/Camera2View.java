@@ -371,9 +371,10 @@ public class Camera2View {
             previewRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             previewRequestBuilder.addTarget(previewSurface);
 
-            Log.d(TAG, "createCameraPreviewSession: Creating capture session with surfaces");
+            Log.d(TAG, "createCameraPreviewSession: Creating capture session with preview surface only");
+            // Start with preview surface only to avoid stream configuration conflicts
             cameraDevice.createCaptureSession(
-                Arrays.asList(previewSurface, imageReader.getSurface(), sampleImageReader.getSurface()),
+                Arrays.asList(previewSurface),
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
@@ -477,21 +478,57 @@ public class Camera2View {
         }
 
         try {
-            CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            captureBuilder.addTarget(imageReader.getSurface());
-            
-            // Auto-focus
-            captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
-            
-            // Set zoom
-            captureBuilder.set(CaptureRequest.SCALER_CROP_REGION, previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION));
+            Log.d(TAG, "capturePhoto: Creating capture session with image reader");
+            // Create a new session with both preview and image reader surfaces for capture
+            cameraDevice.createCaptureSession(
+                Arrays.asList(previewSurface, imageReader.getSurface()),
+                new CameraCaptureSession.StateCallback() {
+                    @Override
+                    public void onConfigured(@NonNull CameraCaptureSession session) {
+                        try {
+                            Log.d(TAG, "capturePhoto: Capture session configured, taking photo");
+                            CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                            captureBuilder.addTarget(imageReader.getSurface());
+                            
+                            // Auto-focus
+                            captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
+                            
+                            // Set zoom if available
+                            if (previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION) != null) {
+                                captureBuilder.set(CaptureRequest.SCALER_CROP_REGION, previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION));
+                            }
 
-            captureSession.capture(captureBuilder.build(), null, backgroundHandler);
+                            session.capture(captureBuilder.build(), new CameraCaptureSession.CaptureCallback() {
+                                @Override
+                                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                                    Log.d(TAG, "capturePhoto: Photo capture completed, restoring preview session");
+                                    // Restore preview-only session
+                                    createCameraPreviewSession();
+                                }
+                            }, backgroundHandler);
+                        } catch (CameraAccessException e) {
+                            Log.e(TAG, "capturePhoto: Error during capture", e);
+                            if (listener != null) {
+                                listener.onPictureTakenError("Error capturing photo: " + e.getMessage());
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                        Log.e(TAG, "capturePhoto: Failed to configure capture session");
+                        if (listener != null) {
+                            listener.onPictureTakenError("Failed to configure capture session");
+                        }
+                    }
+                },
+                backgroundHandler
+            );
         } catch (CameraAccessException e) {
-            Log.e(TAG, "Error capturing photo", e);
+            Log.e(TAG, "capturePhoto: Error creating capture session", e);
             if (listener != null) {
-                listener.onPictureTakenError("Error capturing photo: " + e.getMessage());
+                listener.onPictureTakenError("Error creating capture session: " + e.getMessage());
             }
         }
     }
@@ -505,18 +542,56 @@ public class Camera2View {
         }
 
         try {
-            CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            captureBuilder.addTarget(sampleImageReader.getSurface());
-            
-            captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
-            captureBuilder.set(CaptureRequest.SCALER_CROP_REGION, previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION));
+            Log.d(TAG, "captureSample: Creating capture session with sample image reader");
+            // Create a new session with both preview and sample image reader surfaces for capture
+            cameraDevice.createCaptureSession(
+                Arrays.asList(previewSurface, sampleImageReader.getSurface()),
+                new CameraCaptureSession.StateCallback() {
+                    @Override
+                    public void onConfigured(@NonNull CameraCaptureSession session) {
+                        try {
+                            Log.d(TAG, "captureSample: Capture session configured, taking sample");
+                            CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                            captureBuilder.addTarget(sampleImageReader.getSurface());
+                            
+                            captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
+                            
+                            // Set zoom if available
+                            if (previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION) != null) {
+                                captureBuilder.set(CaptureRequest.SCALER_CROP_REGION, previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION));
+                            }
 
-            captureSession.capture(captureBuilder.build(), null, backgroundHandler);
+                            session.capture(captureBuilder.build(), new CameraCaptureSession.CaptureCallback() {
+                                @Override
+                                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                                    Log.d(TAG, "captureSample: Sample capture completed, restoring preview session");
+                                    // Restore preview-only session
+                                    createCameraPreviewSession();
+                                }
+                            }, backgroundHandler);
+                        } catch (CameraAccessException e) {
+                            Log.e(TAG, "captureSample: Error during capture", e);
+                            if (listener != null) {
+                                listener.onSampleTakenError("Error capturing sample: " + e.getMessage());
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                        Log.e(TAG, "captureSample: Failed to configure capture session");
+                        if (listener != null) {
+                            listener.onSampleTakenError("Failed to configure capture session");
+                        }
+                    }
+                },
+                backgroundHandler
+            );
         } catch (CameraAccessException e) {
-            Log.e(TAG, "Error capturing sample", e);
+            Log.e(TAG, "captureSample: Error creating capture session", e);
             if (listener != null) {
-                listener.onSampleTakenError("Error capturing sample: " + e.getMessage());
+                listener.onSampleTakenError("Error creating capture session: " + e.getMessage());
             }
         }
     }
@@ -683,16 +758,31 @@ public class Camera2View {
     }
 
     public ZoomFactors getZoomFactors() {
-        if (cameraCharacteristics == null) {
-            return new ZoomFactors(1.0f, 1.0f, 1.0f);
+        // Use current camera characteristics if available
+        if (cameraCharacteristics != null) {
+            Float maxZoom = cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+            if (maxZoom == null) {
+                maxZoom = 1.0f;
+            }
+            return new ZoomFactors(1.0f, maxZoom, currentZoomRatio);
         }
-
-        Float maxZoom = cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
-        if (maxZoom == null) {
-            maxZoom = 1.0f;
+        
+        // If no active session, check first available camera
+        try {
+            String[] cameraIdList = cameraManager.getCameraIdList();
+            if (cameraIdList.length > 0) {
+                CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraIdList[0]);
+                Float maxZoom = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+                if (maxZoom == null) {
+                    maxZoom = 1.0f;
+                }
+                return new ZoomFactors(1.0f, maxZoom, 1.0f); // Default current zoom to 1.0
+            }
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "getZoomFactors: Error checking zoom capabilities", e);
         }
-
-        return new ZoomFactors(1.0f, maxZoom, currentZoomRatio);
+        
+        return new ZoomFactors(1.0f, 1.0f, 1.0f);
     }
 
     public void setZoom(float zoomRatio) throws Exception {
@@ -750,16 +840,31 @@ public class Camera2View {
     }
 
     public List<String> getSupportedFlashModes() {
-        if (cameraCharacteristics == null) {
-            return Arrays.asList("off");
+        // Try to use current camera characteristics if available
+        if (cameraCharacteristics != null) {
+            Boolean flashAvailable = cameraCharacteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+            if (flashAvailable != null && flashAvailable) {
+                return Arrays.asList("off", "on", "auto");
+            } else {
+                return Arrays.asList("off");
+            }
         }
-
-        Boolean flashAvailable = cameraCharacteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
-        if (flashAvailable != null && flashAvailable) {
-            return Arrays.asList("off", "on", "auto");
-        } else {
-            return Arrays.asList("off");
+        
+        // If no active session, check first available camera
+        try {
+            String[] cameraIdList = cameraManager.getCameraIdList();
+            if (cameraIdList.length > 0) {
+                CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraIdList[0]);
+                Boolean flashAvailable = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+                if (flashAvailable != null && flashAvailable) {
+                    return Arrays.asList("off", "on", "auto");
+                }
+            }
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "getSupportedFlashModes: Error checking flash availability", e);
         }
+        
+        return Arrays.asList("off");
     }
 
     public void setFlashMode(String mode) throws Exception {

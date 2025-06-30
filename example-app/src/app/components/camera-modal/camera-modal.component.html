@@ -1,55 +1,4 @@
 <div class="container">
-  <ion-header class="ion-no-border">
-    <ion-toolbar>
-      <ion-title>Camera</ion-title>
-
-      <ion-buttons slot="start">
-        <ion-button (click)="testAllFeatures()">
-          <ion-icon slot="icon-only" name="bug"></ion-icon>
-        </ion-button>
-        <ion-button (click)="refreshDeviceInfo()">
-          <ion-icon slot="icon-only" name="refresh"></ion-icon>
-        </ion-button>
-      </ion-buttons>
-
-      <ion-buttons slot="end">
-        <ion-button (click)="close()">
-          <ion-icon slot="icon-only" name="close"></ion-icon>
-        </ion-button>
-      </ion-buttons>
-    </ion-toolbar>
-    
-    <!-- Developer Info Panel -->
-    <ion-list class="developer-panel">
-      <ion-item lines="none">
-        <ion-label>
-          <h3>Status: {{ isRunning() ? 'Running' : 'Stopped' }}</h3>
-          <p>Device: {{ currentDeviceId() || 'Unknown' }}</p>
-          <p>Zoom: {{ currentZoomFactor() }}x ({{ minZoom() }}-{{ maxZoom() }})</p>
-          <p>Flash: {{ flashMode() }}</p>
-          <p>Recording: {{ isRecording() ? 'Yes' : 'No' }}</p>
-          <p>Opacity: {{ currentOpacity() }}%</p>
-        </ion-label>
-      </ion-item>
-      
-      @if (availableDevices().length > 0) {
-        <ion-item>
-          <ion-select 
-            [value]="currentDeviceId()" 
-            (ionChange)="switchToDevice($event.detail.value)"
-            placeholder="Select Camera Device"
-          >
-            @for (device of availableDevices(); track device.deviceId) {
-              <ion-select-option [value]="device.deviceId">
-                {{ device.label }} ({{ device.position }}, {{ device.deviceType }})
-              </ion-select-option>
-            }
-          </ion-select>
-        </ion-item>
-      }
-    </ion-list>
-  </ion-header>
-
   <div id="cameraView">
     @if (!cameraStarted()) {
       <div class="loading-screen">
@@ -57,6 +6,75 @@
       </div>
     }
   </div>
+
+  <!-- Floating Developer Info Panel -->
+  <div class="floating-info-panel">
+    <ion-card>
+      <ion-card-content>
+        <div class="info-row">
+          <span class="label">Status:</span>
+          <span class="value">{{ isRunning() ? 'Running' : 'Stopped' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Device:</span>
+          <span class="value">{{ currentDeviceId() || 'Unknown' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Zoom:</span>
+          <span class="value">{{ currentZoomFactor() }}x ({{ minZoom() }}-{{ maxZoom() }})</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Flash:</span>
+          <span class="value">{{ flashMode() }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Recording:</span>
+          <span class="value">{{ isRecording() ? 'Yes' : 'No' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Opacity:</span>
+          <span class="value">{{ currentOpacity() }}%</span>
+        </div>
+        
+        @if (availableDevices().length > 0) {
+          <div class="device-selector">
+            <ion-select 
+              [value]="currentDeviceId()" 
+              (ionChange)="switchToDevice($event.detail.value)"
+              placeholder="Select Camera Device"
+              fill="outline"
+              size="small"
+            >
+              @for (device of availableDevices(); track device.deviceId) {
+                <ion-select-option [value]="device.deviceId">
+                  {{ device.label }} ({{ device.position }})
+                </ion-select-option>
+              }
+            </ion-select>
+          </div>
+        }
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- Floating Action Buttons -->
+  <ion-fab class="close-fab" slot="fixed" horizontal="start" vertical="top">
+    <ion-fab-button (click)="close()" color="dark" size="small">
+      <ion-icon name="close"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+
+  <ion-fab class="test-fab" slot="fixed" horizontal="end" vertical="top">
+    <ion-fab-button (click)="testAllFeatures()" color="primary" size="small">
+      <ion-icon name="bug"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+
+  <ion-fab class="refresh-fab" slot="fixed" horizontal="center" vertical="top">
+    <ion-fab-button (click)="refreshDeviceInfo()" color="secondary" size="small">
+      <ion-icon name="refresh"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
 
   @if (cameraStarted()) {
     <ion-fab

@@ -61,7 +61,7 @@ public class CameraPreview
 
   @PluginMethod
   public void start(PluginCall call) {
-    boolean disableAudio = call.getBoolean("disableAudio", false);
+    boolean disableAudio = call.getBoolean("disableAudio", true); // Default to true (camera only)
     String permissionAlias = disableAudio
       ? CAMERA_ONLY_PERMISSION_ALIAS
       : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
@@ -134,30 +134,48 @@ public class CameraPreview
 
   @PluginMethod
   public void getSupportedPictureSizes(final PluginCall call) {
-    // For simplicity, return a basic response for now
-    // This can be enhanced later if needed
-    JSArray ret = new JSArray();
-    JSObject camera = new JSObject();
-    camera.put("facing", "Back");
-    JSArray supportedPictureSizes = new JSArray();
-    
-    // Add some common sizes
-    JSObject size1 = new JSObject();
-    size1.put("width", 1920);
-    size1.put("height", 1080);
-    supportedPictureSizes.put(size1);
-    
-    JSObject size2 = new JSObject();
-    size2.put("width", 1280);
-    size2.put("height", 720);
-    supportedPictureSizes.put(size2);
-    
-    camera.put("supportedPictureSizes", supportedPictureSizes);
-    ret.put(camera);
-    
-    JSObject finalRet = new JSObject();
-    finalRet.put("supportedPictureSizes", ret);
-    call.resolve(finalRet);
+    try {
+      if (camera2View == null) {
+        camera2View = new Camera2View(getContext(), getBridge().getWebView());
+      }
+
+      JSArray ret = new JSArray();
+      
+      // Get available devices and their picture sizes
+      List<CameraDevice> devices = camera2View.getAvailableDevices();
+      for (CameraDevice device : devices) {
+        JSObject cameraInfo = new JSObject();
+        cameraInfo.put("facing", device.getPosition().equals("front") ? "Front" : "Back");
+        
+        JSArray supportedPictureSizes = new JSArray();
+        
+        // Add some common sizes (could be enhanced to get actual sizes from camera characteristics)
+        JSObject size1 = new JSObject();
+        size1.put("width", 1920);
+        size1.put("height", 1080);
+        supportedPictureSizes.put(size1);
+        
+        JSObject size2 = new JSObject();
+        size2.put("width", 1280);
+        size2.put("height", 720);
+        supportedPictureSizes.put(size2);
+        
+        JSObject size3 = new JSObject();
+        size3.put("width", 640);
+        size3.put("height", 480);
+        supportedPictureSizes.put(size3);
+        
+        cameraInfo.put("supportedPictureSizes", supportedPictureSizes);
+        ret.put(cameraInfo);
+      }
+      
+      JSObject finalRet = new JSObject();
+      finalRet.put("supportedPictureSizes", ret);
+      call.resolve(finalRet);
+    } catch (Exception e) {
+      Logger.debug(getLogTag(), "Error getting supported picture sizes: " + e.getMessage());
+      call.reject("Error getting supported picture sizes: " + e.getMessage());
+    }
   }
 
   @PluginMethod
@@ -187,34 +205,42 @@ public class CameraPreview
 
   @PluginMethod
   public void getSupportedFlashModes(PluginCall call) {
-    if (camera2View == null || !camera2View.isRunning()) {
-      call.reject("Camera is not running");
-      return;
+    try {
+      if (camera2View == null) {
+        camera2View = new Camera2View(getContext(), getBridge().getWebView());
+      }
+
+      List<String> supportedFlashModes = camera2View.getSupportedFlashModes();
+      JSArray jsonFlashModes = new JSArray();
+
+      for (String mode : supportedFlashModes) {
+        jsonFlashModes.put(mode);
+      }
+
+      JSObject jsObject = new JSObject();
+      jsObject.put("result", jsonFlashModes);
+      call.resolve(jsObject);
+    } catch (Exception e) {
+      Logger.debug(getLogTag(), "Error getting supported flash modes: " + e.getMessage());
+      call.reject("Error getting supported flash modes: " + e.getMessage());
     }
-
-    List<String> supportedFlashModes = camera2View.getSupportedFlashModes();
-    JSArray jsonFlashModes = new JSArray();
-
-    for (String mode : supportedFlashModes) {
-      jsonFlashModes.put(mode);
-    }
-
-    JSObject jsObject = new JSObject();
-    jsObject.put("result", jsonFlashModes);
-    call.resolve(jsObject);
   }
 
   @PluginMethod
   public void getHorizontalFov(PluginCall call) {
-    if (camera2View == null || !camera2View.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
+    try {
+      if (camera2View == null) {
+        camera2View = new Camera2View(getContext(), getBridge().getWebView());
+      }
 
-    // For now, return a default value as Camera2 FOV calculation is more complex
-    JSObject jsObject = new JSObject();
-    jsObject.put("result", 60.0); // Default FOV value
-    call.resolve(jsObject);
+      // For now, return a default value as Camera2 FOV calculation is more complex
+      JSObject jsObject = new JSObject();
+      jsObject.put("result", 60.0); // Default FOV value
+      call.resolve(jsObject);
+    } catch (Exception e) {
+      Logger.debug(getLogTag(), "Error getting horizontal FOV: " + e.getMessage());
+      call.reject("Error getting horizontal FOV: " + e.getMessage());
+    }
   }
 
   @PluginMethod
@@ -287,17 +313,21 @@ public class CameraPreview
 
   @PluginMethod
   public void getZoom(PluginCall call) {
-    if (camera2View == null || !camera2View.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
+    try {
+      if (camera2View == null) {
+        camera2View = new Camera2View(getContext(), getBridge().getWebView());
+      }
 
-    ZoomFactors zoomFactors = camera2View.getZoomFactors();
-    JSObject result = new JSObject();
-    result.put("min", zoomFactors.getMin());
-    result.put("max", zoomFactors.getMax());
-    result.put("current", zoomFactors.getCurrent());
-    call.resolve(result);
+      ZoomFactors zoomFactors = camera2View.getZoomFactors();
+      JSObject result = new JSObject();
+      result.put("min", zoomFactors.getMin());
+      result.put("max", zoomFactors.getMax());
+      result.put("current", zoomFactors.getCurrent());
+      call.resolve(result);
+    } catch (Exception e) {
+      Logger.debug(getLogTag(), "Error getting zoom capabilities: " + e.getMessage());
+      call.reject("Error getting zoom capabilities: " + e.getMessage());
+    }
   }
 
   @PluginMethod
@@ -379,7 +409,7 @@ public class CameraPreview
 
   @PermissionCallback
   private void handleCameraPermissionResult(PluginCall call) {
-    boolean disableAudio = call.getBoolean("disableAudio", false);
+    boolean disableAudio = call.getBoolean("disableAudio", true); // Default to true (camera only)
     String permissionAlias = disableAudio
       ? CAMERA_ONLY_PERMISSION_ALIAS
       : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
@@ -398,13 +428,11 @@ public class CameraPreview
     final String deviceId = call.getString("deviceId");
 
     final String position;
-    if (positionParam == null || positionParam.isEmpty() || "rear".equals(positionParam)) {
+    if (positionParam == null || positionParam.isEmpty() || "rear".equals(positionParam) || "back".equals(positionParam)) {
       position = "back";
     } else {
       position = "front";
     }
-
-    Logger.debug(getLogTag(), "Camera config - Position: " + position + ", DeviceId: " + deviceId);
 
     @NonNull
     final Integer x = Objects.requireNonNull(call.getInt("x", 0));
@@ -418,9 +446,13 @@ public class CameraPreview
     final Integer paddingBottom = Objects.requireNonNull(
       call.getInt("paddingBottom", 0)
     );
+    // For rear cameras, default to being behind the webview
+    final boolean defaultToBack = "back".equals(position);
     final Boolean toBack = Objects.requireNonNull(
-      call.getBoolean("toBack", false)
+      call.getBoolean("toBack", defaultToBack)
     );
+
+    Logger.debug(getLogTag(), "Camera config - Position: " + position + " (from: " + positionParam + "), DeviceId: " + deviceId + ", ToBack: " + toBack);
     final Boolean storeToFile = Objects.requireNonNull(
       call.getBoolean("storeToFile", false)
     );
@@ -436,7 +468,7 @@ public class CameraPreview
     final Boolean lockOrientation = Objects.requireNonNull(
       call.getBoolean("lockAndroidOrientation", false)
     );
-    final Boolean disableAudio = call.getBoolean("disableAudio", false);
+    final Boolean disableAudio = call.getBoolean("disableAudio", true); // Default to true (camera only)
     
     Logger.debug(getLogTag(), "Camera dimensions - x:" + x + ", y:" + y + ", width:" + width + ", height:" + height);
     

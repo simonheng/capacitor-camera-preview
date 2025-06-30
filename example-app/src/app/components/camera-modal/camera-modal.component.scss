@@ -15,7 +15,7 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: black;
+  background: transparent;
 }
 
 #webCamera {
@@ -31,11 +31,94 @@
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 10;
-  background-color: #333;
-  color: white;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+}
+
+.floating-info-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  pointer-events: auto;
+
+  ion-card {
+    --background: rgba(0, 0, 0, 0.85);
+    --color: white;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    min-width: 280px;
+    max-width: 350px;
+
+    ion-card-content {
+      padding: 16px;
+      
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+        
+        .label {
+          font-weight: 600;
+          color: rgba(255, 255, 255, 0.8);
+          min-width: 80px;
+        }
+        
+        .value {
+          color: white;
+          text-align: right;
+          font-family: monospace;
+        }
+        
+        &:last-child {
+          margin-bottom: 0;
+        }
+      }
+      
+      .device-selector {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        
+        ion-select {
+          --color: white;
+          --placeholder-color: rgba(255, 255, 255, 0.6);
+          font-size: 0.8rem;
+        }
+      }
+    }
+  }
+}
+
+// Floating Action Buttons
+.close-fab, .test-fab, .refresh-fab {
+  margin: 16px;
+  
+  ion-fab-button {
+    --box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+}
+
+.close-fab {
+  ion-fab-button {
+    --background: rgba(0, 0, 0, 0.8);
+    --color: white;
+  }
+}
+
+.test-fab {
+  ion-fab-button {
+    --background: var(--ion-color-primary);
+  }
+}
+
+.refresh-fab {
+  ion-fab-button {
+    --background: var(--ion-color-secondary);
+  }
 }
 
 // Toolbar and icons
@@ -103,63 +186,7 @@ ion-chip.barcode-detected {
   }
 }
 
-.developer-panel {
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  
-  ion-item {
-    --background: transparent;
-    --color: white;
-    
-    ion-label {
-      h3 {
-        margin: 4px 0;
-        font-size: 0.9rem;
-      }
-      
-      p {
-        margin: 2px 0;
-        font-size: 0.8rem;
-        opacity: 0.8;
-      }
-    }
-  }
-}
 
-.advanced-panel {
-  background: rgba(40, 40, 40, 0.95);
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-  
-  ion-item {
-    --background: transparent;
-    --color: white;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    
-    ion-label {
-      font-size: 0.9rem;
-    }
-    
-    ion-button {
-      --color: white;
-      --border-color: rgba(255, 255, 255, 0.3);
-    }
-    
-    ion-range {
-      --bar-background: rgba(255, 255, 255, 0.3);
-      --bar-background-active: var(--ion-color-primary);
-      --knob-background: var(--ion-color-primary);
-    }
-    
-    ion-select {
-      --color: white;
-    }
-    
-    ion-input {
-      --color: white;
-      --placeholder-color: rgba(255, 255, 255, 0.6);
-    }
-  }
-}
 
 .camera-actions {
   ion-fab-button {
@@ -172,6 +199,7 @@ ion-chip.barcode-detected {
 .video-controls {
   ion-fab-button {
     margin: 8px 0;
+    --box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -181,6 +209,7 @@ ion-chip.barcode-detected {
     --background: rgba(255, 255, 255, 0.9);
     --color: black;
     margin-bottom: 30px;
+    --box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -199,12 +228,13 @@ ion-chip.barcode-detected {
   right: 20px;
   max-height: 40vh;
   overflow-y: auto;
-  z-index: 100;
+  z-index: 50;
   
   ion-card {
     --background: rgba(0, 0, 0, 0.9);
     --color: white;
     border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
     
     ion-card-header {
       padding: 12px;
@@ -260,6 +290,30 @@ ion-chip.barcode-detected {
     }
   }
   
+  .floating-info-panel {
+    ion-card {
+      min-width: 250px;
+      max-width: 300px;
+      
+      ion-card-content {
+        padding: 14px;
+        
+        .info-row {
+          font-size: 0.8rem;
+          margin-bottom: 6px;
+          
+          .label {
+            min-width: 70px;
+          }
+        }
+      }
+    }
+  }
+  
+  .close-fab, .test-fab, .refresh-fab {
+    margin: 12px;
+  }
+  
   .test-results {
     left: 10px;
     right: 10px;
@@ -280,6 +334,11 @@ ion-chip.barcode-detected {
   .advanced-panel {
     background: rgba(0, 0, 0, 0.95);
     border: 1px solid white;
+  }
+  
+  .floating-info-panel ion-card {
+    --background: black;
+    border: 2px solid white;
   }
   
   .test-results ion-card {
