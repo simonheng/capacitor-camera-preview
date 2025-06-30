@@ -181,6 +181,14 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`setOpacity(...)`](#setopacity)
 * [`stopRecordVideo()`](#stoprecordvideo)
 * [`startRecordVideo(...)`](#startrecordvideo)
+* [`isRunning()`](#isrunning)
+* [`getAvailableDevices()`](#getavailabledevices)
+* [`getZoom()`](#getzoom)
+* [`setZoom(...)`](#setzoom)
+* [`getFlashMode()`](#getflashmode)
+* [`removeAllListeners()`](#removealllisteners)
+* [`setDeviceId(...)`](#setdeviceid)
+* [`getDeviceId()`](#getdeviceid)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 
@@ -379,6 +387,128 @@ Start recording video.
 --------------------
 
 
+### isRunning()
+
+```typescript
+isRunning() => Promise<{ isRunning: boolean; }>
+```
+
+Check if camera preview is running.
+
+**Returns:** <code>Promise&lt;{ isRunning: boolean; }&gt;</code>
+
+**Since:** 7.4.0
+
+--------------------
+
+
+### getAvailableDevices()
+
+```typescript
+getAvailableDevices() => Promise<{ devices: CameraDevice[]; }>
+```
+
+Get available camera devices.
+
+**Returns:** <code>Promise&lt;{ devices: CameraDevice[]; }&gt;</code>
+
+**Since:** 7.4.0
+
+--------------------
+
+
+### getZoom()
+
+```typescript
+getZoom() => Promise<{ min: number; max: number; current: number; }>
+```
+
+Get zoom capabilities and current level.
+
+**Returns:** <code>Promise&lt;{ min: number; max: number; current: number; }&gt;</code>
+
+**Since:** 7.4.0
+
+--------------------
+
+
+### setZoom(...)
+
+```typescript
+setZoom(options: { level: number; ramp?: boolean; }) => Promise<void>
+```
+
+Set zoom level.
+
+| Param         | Type                                            | Description                  |
+| ------------- | ----------------------------------------------- | ---------------------------- |
+| **`options`** | <code>{ level: number; ramp?: boolean; }</code> | the options to set zoom with |
+
+**Since:** 7.4.0
+
+--------------------
+
+
+### getFlashMode()
+
+```typescript
+getFlashMode() => Promise<{ flashMode: FlashMode; }>
+```
+
+Get current flash mode.
+
+**Returns:** <code>Promise&lt;{ flashMode: <a href="#camerapreviewflashmode">CameraPreviewFlashMode</a>; }&gt;</code>
+
+**Since:** 7.4.0
+
+--------------------
+
+
+### removeAllListeners()
+
+```typescript
+removeAllListeners() => Promise<void>
+```
+
+Remove all listeners for this plugin.
+
+**Since:** 7.4.0
+
+--------------------
+
+
+### setDeviceId(...)
+
+```typescript
+setDeviceId(options: { deviceId: string; }) => Promise<void>
+```
+
+Swap the deviceId.
+
+| Param         | Type                               | Description                           |
+| ------------- | ---------------------------------- | ------------------------------------- |
+| **`options`** | <code>{ deviceId: string; }</code> | the options to swap the deviceId with |
+
+**Since:** 7.4.0
+
+--------------------
+
+
+### getDeviceId()
+
+```typescript
+getDeviceId() => Promise<{ deviceId: string; }>
+```
+
+Get the current deviceId.
+
+**Returns:** <code>Promise&lt;{ deviceId: string; }&gt;</code>
+
+**Since:** 7.4.0
+
+--------------------
+
+
 ### Interfaces
 
 
@@ -405,6 +535,7 @@ Start recording video.
 | **`enableOpacity`**                | <code>boolean</code> | Defaults to false - Android and Web only. Set if camera preview can change opacity.                                                                           |
 | **`enableZoom`**                   | <code>boolean</code> | Defaults to false - Android only. Set if camera preview will support pinch to zoom.                                                                           |
 | **`cameraMode`**                   | <code>boolean</code> | default to false - IOS only. Set the CameraPreview to use the video mode preset                                                                               |
+| **`deviceId`**                     | <code>string</code>  | Defaults to false - IOS only. Set the CameraPreview to start with the deviceId                                                                                |
 
 
 #### CameraPreviewPictureOptions
@@ -431,6 +562,16 @@ Start recording video.
 | **`opacity`** | <code>number</code> | The percent opacity to set for camera view, default 1 |
 
 
+#### CameraDevice
+
+| Prop             | Type                                                          | Description                                                                  |
+| ---------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **`deviceId`**   | <code>string</code>                                           | Device identifier                                                            |
+| **`label`**      | <code>string</code>                                           | Human readable device name                                                   |
+| **`position`**   | <code><a href="#cameraposition">CameraPosition</a></code>     | Camera position                                                              |
+| **`deviceType`** | <code><a href="#cameradevicetype">CameraDeviceType</a></code> | The type of the camera device (e.g., wide, ultra-wide, telephoto) - iOS only |
+
+
 ### Type Aliases
 
 
@@ -447,5 +588,18 @@ Start recording video.
 #### CameraPreviewFlashMode
 
 <code>"off" | "on" | "auto" | "red-eye" | "torch"</code>
+
+
+#### CameraDeviceType
+
+Available camera device types for iOS.
+Maps to AVCaptureDevice DeviceTypes in iOS.
+
+<code>'wideAngle' | 'ultraWide' | 'telephoto' | 'dual' | 'dualWide' | 'triple' | 'trueDepth'</code>
+
+
+#### FlashMode
+
+<code><a href="#camerapreviewflashmode">CameraPreviewFlashMode</a></code>
 
 </docgen-api>

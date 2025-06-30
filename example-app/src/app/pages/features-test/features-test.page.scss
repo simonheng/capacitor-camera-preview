@@ -1,0 +1,29 @@
+ion-card {
+  margin: 8px;
+}
+
+ion-chip {
+  margin: 4px;
+}
+
+ion-button {
+  margin: 4px;
+}
+
+.test-result {
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.status-success {
+  color: var(--ion-color-success);
+}
+
+.status-error {
+  color: var(--ion-color-danger);
+}
+
+.status-info {
+  color: var(--ion-color-primary);
+} 

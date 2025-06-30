@@ -1,0 +1,98 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>Camera Devices</ion-title>
+    <ion-button slot="end" fill="clear" (click)="loadDevices()">
+      <ion-icon slot="icon-only" name="refresh"></ion-icon>
+    </ion-button>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Available Camera Devices</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      @if (loading()) {
+        <p>Loading devices...</p>
+      } @else if (devices().length === 0) {
+        <p>No camera devices found.</p>
+        <ion-button (click)="loadDevices()" fill="outline">
+          Refresh
+        </ion-button>
+      } @else {
+        <p>Found {{ devices().length }} camera device(s)</p>
+        
+        <ion-list>
+          @for (device of devices(); track device.deviceId) {
+            <ion-item button (click)="switchToDevice(device.deviceId)">
+              <ion-label>
+                <h2>{{ device.label }}</h2>
+                <p>Device ID: {{ device.deviceId }}</p>
+                
+                <div style="margin-top: 8px;">
+                  <ion-chip [color]="getPositionColor(device.position)" size="small">
+                    <ion-label>{{ device.position | titlecase }}</ion-label>
+                  </ion-chip>
+                  
+                  @if (device.deviceType) {
+                    <ion-chip [color]="getDeviceTypeColor(device.deviceType)" size="small">
+                      <ion-label>{{ device.deviceType }}</ion-label>
+                    </ion-chip>
+                  }
+                  
+                  @if (device.deviceId === currentDeviceId()) {
+                    <ion-chip color="success" size="small">
+                      <ion-label>Active</ion-label>
+                    </ion-chip>
+                  }
+                </div>
+              </ion-label>
+            </ion-item>
+          }
+        </ion-list>
+      }
+    </ion-card-content>
+  </ion-card>
+
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Device Type Legend</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-chip color="primary" size="small">
+        <ion-label>Wide Angle (1x)</ion-label>
+      </ion-chip>
+      <ion-chip color="secondary" size="small">
+        <ion-label>Ultra Wide (0.5x)</ion-label>
+      </ion-chip>
+      <ion-chip color="tertiary" size="small">
+        <ion-label>Telephoto (2x+)</ion-label>
+      </ion-chip>
+      <ion-chip color="success" size="small">
+        <ion-label>True Depth</ion-label>
+      </ion-chip>
+      <ion-chip color="warning" size="small">
+        <ion-label>Dual/Multi Camera</ion-label>
+      </ion-chip>
+    </ion-card-content>
+  </ion-card>
+
+  @if (currentDeviceId()) {
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Current Active Device</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <p><strong>Device ID:</strong> {{ currentDeviceId() }}</p>
+        @for (device of devices(); track device.deviceId) {
+          @if (device.deviceId === currentDeviceId()) {
+            <p><strong>Name:</strong> {{ device.label }}</p>
+            <p><strong>Position:</strong> {{ device.position | titlecase }}</p>
+            <p><strong>Type:</strong> {{ device.deviceType || 'Unknown' }}</p>
+          }
+        }
+      </ion-card-content>
+    </ion-card>
+  }
+</ion-content> 

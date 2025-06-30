@@ -1,0 +1,129 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>Camera Features Test</ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="testAllFeatures()">
+        <ion-icon slot="icon-only" name="play-circle"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Camera Control</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-button 
+        [disabled]="cameraStarted()" 
+        (click)="startCamera()" 
+        expand="block"
+        color="success"
+      >
+        Start Camera
+      </ion-button>
+      <ion-button 
+        [disabled]="!cameraStarted()" 
+        (click)="stopCamera()" 
+        expand="block"
+        color="danger"
+      >
+        Stop Camera
+      </ion-button>
+    </ion-card-content>
+  </ion-card>
+
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Camera Status</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-chip [color]="isRunning() ? 'success' : 'danger'">
+        <ion-label>{{ isRunning() ? 'Running' : 'Stopped' }}</ion-label>
+      </ion-chip>
+      <ion-chip color="primary">
+        <ion-label>Device: {{ currentDeviceId() || 'None' }}</ion-label>
+      </ion-chip>
+      <ion-chip color="secondary">
+        <ion-label>Flash: {{ currentFlashMode() }}</ion-label>
+      </ion-chip>
+      <ion-chip color="tertiary">
+        <ion-label>Zoom: {{ zoomCapabilities().current }}x</ion-label>
+      </ion-chip>
+    </ion-card-content>
+  </ion-card>
+
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Available Devices ({{ availableDevices().length }})</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      @if (availableDevices().length > 0) {
+        <ion-list>
+          @for (device of availableDevices(); track device.deviceId) {
+            <ion-item button (click)="testSwitchDevice(device.deviceId)">
+              <ion-label>
+                <h3>{{ device.label }}</h3>
+                <p>Position: {{ device.position }}</p>
+                <p>Type: {{ device.deviceType }}</p>
+                <p>ID: {{ device.deviceId }}</p>
+              </ion-label>
+              @if (device.deviceId === currentDeviceId()) {
+                <ion-chip color="success" slot="end">
+                  <ion-label>Active</ion-label>
+                </ion-chip>
+              }
+            </ion-item>
+          }
+        </ion-list>
+      } @else {
+        <p>No devices found. Click refresh to scan again.</p>
+      }
+    </ion-card-content>
+  </ion-card>
+
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Individual Tests</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-button (click)="testIsRunning()" fill="outline" size="small">
+        Test Running Status
+      </ion-button>
+      <ion-button (click)="testGetDevices()" fill="outline" size="small">
+        Get Devices
+      </ion-button>
+      <ion-button (click)="testGetCurrentDevice()" fill="outline" size="small">
+        Get Current Device
+      </ion-button>
+      <ion-button (click)="testZoom()" fill="outline" size="small" [disabled]="!cameraStarted()">
+        Test Zoom
+      </ion-button>
+      <ion-button (click)="testFlash()" fill="outline" size="small" [disabled]="!cameraStarted()">
+        Test Flash
+      </ion-button>
+    </ion-card-content>
+  </ion-card>
+
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Test Results</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      @if (testResults().length > 0) {
+        <ion-list>
+          @for (result of testResults(); track $index) {
+            <ion-item lines="none">
+              <ion-label class="ion-text-wrap">
+                <p style="font-family: monospace; font-size: 0.8rem;">{{ result }}</p>
+              </ion-label>
+            </ion-item>
+          }
+        </ion-list>
+      } @else {
+        <p>No test results yet. Run some tests!</p>
+      }
+    </ion-card-content>
+  </ion-card>
+</ion-content> 

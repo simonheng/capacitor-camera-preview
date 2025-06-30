@@ -1,4 +1,44 @@
 export type CameraPosition = "rear" | "front";
+
+export type FlashMode = CameraPreviewFlashMode;
+
+export interface CameraDevice {
+  /** Device identifier */
+  deviceId: string;
+  /** Human readable device name */
+  label: string;
+  /** Camera position */
+  position: CameraPosition;
+  /** The type of the camera device (e.g., wide, ultra-wide, telephoto) - iOS only */
+  deviceType?: CameraDeviceType;
+}
+
+/**
+ * Available camera device types for iOS.
+ * Maps to AVCaptureDevice DeviceTypes in iOS.
+ *
+ * @see https://developer.apple.com/documentation/avfoundation/avcapturedevice/devicetype-swift.struct
+ *
+ * @since 7.4.0
+ */
+export type CameraDeviceType =
+  /** builtInWideAngleCamera - standard camera */
+  | 'wideAngle'
+  /** builtInUltraWideCamera - 0.5x zoom level */
+  | 'ultraWide'
+  /** builtInTelephotoCamera - 2x/3x zoom level */
+  | 'telephoto'
+  /** builtInDualCamera - wide + telephoto combination */
+  | 'dual'
+  /** builtInDualWideCamera - wide + ultraWide combination */
+  | 'dualWide'
+  /** builtInTripleCamera - wide + ultraWide + telephoto */
+  | 'triple'
+  /** builtInTrueDepthCamera - front-facing camera with depth sensing */
+  | 'trueDepth';
+
+export type CameraSessionConfiguration = CameraPreviewOptions;
+
 export interface CameraPreviewOptions {
   /** Parent element to attach the video preview element to (applicable to the web platform only) */
   parent?: string;
@@ -38,6 +78,8 @@ export interface CameraPreviewOptions {
   enableZoom?: boolean;
   /** default to false - IOS only. Set the CameraPreview to use the video mode preset */
   cameraMode?: boolean;
+  /** Defaults to false - IOS only. Set the CameraPreview to start with the deviceId */
+  deviceId?: string;
 }
 
 export interface CameraPreviewPictureOptions {
@@ -106,7 +148,7 @@ export interface CameraPreviewPlugin {
   captureSample(options: CameraSampleOptions): Promise<{ value: string }>;
   /**
    * Get supported flash modes.
-   * @returns {Promise<CameraPreviewFlashMode[]>} an Promise that resolves with the supported flash modes
+   * @returns {Promise<{result: CameraPreviewFlashMode[]}>} an Promise that resolves with the supported flash modes
    * @throws An error if the something went wrong
    * @since 0.0.1
    */
@@ -174,4 +216,61 @@ export interface CameraPreviewPlugin {
    * @since 0.0.1
    */
   startRecordVideo(options: CameraPreviewOptions): Promise<void>;
+  /**
+   * Check if camera preview is running.
+   * @returns {Promise<{isRunning: boolean}>} an Promise that resolves with the running status
+   * @throws An error if something went wrong
+   * @since 7.4.0
+   */
+  isRunning(): Promise<{ isRunning: boolean }>;
+  /**
+   * Get available camera devices.
+   * @returns {Promise<{devices: CameraDevice[]}>} an Promise that resolves with available devices
+   * @throws An error if something went wrong
+   * @since 7.4.0
+   */
+  getAvailableDevices(): Promise<{ devices: CameraDevice[] }>;
+  /**
+   * Get zoom capabilities and current level.
+   * @returns {Promise<{min: number; max: number; current: number}>} an Promise that resolves with zoom info
+   * @throws An error if something went wrong
+   * @since 7.4.0
+   */
+  getZoom(): Promise<{ min: number; max: number; current: number }>;
+  /**
+   * Set zoom level.
+   * @param options the options to set zoom with
+   * @returns {Promise<void>} an Promise that resolves when zoom is set
+   * @throws An error if something went wrong
+   * @since 7.4.0
+   */
+  setZoom(options: { level: number; ramp?: boolean }): Promise<void>;
+  /**
+   * Get current flash mode.
+   * @returns {Promise<{flashMode: FlashMode}>} an Promise that resolves with current flash mode
+   * @throws An error if something went wrong
+   * @since 7.4.0
+   */
+  getFlashMode(): Promise<{ flashMode: FlashMode }>;
+  /**
+   * Remove all listeners for this plugin.
+   *
+   * @since 7.4.0
+   */
+  removeAllListeners(): Promise<void>;
+  /**
+   * Swap the deviceId.
+   * @param options the options to swap the deviceId with
+   * @returns {Promise<void>} an Promise that resolves when the deviceId is swapped
+   * @throws An error if something went wrong
+   * @since 7.4.0
+   */
+  setDeviceId(options: { deviceId: string }): Promise<void>;
+  /**
+   * Get the current deviceId.
+   * @returns {Promise<{ deviceId: string }>} an Promise that resolves with the current deviceId
+   * @throws An error if something went wrong
+   * @since 7.4.0
+   */
+  getDeviceId(): Promise<{ deviceId: string }>;
 }
