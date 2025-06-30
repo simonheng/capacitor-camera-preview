@@ -15,7 +15,10 @@ import { Capacitor } from '@capacitor/core';
 import {
   IonButton,
   IonButtons,
-  // IonChip,
+  IonCard,
+  IonCardContent,
+  IonCardHeader,
+  IonCardTitle,
   IonFab,
   IonFabButton,
   IonHeader,
@@ -30,8 +33,7 @@ import {
   IonToolbar,
   ModalController,
 } from '@ionic/angular/standalone';
-import { type CameraDevice, type CameraPosition, type FlashMode } from '@capgo/camera-preview';
-// import { concat, map, of, switchMap, tap, timer } from 'rxjs';
+import { type CameraDevice, type CameraPosition, type FlashMode, type PictureFormat } from '@capgo/camera-preview';
 import { CapacitorCameraViewService } from '../../core/capacitor-camera-preview.service';
 
 function getDistance(touch1: Touch, touch2: Touch): number {
@@ -47,6 +49,10 @@ function getDistance(touch1: Touch, touch2: Touch): number {
   imports: [
     IonButton,
     IonButtons,
+    IonCard,
+    IonCardContent,
+    IonCardHeader,
+    IonCardTitle,
     IonFab,
     IonFabButton,
     IonHeader,
@@ -59,7 +65,6 @@ function getDistance(touch1: Touch, touch2: Touch): number {
     IonSpinner,
     IonTitle,
     IonToolbar,
-    // IonChip,
   ],
   host: {
     class: 'camera-modal',
@@ -70,15 +75,26 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   readonly #elementRef = inject(ElementRef);
   readonly #modalController = inject(ModalController);
 
-  protected barcodeRect =
-    viewChild.required<ElementRef<HTMLDivElement>>('barcodeRect');
-
+  // Basic camera inputs
   public readonly deviceId = input<string>();
-  public readonly enableBarcodeDetection = input<boolean>(false);
   public readonly position = input<CameraPosition>('rear');
   public readonly quality = input<number>(85);
   public readonly useTripleCameraIfAvailable = input<boolean>(false);
   public readonly initialZoomFactor = input<number>(1.0);
+
+  // Picture settings inputs
+  public readonly pictureFormat = input<PictureFormat>('jpeg');
+  public readonly pictureQuality = input<number>(85);
+  public readonly useCustomSize = input<boolean>(false);
+  public readonly pictureWidth = input<number>(1920);
+  public readonly pictureHeight = input<number>(1080);
+
+  // Camera behavior inputs
+  public readonly opacity = input<number>(100);
+  public readonly enableZoom = input<boolean>(false);
+  public readonly disableAudio = input<boolean>(false);
+  public readonly enableHighResolution = input<boolean>(false);
+  public readonly lockAndroidOrientation = input<boolean>(false);
 
   protected readonly cameraStarted = toSignal(
     this.#cameraViewService.cameraStarted,
@@ -96,6 +112,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly currentDeviceId = signal<string>('');
   protected readonly isRunning = signal(false);
 
+  // Video recording and testing state
+  protected readonly isRecording = signal(false);
+  protected readonly currentOpacity = signal(100);
+  protected readonly testResults = signal<string>('');
+
   protected readonly canZoomIn = computed(() => {
     return this.currentZoomFactor() + 0.5 <= this.maxZoom();
   });
@@ -104,20 +125,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     return this.currentZoomFactor() - 0.5 >= this.minZoom();
   });
 
-  // protected readonly detectedBarcode = toSignal(
-  //   this.#cameraViewService.barcodeData.pipe(
-  //     tap((value) => console.log('Barcode detected:', value)),
-  //     switchMap((value) =>
-  //       concat(of(value), timer(1000).pipe(map(() => undefined))),
-  //     ),
-  //   ),
-  //   { initialValue: undefined },
-  // );
-
   protected readonly isWeb = Capacitor.getPlatform() === 'web';
 
   #supportedFlashModes = signal<Array<FlashMode>>(['off']);
-
   #touchStartDistance = 0;
   #initialZoomFactorOnPinch = 1.0;
 
@@ -128,27 +138,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         this.flashMode.set((flashModes[0] as FlashMode) ?? 'off');
       }
     });
-
-    // effect(() => {
-      // const barcodeData = this.detectedBarcode();
-      // const element = this.barcodeRect().nativeElement;
-
-      // if (barcodeData) {
-      //   const boundingRect = barcodeData.boundingRect;
-
-      //   element.style.visibility = 'visible';
-      //   element.style.opacity = '1';
-      //   element.style.left = `${boundingRect.x - 5}px`;
-      //   element.style.top = `${boundingRect.y - 5}px`;
-      //   element.style.width = `${boundingRect.width + 10}px`;
-      //   element.style.height = `${boundingRect.height + 10}px`;
-      // } else {
-        // element.style.opacity = '0';
-        // element.style.width = `0`;
-        // element.style.height = `0`;
-        // element.style.visibility = 'hidden';
-      // }
-    // });
   }
 
   public ngOnInit() {
@@ -165,10 +154,16 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async startCamera(): Promise<void> {
-    await this.#cameraViewService.start({
+    const startOptions = {
       deviceId: this.deviceId(),
       position: this.position(),
-    });
+      enableZoom: this.enableZoom(),
+      disableAudio: this.disableAudio(),
+      enableHighResolution: this.enableHighResolution(),
+      lockAndroidOrientation: this.lockAndroidOrientation(),
+    };
+
+    await this.#cameraViewService.start(startOptions);
 
     await Promise.all([
       this.#initializeZoomLimits(),
@@ -176,6 +171,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.#initializeDevices(),
       this.#updateRunningStatus(),
       this.#updateCurrentDeviceId(),
+      this.#setInitialOpacity(),
     ]);
 
     this.currentZoomFactor.set(this.initialZoomFactor());
@@ -199,8 +195,21 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected async capturePhoto(): Promise<void> {
     this.isCapturingPhoto.set(true);
     try {
-      const photo = await this.#cameraViewService.capture(this.quality());
-      this.#modalController.dismiss({ photo });
+      const captureOptions = {
+        quality: this.pictureQuality(),
+        format: this.pictureFormat(),
+        ...(this.useCustomSize() && {
+          width: this.pictureWidth(),
+          height: this.pictureHeight(),
+        }),
+      };
+
+      const photo = await this.#cameraViewService.capture(this.quality(), captureOptions);
+      this.#modalController.dismiss({ 
+        photo, 
+        options: captureOptions,
+        type: 'standard'
+      });
     } catch (error) {
       console.error('Failed to capture photo', error);
       this.#modalController.dismiss();
@@ -216,8 +225,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected async captureSample(): Promise<void> {
     this.isCapturingPhoto.set(true);
     try {
-      const photo = await this.#cameraViewService.captureSample();
-      this.#modalController.dismiss({ photo });
+      const photo = await this.#cameraViewService.captureSample(this.pictureQuality());
+      this.#modalController.dismiss({ 
+        photo,
+        type: 'sample'
+      });
     } catch (error) {
       console.error('Failed to capture sample', error);
       this.#modalController.dismiss();
@@ -282,41 +294,76 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async testAllFeatures(): Promise<void> {
-    console.log('=== Testing All Camera Features ===');
+    let results = '=== Camera Modal Test Results ===\n';
     
-    // Test running status
-    const running = await this.#cameraViewService.isRunning();
-    console.log('Camera running:', running);
-    
-    // Test available devices
-    const devices = await this.#cameraViewService.getAvailableDevices();
-    console.log('Available devices:', devices);
-    
-    // Test current device ID
-    const currentId = await this.#cameraViewService.getDeviceId();
-    console.log('Current device ID:', currentId);
-    
-    // Test zoom capabilities
-    const zoom = await this.#cameraViewService.getZoom();
-    console.log('Zoom capabilities:', zoom);
-    
-    // Test flash mode
-    const flashMode = await this.#cameraViewService.getFlashMode();
-    console.log('Current flash mode:', flashMode);
-    
-    // Test supported flash modes
-    const supportedFlash = await this.#cameraViewService.getSupportedFlashModes();
-    console.log('Supported flash modes:', supportedFlash);
+    try {
+      // Test running status
+      const running = await this.#cameraViewService.isRunning();
+      results += `\n✓ Camera running: ${running}`;
+      
+      // Test current device ID
+      const currentId = await this.#cameraViewService.getDeviceId();
+      results += `\n✓ Current device: ${currentId}`;
+      
+      // Test zoom capabilities
+      const zoom = await this.#cameraViewService.getZoom();
+      results += `\n✓ Zoom: ${zoom.min} - ${zoom.max} (current: ${zoom.current})`;
+      
+      // Test flash mode
+      const flashMode = await this.#cameraViewService.getFlashMode();
+      results += `\n✓ Flash mode: ${flashMode}`;
+
+      this.testResults.set(results);
+    } catch (error) {
+      results += `\n✗ Error during testing: ${error}`;
+      this.testResults.set(results);
+    }
   }
 
-  // protected async readBarcode(): Promise<void> {
-  //   await this.stopCamera();
-  //   await this.#modalController.dismiss({ barcode: this.detectedBarcode() });
-  // }
+  protected async startRecording(): Promise<void> {
+    try {
+      await this.#cameraViewService.startRecordVideo({
+        position: this.position(),
+        deviceId: this.currentDeviceId(),
+        disableAudio: this.disableAudio(),
+      });
+      this.isRecording.set(true);
+      const results = this.testResults() + `\n✓ Video recording started`;
+      this.testResults.set(results);
+    } catch (error) {
+      const results = this.testResults() + `\n✗ Failed to start recording: ${error}`;
+      this.testResults.set(results);
+      console.error('Failed to start recording:', error);
+    }
+  }
+
+  protected async stopRecording(): Promise<void> {
+    try {
+      const result = await this.#cameraViewService.stopRecordVideo();
+      this.isRecording.set(false);
+      this.#modalController.dismiss({ 
+        video: result.videoFilePath,
+        type: 'video'
+      });
+    } catch (error) {
+      const results = this.testResults() + `\n✗ Failed to stop recording: ${error}`;
+      this.testResults.set(results);
+      console.error('Failed to stop recording:', error);
+    }
+  }
 
   async #setZoom(zoomFactor: number): Promise<void> {
     this.currentZoomFactor.set(zoomFactor);
     await this.#cameraViewService.setZoom(zoomFactor, false);
+  }
+
+  async #setInitialOpacity(): Promise<void> {
+    try {
+      this.currentOpacity.set(this.opacity());
+      await this.#cameraViewService.setOpacity(this.opacity() / 100);
+    } catch (error) {
+      console.warn('Failed to set initial opacity', error);
+    }
   }
 
   async #initializeZoomLimits(): Promise<void> {
@@ -371,22 +418,22 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   #initializeEventListeners(): void {
     this.#elementRef.nativeElement.addEventListener(
       'touchstart',
-      this.#handleTouchStart,
+      this.#handleTouchStart.bind(this),
     );
     this.#elementRef.nativeElement.addEventListener(
       'touchmove',
-      this.#handleTouchMove,
+      this.#handleTouchMove.bind(this),
     );
   }
 
   #destroyEventListeners(): void {
     this.#elementRef.nativeElement.removeEventListener(
       'touchstart',
-      this.#handleTouchStart,
+      this.#handleTouchStart.bind(this),
     );
     this.#elementRef.nativeElement.removeEventListener(
       'touchmove',
-      this.#handleTouchMove,
+      this.#handleTouchMove.bind(this),
     );
   }
 

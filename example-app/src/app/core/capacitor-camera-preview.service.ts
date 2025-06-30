@@ -6,7 +6,9 @@ import {
   CameraSessionConfiguration,
   CameraPreview,
   CameraPreviewPlugin,
+  CameraPreviewPictureOptions,
   FlashMode,
+  PictureFormat,
 } from '@capgo/camera-preview';
 import { BehaviorSubject } from 'rxjs';
 // import { BehaviorSubject, Subject } from 'rxjs';
@@ -68,10 +70,15 @@ export class CapacitorCameraViewService {
   /**
    * Capture a photo from the camera view
    * @param quality The quality of the photo (0-100)
+   * @param options Additional capture options
    * @returns A base64 encoded string of the captured photo
    */
-  async capture(quality: number = 90): Promise<string> {
-    return (await this.#cameraView.capture({ quality })).value;
+  async capture(quality: number = 90, options?: Partial<CameraPreviewPictureOptions>): Promise<string> {
+    const captureOptions: CameraPreviewPictureOptions = {
+      quality,
+      ...options,
+    };
+    return (await this.#cameraView.capture(captureOptions)).value;
   }
 
   /**
@@ -152,6 +159,53 @@ export class CapacitorCameraViewService {
    */
   async setDeviceId(deviceId: string): Promise<void> {
     return this.#cameraView.setDeviceId({ deviceId });
+  }
+
+  /**
+   * Get horizontal field of view
+   * @returns The horizontal field of view
+   */
+  async getHorizontalFov(): Promise<any> {
+    return (await this.#cameraView.getHorizontalFov()).result;
+  }
+
+  /**
+   * Get supported picture sizes for available devices
+   * @returns Object containing supported picture sizes for each device
+   */
+  async getSupportedPictureSizes(): Promise<any> {
+    return await this.#cameraView.getSupportedPictureSizes();
+  }
+
+  /**
+   * Set camera opacity
+   * @param opacity The opacity value (0.0 - 1.0)
+   */
+  async setOpacity(opacity: number): Promise<void> {
+    return this.#cameraView.setOpacity({ opacity });
+  }
+
+  /**
+   * Start video recording
+   * @param options Configuration options for video recording
+   */
+  async startRecordVideo(options: CameraSessionConfiguration = {}): Promise<void> {
+    return this.#cameraView.startRecordVideo(options);
+  }
+
+  /**
+   * Stop video recording
+   * @returns Object containing the video file path
+   */
+  async stopRecordVideo(): Promise<{ videoFilePath: string }> {
+    return this.#cameraView.stopRecordVideo();
+  }
+
+  /**
+   * Remove all event listeners
+   */
+  async removeAllListeners(): Promise<void> {
+    return this.#cameraView.removeAllListeners();
   }
 
   // /**

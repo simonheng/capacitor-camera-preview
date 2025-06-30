@@ -88,6 +88,7 @@ public class CameraActivity extends Fragment {
   // The first rear facing camera
   private int defaultCameraId;
   public String defaultCamera;
+  public String deviceId;
   public boolean tapToTakePicture;
   public boolean dragEnabled;
   public boolean tapToFocus;
@@ -366,6 +367,20 @@ public class CameraActivity extends Fragment {
   }
 
   private void setDefaultCameraId() {
+    // If deviceId is specified, use that specific camera
+    if (deviceId != null && !deviceId.isEmpty()) {
+      try {
+        int requestedCameraId = Integer.parseInt(deviceId);
+        if (requestedCameraId >= 0 && requestedCameraId < getNumberOfCameras()) {
+          defaultCameraId = requestedCameraId;
+          cameraCurrentlyLocked = requestedCameraId;
+          return;
+        }
+      } catch (NumberFormatException e) {
+        Log.w(TAG, "Invalid deviceId format: " + deviceId);
+      }
+    }
+
     int facing = "front".equals(defaultCamera)
       ? Camera.CameraInfo.CAMERA_FACING_FRONT
       : Camera.CameraInfo.CAMERA_FACING_BACK;
@@ -376,6 +391,7 @@ public class CameraActivity extends Fragment {
       Camera.getCameraInfo(i, cameraInfo);
       if (cameraInfo.facing == facing) {
         defaultCameraId = i;
+        cameraCurrentlyLocked = defaultCameraId;
         break;
       }
     }
@@ -566,6 +582,45 @@ public class CameraActivity extends Fragment {
 
       mCamera.startPreview();
     }
+  }
+
+  public int getCurrentCameraId() {
+    return cameraCurrentlyLocked;
+  }
+
+  public void switchToCamera(int cameraId) throws Exception {
+    if (cameraId < 0 || cameraId >= getNumberOfCameras()) {
+      throw new Exception("Invalid camera ID: " + cameraId);
+    }
+
+    cameraCurrentlyLocked = cameraId;
+
+    if (this.mCamera != null) {
+      mCamera.stopPreview();
+      mPreview.setCamera(null, -1);
+      mCamera.release();
+      mCamera = null;
+    }
+
+    // Acquire the specified camera
+    mCamera = Camera.open(cameraCurrentlyLocked);
+
+    if (cameraParameters != null) {
+      // Check for flashMode compatibility
+      List<String> supportedFlashModes = mCamera
+        .getParameters()
+        .getSupportedFlashModes();
+      String currentFlashMode = cameraParameters.getFlashMode();
+      if (
+        supportedFlashModes != null &&
+        supportedFlashModes.contains(currentFlashMode)
+      ) {
+        // Flash mode is supported, could apply parameters here if needed
+      }
+    }
+
+    mPreview.switchCamera(mCamera, cameraCurrentlyLocked);
+    mCamera.startPreview();
   }
 
   public void setCameraParameters(Camera.Parameters params) {

@@ -27,6 +27,8 @@
           <p>Device: {{ currentDeviceId() || 'Unknown' }}</p>
           <p>Zoom: {{ currentZoomFactor() }}x ({{ minZoom() }}-{{ maxZoom() }})</p>
           <p>Flash: {{ flashMode() }}</p>
+          <p>Recording: {{ isRecording() ? 'Yes' : 'No' }}</p>
+          <p>Opacity: {{ currentOpacity() }}%</p>
         </ion-label>
       </ion-item>
       
@@ -94,13 +96,23 @@
       </ion-fab-button>
     </ion-fab>
 
-    <!-- @if (detectedBarcode()) {
-      <ion-chip (click)="readBarcode()" class="barcode-detected">
-        <ion-icon name="qr-code-outline"></ion-icon>
-        <ion-label>Barcode</ion-label> -->
-        <!-- <ion-icon name="close-circle"></ion-icon> -->
-      <!-- </ion-chip>
-    } -->
+    <!-- Video Recording Controls -->
+    <ion-fab
+      class="video-controls"
+      slot="fixed"
+      horizontal="start"
+      vertical="center"
+    >
+      @if (!isRecording()) {
+        <ion-fab-button (click)="startRecording()" color="danger" size="small">
+          <ion-icon name="videocam"></ion-icon>
+        </ion-fab-button>
+      } @else {
+        <ion-fab-button (click)="stopRecording()" color="dark" size="small">
+          <ion-icon name="stop"></ion-icon>
+        </ion-fab-button>
+      }
+    </ion-fab>
 
     <ion-fab
       class="camera-trigger"
@@ -117,8 +129,9 @@
       </ion-fab-button>
     </ion-fab>
 
+    <!-- Sample Capture -->
     <ion-fab
-      class="capture-sample"
+      class="capture-options"
       slot="fixed"
       horizontal="end"
       vertical="bottom"
@@ -127,7 +140,19 @@
         <ion-icon name="aperture"></ion-icon>
       </ion-fab-button>
     </ion-fab>
-  }
 
-  <div #barcodeRect class="barcode-rect"></div>
+    <!-- Test Results Display -->
+    @if (testResults()) {
+      <div class="test-results">
+        <ion-card>
+          <ion-card-header>
+            <ion-card-title>Test Results</ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <pre>{{ testResults() }}</pre>
+          </ion-card-content>
+        </ion-card>
+      </div>
+    }
+  }
 </div>

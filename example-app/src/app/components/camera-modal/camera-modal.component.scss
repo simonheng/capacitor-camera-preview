@@ -5,17 +5,17 @@
 
 .container {
   position: relative;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 // Camera elements
 #cameraView {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
+  position: relative;
   width: 100%;
+  height: 100%;
+  background: black;
 }
 
 #webCamera {
@@ -27,10 +27,10 @@
 // Loading state
 .loading-screen {
   position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 100%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
   background-color: #333;
   color: white;
   display: flex;
@@ -68,12 +68,13 @@ ion-fab-button {
 // Barcode elements
 .barcode-rect {
   position: absolute;
-  border: 2px solid #dce358;
-  border-radius: 10px;
+  border: 2px solid #00ff00;
+  border-radius: 4px;
+  background: rgba(0, 255, 0, 0.1);
   visibility: hidden;
   opacity: 0;
-  transition: 0.2s ease-out;
-  background-color: #dce35875;
+  transition: all 0.2s ease;
+  z-index: 50;
 }
 
 ion-chip.barcode-detected {
@@ -99,5 +100,190 @@ ion-chip.barcode-detected {
   to {
     opacity: 1;
     transform: translate(-50%, 0);
+  }
+}
+
+.developer-panel {
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  
+  ion-item {
+    --background: transparent;
+    --color: white;
+    
+    ion-label {
+      h3 {
+        margin: 4px 0;
+        font-size: 0.9rem;
+      }
+      
+      p {
+        margin: 2px 0;
+        font-size: 0.8rem;
+        opacity: 0.8;
+      }
+    }
+  }
+}
+
+.advanced-panel {
+  background: rgba(40, 40, 40, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  
+  ion-item {
+    --background: transparent;
+    --color: white;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    
+    ion-label {
+      font-size: 0.9rem;
+    }
+    
+    ion-button {
+      --color: white;
+      --border-color: rgba(255, 255, 255, 0.3);
+    }
+    
+    ion-range {
+      --bar-background: rgba(255, 255, 255, 0.3);
+      --bar-background-active: var(--ion-color-primary);
+      --knob-background: var(--ion-color-primary);
+    }
+    
+    ion-select {
+      --color: white;
+    }
+    
+    ion-input {
+      --color: white;
+      --placeholder-color: rgba(255, 255, 255, 0.6);
+    }
+  }
+}
+
+.camera-actions {
+  ion-fab-button {
+    --background: rgba(0, 0, 0, 0.7);
+    --color: white;
+    margin: 8px 0;
+  }
+}
+
+.video-controls {
+  ion-fab-button {
+    margin: 8px 0;
+  }
+}
+
+.camera-trigger {
+  ion-fab-button {
+    --size: 80px;
+    --background: rgba(255, 255, 255, 0.9);
+    --color: black;
+    margin-bottom: 30px;
+  }
+}
+
+.capture-options {
+  ion-fab-button {
+    --background: rgba(0, 0, 0, 0.7);
+    --color: white;
+    margin: 4px 0;
+  }
+}
+
+.test-results {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  max-height: 40vh;
+  overflow-y: auto;
+  z-index: 100;
+  
+  ion-card {
+    --background: rgba(0, 0, 0, 0.9);
+    --color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    
+    ion-card-header {
+      padding: 12px;
+      
+      ion-card-title {
+        font-size: 1rem;
+        color: white;
+      }
+    }
+    
+    ion-card-content {
+      padding: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      
+      pre {
+        font-size: 0.75rem;
+        line-height: 1.3;
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: #e0e0e0;
+      }
+    }
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .developer-panel {
+    ion-item {
+      ion-label {
+        h3 {
+          font-size: 0.8rem;
+        }
+        
+        p {
+          font-size: 0.7rem;
+        }
+      }
+    }
+  }
+  
+  .advanced-panel {
+    ion-item {
+      ion-label {
+        font-size: 0.8rem;
+      }
+      
+      ion-button {
+        font-size: 0.8rem;
+      }
+    }
+  }
+  
+  .test-results {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    max-height: 35vh;
+    
+    ion-card-content {
+      pre {
+        font-size: 0.7rem;
+      }
+    }
+  }
+}
+
+// High contrast mode for better visibility
+@media (prefers-contrast: high) {
+  .developer-panel,
+  .advanced-panel {
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid white;
+  }
+  
+  .test-results ion-card {
+    --background: black;
+    border: 2px solid white;
   }
 }
