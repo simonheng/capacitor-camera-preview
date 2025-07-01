@@ -119,10 +119,7 @@ public class Camera2View {
             Log.d(TAG, "startSession: Starting background thread");
             startBackgroundThread();
             
-            Log.d(TAG, "startSession: Setting up surface view");
-            setupSurfaceView();
-            
-            Log.d(TAG, "startSession: Opening camera");
+            Log.d(TAG, "startSession: Opening camera (surface view will be set up after camera is ready)");
             openCamera();
         } catch (Exception e) {
             Log.e(TAG, "startSession: Error during initialization", e);
@@ -167,12 +164,36 @@ public class Camera2View {
         }
 
         surfaceView = new SurfaceView(context);
-        ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(
-            sessionConfig.getWidth(),
-            sessionConfig.getHeight() - sessionConfig.getPaddingBottom()
-        );
         
-        if (surfaceView.getLayoutParams() == null) {
+        // Calculate proper aspect ratio for preview
+        Size previewSize = getOptimalPreviewSize();
+        if (previewSize != null) {
+            Log.d(TAG, "setupSurfaceView: Using optimal preview size: " + previewSize.getWidth() + "x" + previewSize.getHeight());
+            
+            // Calculate aspect ratio
+            float aspectRatio = (float) previewSize.getWidth() / previewSize.getHeight();
+            
+            int targetWidth = sessionConfig.getWidth();
+            int targetHeight = sessionConfig.getHeight() - sessionConfig.getPaddingBottom();
+            
+            // Adjust dimensions to maintain aspect ratio
+            if (targetWidth / aspectRatio <= targetHeight) {
+                targetHeight = (int) (targetWidth / aspectRatio);
+            } else {
+                targetWidth = (int) (targetHeight * aspectRatio);
+            }
+            
+            Log.d(TAG, "setupSurfaceView: Adjusted surface size: " + targetWidth + "x" + targetHeight + 
+                      " (aspect ratio: " + aspectRatio + ")");
+            
+            ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(targetWidth, targetHeight);
+            surfaceView.setLayoutParams(layoutParams);
+        } else {
+            // Fallback to original dimensions
+            ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(
+                sessionConfig.getWidth(),
+                sessionConfig.getHeight() - sessionConfig.getPaddingBottom()
+            );
             surfaceView.setLayoutParams(layoutParams);
         }
 
@@ -343,6 +364,20 @@ public class Camera2View {
             Log.d(TAG, "deviceStateCallback.onOpened: Camera device opened successfully");
             cameraOpenCloseLock.release();
             cameraDevice = camera;
+            
+            // Now that we have camera characteristics, set up surface view with proper dimensions on UI thread
+            Log.d(TAG, "deviceStateCallback.onOpened: Setting up surface view with camera characteristics");
+            if (context instanceof Activity) {
+                Activity activity = (Activity) context;
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        setupSurfaceView();
+                    }
+                });
+            } else {
+                setupSurfaceView(); // Fallback for non-Activity contexts
+            }
             
             Log.d(TAG, "deviceStateCallback.onOpened: PreviewSurface available: " + (previewSurface != null));
             if (previewSurface != null) {
@@ -831,6 +866,61 @@ public class Camera2View {
         return baseLabel + " " + cameraId + typeLabel;
     }
 
+    private Size getOptimalPreviewSize() {
+        if (cameraCharacteristics == null) {
+            return null;
+        }
+
+        try {
+            StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            if (map == null) {
+                return null;
+            }
+
+            Size[] previewSizes = map.getOutputSizes(SurfaceHolder.class);
+            if (previewSizes == null || previewSizes.length == 0) {
+                return null;
+            }
+
+            // Get target dimensions
+            int targetWidth = sessionConfig.getWidth();
+            int targetHeight = sessionConfig.getHeight() - sessionConfig.getPaddingBottom();
+            
+            Log.d(TAG, "getOptimalPreviewSize: Target dimensions: " + targetWidth + "x" + targetHeight);
+
+            // Find the best size that fits our requirements
+            Size optimalSize = null;
+            int minDiff = Integer.MAX_VALUE;
+
+            for (Size size : previewSizes) {
+                Log.d(TAG, "getOptimalPreviewSize: Available size: " + size.getWidth() + "x" + size.getHeight());
+                
+                // Calculate how well this size fits our target
+                int diff = Math.abs(size.getWidth() - targetWidth) + Math.abs(size.getHeight() - targetHeight);
+                
+                // Prefer sizes that don't exceed our target by too much
+                if (size.getWidth() <= targetWidth * 1.2 && size.getHeight() <= targetHeight * 1.2) {
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        optimalSize = size;
+                    }
+                }
+            }
+
+            // If no good fit found, use the first available size
+            if (optimalSize == null && previewSizes.length > 0) {
+                optimalSize = previewSizes[0];
+                Log.d(TAG, "getOptimalPreviewSize: No good fit found, using first available: " + 
+                      optimalSize.getWidth() + "x" + optimalSize.getHeight());
+            }
+
+            return optimalSize;
+        } catch (Exception e) {
+            Log.e(TAG, "getOptimalPreviewSize: Error getting optimal preview size", e);
+            return null;
+        }
+    }
+
     public ZoomFactors getZoomFactors() {
         // Use current camera characteristics if available
         if (cameraCharacteristics != null) {
@@ -1117,27 +1207,36 @@ public class Camera2View {
             
             if (lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
                 isFrontCamera = true;
-                // Front camera: mirror the sensor orientation
+                // Front camera rotation calculation
+                // For most devices, front camera needs: (360 - sensorOrientation) % 360
+                // But some devices need different calculations
                 rotation = (360 - sensorOrientation) % 360;
+                
+                // Common adjustments for front cameras
+                if (rotation == 270) {
+                    rotation = 90;  // Fix common upside-down issue
+                } else if (rotation == 90) {
+                    rotation = 270;
+                }
             } else {
                 // Back camera: use sensor orientation directly
                 rotation = sensorOrientation;
             }
 
             Log.d(TAG, "correctImageRotation: Sensor orientation=" + sensorOrientation + 
-                  ", front camera=" + isFrontCamera + ", applying rotation=" + rotation);
+                  ", front camera=" + isFrontCamera + ", calculated rotation=" + rotation);
 
             // Apply transformations
             Matrix matrix = new Matrix();
             
+            // For front camera, mirror first, then rotate
+            if (isFrontCamera) {
+                matrix.postScale(-1, 1);  // Mirror horizontally
+            }
+            
             // Apply rotation
             if (rotation != 0) {
                 matrix.postRotate(rotation);
-            }
-            
-            // Mirror front camera horizontally (like a mirror)
-            if (isFrontCamera) {
-                matrix.postScale(-1, 1);
             }
 
             // Apply transformations

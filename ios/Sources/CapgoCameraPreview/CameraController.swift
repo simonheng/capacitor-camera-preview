@@ -63,7 +63,14 @@ extension CameraController {
             let session = AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: AVMediaType.video, position: .unspecified)
 
             let cameras = session.devices.compactMap { $0 }
-            guard !cameras.isEmpty else { throw CameraControllerError.noCamerasAvailable }
+            print("Camera discovery found \(cameras.count) cameras")
+            for camera in cameras {
+                print("Camera: \(camera.localizedName) - Position: \(camera.position.rawValue) - ID: \(camera.uniqueID)")
+            }
+            guard !cameras.isEmpty else { 
+                print("ERROR: No cameras found during device discovery")
+                throw CameraControllerError.noCamerasAvailable 
+            }
 
             for camera in cameras {
                 if camera.position == .front {
@@ -73,9 +80,16 @@ extension CameraController {
                 if camera.position == .back {
                     self.rearCamera = camera
 
-                    try camera.lockForConfiguration()
-                    camera.focusMode = .continuousAutoFocus
-                    camera.unlockForConfiguration()
+                    // Configure rear camera focus mode, but don't fail if it errors
+                    do {
+                        try camera.lockForConfiguration()
+                        if camera.isFocusModeSupported(.continuousAutoFocus) {
+                            camera.focusMode = .continuousAutoFocus
+                        }
+                        camera.unlockForConfiguration()
+                    } catch {
+                        print("Warning: Could not configure rear camera focus mode: \(error)")
+                    }
                 }
             }
             if disableAudio == false {
@@ -123,21 +137,41 @@ extension CameraController {
                 // Use position-based selection (legacy behavior)
                 if cameraPosition == "rear" {
                     if let rearCamera = self.rearCamera {
+                        print("Configuring rear camera: \(rearCamera.localizedName)")
                         self.rearCameraInput = try AVCaptureDeviceInput(device: rearCamera)
 
-                        if captureSession.canAddInput(self.rearCameraInput!) { captureSession.addInput(self.rearCameraInput!) }
+                        if captureSession.canAddInput(self.rearCameraInput!) { 
+                            captureSession.addInput(self.rearCameraInput!) 
+                            print("Successfully added rear camera input")
+                        }
 
                         self.currentCameraPosition = .rear
+                    } else {
+                        print("ERROR: Rear camera requested but not available")
+                        throw CameraControllerError.noCamerasAvailable
                     }
                 } else if cameraPosition == "front" {
                     if let frontCamera = self.frontCamera {
+                        print("Configuring front camera: \(frontCamera.localizedName)")
                         self.frontCameraInput = try AVCaptureDeviceInput(device: frontCamera)
 
-                        if captureSession.canAddInput(self.frontCameraInput!) { captureSession.addInput(self.frontCameraInput!) } else { throw CameraControllerError.inputsAreInvalid }
+                        if captureSession.canAddInput(self.frontCameraInput!) { 
+                            captureSession.addInput(self.frontCameraInput!) 
+                            print("Successfully added front camera input")
+                        } else { 
+                            print("ERROR: Cannot add front camera input to session")
+                            throw CameraControllerError.inputsAreInvalid 
+                        }
 
                         self.currentCameraPosition = .front
+                    } else {
+                        print("ERROR: Front camera requested but not available")
+                        throw CameraControllerError.noCamerasAvailable
                     }
-                } else { throw CameraControllerError.noCamerasAvailable }
+                } else { 
+                    print("ERROR: Invalid camera position: \(cameraPosition)")
+                    throw CameraControllerError.noCamerasAvailable 
+                }
             }
 
             // Add audio input
