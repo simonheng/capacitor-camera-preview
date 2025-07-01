@@ -66,30 +66,31 @@ public class Camera2View {
     private CameraCaptureSession captureSession;
     private ImageReader imageReader;
     private ImageReader sampleImageReader;
-    
+
     // Surface and preview
     private SurfaceView surfaceView;
     private Surface previewSurface;
-    
+
     // Camera state
     private String currentCameraId;
     private CameraCharacteristics cameraCharacteristics;
     private CaptureRequest.Builder previewRequestBuilder;
     private CaptureRequest previewRequest;
-    private int currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON;
+    private CaptureRequest.Key<Integer> currentControlFlashMode = CaptureRequest.FLASH_MODE;
+    private int currentFlashMode = CameraMetadata.FLASH_MODE_OFF;
     private float currentZoomRatio = 1.0f;
-    
+
     // Threading
     private HandlerThread backgroundThread;
     private Handler backgroundHandler;
     private final Semaphore cameraOpenCloseLock = new Semaphore(1);
-    
+
     // Configuration
     private CameraSessionConfiguration sessionConfig;
     private Camera2ViewListener listener;
     private Context context;
     private WebView webView;
-    
+
     // State tracking
     private boolean isRunning = false;
 
@@ -109,16 +110,16 @@ public class Camera2View {
 
     public void startSession(CameraSessionConfiguration config) {
         Log.d(TAG, "startSession: Starting camera session with config");
-        Log.d(TAG, "startSession: DeviceId=" + config.getDeviceId() + 
-                   ", Position=" + config.getPosition() + 
+        Log.d(TAG, "startSession: DeviceId=" + config.getDeviceId() +
+                   ", Position=" + config.getPosition() +
                    ", Dimensions=" + config.getWidth() + "x" + config.getHeight());
-        
+
         this.sessionConfig = config;
-        
+
         try {
             Log.d(TAG, "startSession: Starting background thread");
             startBackgroundThread();
-            
+
             Log.d(TAG, "startSession: Opening camera (surface view will be set up after camera is ready)");
             openCamera();
         } catch (Exception e) {
@@ -164,28 +165,28 @@ public class Camera2View {
         }
 
         surfaceView = new SurfaceView(context);
-        
+
         // Calculate proper aspect ratio for preview
         Size previewSize = getOptimalPreviewSize();
         if (previewSize != null) {
             Log.d(TAG, "setupSurfaceView: Using optimal preview size: " + previewSize.getWidth() + "x" + previewSize.getHeight());
-            
+
             // Calculate aspect ratio
             float aspectRatio = (float) previewSize.getWidth() / previewSize.getHeight();
-            
+
             int targetWidth = sessionConfig.getWidth();
             int targetHeight = sessionConfig.getHeight() - sessionConfig.getPaddingBottom();
-            
+
             // Adjust dimensions to maintain aspect ratio
             if (targetWidth / aspectRatio <= targetHeight) {
                 targetHeight = (int) (targetWidth / aspectRatio);
             } else {
                 targetWidth = (int) (targetHeight * aspectRatio);
             }
-            
-            Log.d(TAG, "setupSurfaceView: Adjusted surface size: " + targetWidth + "x" + targetHeight + 
+
+            Log.d(TAG, "setupSurfaceView: Adjusted surface size: " + targetWidth + "x" + targetHeight +
                       " (aspect ratio: " + aspectRatio + ")");
-            
+
             ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(targetWidth, targetHeight);
             surfaceView.setLayoutParams(layoutParams);
         } else {
@@ -242,7 +243,7 @@ public class Camera2View {
             }
             surfaceView = null;
         }
-        
+
         // Reset WebView background
         webView.setBackgroundColor(android.graphics.Color.WHITE);
     }
@@ -282,7 +283,7 @@ public class Camera2View {
 
             Log.d(TAG, "openCamera: Getting camera characteristics for: " + currentCameraId);
             cameraCharacteristics = cameraManager.getCameraCharacteristics(currentCameraId);
-            
+
             StreamConfigurationMap streamMap = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             if (streamMap == null) {
                 Log.e(TAG, "openCamera: No stream configuration map available");
@@ -292,10 +293,10 @@ public class Camera2View {
                 cameraOpenCloseLock.release();
                 return;
             }
-            
+
             Size[] jpegSizes = streamMap.getOutputSizes(ImageFormat.JPEG);
             Log.d(TAG, "openCamera: Available JPEG sizes: " + (jpegSizes != null ? jpegSizes.length : 0));
-            
+
             int width = 640;
             int height = 480;
             if (jpegSizes != null && jpegSizes.length > 0) {
@@ -334,13 +335,13 @@ public class Camera2View {
         try {
             String[] cameraIdList = cameraManager.getCameraIdList();
             Log.d(TAG, "getCameraIdByPosition: Found " + cameraIdList.length + " cameras");
-            
+
             for (String cameraId : cameraIdList) {
                 CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
                 Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
-                
+
                 Log.d(TAG, "getCameraIdByPosition: Camera " + cameraId + " facing: " + facing);
-                
+
                 if (facing != null) {
                     if ("front".equals(position) && facing == CameraCharacteristics.LENS_FACING_FRONT) {
                         Log.d(TAG, "getCameraIdByPosition: Found front camera: " + cameraId);
@@ -364,7 +365,7 @@ public class Camera2View {
             Log.d(TAG, "deviceStateCallback.onOpened: Camera device opened successfully");
             cameraOpenCloseLock.release();
             cameraDevice = camera;
-            
+
             // Now that we have camera characteristics, set up surface view with proper dimensions on UI thread
             Log.d(TAG, "deviceStateCallback.onOpened: Setting up surface view with camera characteristics");
             if (context instanceof Activity) {
@@ -378,7 +379,7 @@ public class Camera2View {
             } else {
                 setupSurfaceView(); // Fallback for non-Activity contexts
             }
-            
+
             Log.d(TAG, "deviceStateCallback.onOpened: PreviewSurface available: " + (previewSurface != null));
             if (previewSurface != null) {
                 createCameraPreviewSession();
@@ -411,7 +412,7 @@ public class Camera2View {
         Log.d(TAG, "createCameraPreviewSession: Starting camera preview session creation");
         try {
             if (cameraDevice == null || previewSurface == null) {
-                Log.e(TAG, "createCameraPreviewSession: Cannot create session - camera device: " + 
+                Log.e(TAG, "createCameraPreviewSession: Cannot create session - camera device: " +
                       (cameraDevice != null) + ", preview surface: " + (previewSurface != null));
                 return;
             }
@@ -438,7 +439,7 @@ public class Camera2View {
                             Log.d(TAG, "captureSession.onConfigured: Setting up preview request");
                             previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                             previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
-                            
+
                             // Set initial zoom
                             if (sessionConfig.getZoomFactor() != 1.0f) {
                                 Log.d(TAG, "captureSession.onConfigured: Setting initial zoom: " + sessionConfig.getZoomFactor());
@@ -448,7 +449,7 @@ public class Camera2View {
                             previewRequest = previewRequestBuilder.build();
                             Log.d(TAG, "captureSession.onConfigured: Starting repeating capture request");
                             captureSession.setRepeatingRequest(previewRequest, captureCallback, backgroundHandler);
-                            
+
                             isRunning = true;
                             Log.d(TAG, "captureSession.onConfigured: Camera preview started successfully");
                             if (listener != null) {
@@ -538,16 +539,17 @@ public class Camera2View {
                             Log.d(TAG, "capturePhoto: Capture session configured, taking photo");
                             CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
                             captureBuilder.addTarget(imageReader.getSurface());
-                            
+
                             // Auto-focus
                             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
-                            
+                            // set flash
+                            captureBuilder.set(currentControlFlashMode, currentFlashMode);
                             // Set zoom if available
                             if (previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION) != null) {
                                 captureBuilder.set(CaptureRequest.SCALER_CROP_REGION, previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION));
                             }
 
+                            // capture photo
                             session.capture(captureBuilder.build(), new CameraCaptureSession.CaptureCallback() {
                                 @Override
                                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
@@ -602,15 +604,19 @@ public class Camera2View {
                             Log.d(TAG, "captureSample: Capture session configured, taking sample");
                             CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
                             captureBuilder.addTarget(sampleImageReader.getSurface());
-                            
+
+                            // Set auto-focus
                             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
-                            
+
+                            // Set flash
+                            captureBuilder.set(currentControlFlashMode, currentFlashMode);
+
                             // Set zoom if available
                             if (previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION) != null) {
                                 captureBuilder.set(CaptureRequest.SCALER_CROP_REGION, previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION));
                             }
 
+                            // capture photo
                             session.capture(captureBuilder.build(), new CameraCaptureSession.CaptureCallback() {
                                 @Override
                                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
@@ -655,10 +661,10 @@ public class Camera2View {
                     ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                     byte[] bytes = new byte[buffer.remaining()];
                     buffer.get(bytes);
-                    
+
                     // Apply rotation correction
                     bytes = correctImageRotation(bytes);
-                    
+
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
                     if (listener != null) {
                         listener.onPictureTaken(base64);
@@ -687,10 +693,10 @@ public class Camera2View {
                     ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                     byte[] bytes = new byte[buffer.remaining()];
                     buffer.get(bytes);
-                    
+
                     // Apply rotation correction
                     bytes = correctImageRotation(bytes);
-                    
+
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
                     if (listener != null) {
                         listener.onSampleTaken(base64);
@@ -719,22 +725,22 @@ public class Camera2View {
 
             String[] cameraIdList = cameraManager.getCameraIdList();
             Log.d(TAG, "getAvailableDevices: Found " + cameraIdList.length + " camera IDs");
-            
+
             java.util.List<com.ahm.capacitor.camera.preview.model.CameraDevice> devices = new java.util.ArrayList<>();
-            
+
             for (String cameraId : cameraIdList) {
                 Log.d(TAG, "getAvailableDevices: Processing camera ID: " + cameraId);
-                
+
                 try {
                     CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
                     Integer lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
-                    
+
                     String position = "rear";
                     String deviceType = "wideAngle";
                     String label = "Camera " + cameraId;
-                    
+
                     Log.d(TAG, "getAvailableDevices: Camera " + cameraId + " lens facing: " + lensFacing);
-                    
+
                     if (lensFacing != null) {
                         switch (lensFacing) {
                             case CameraCharacteristics.LENS_FACING_FRONT:
@@ -765,27 +771,27 @@ public class Camera2View {
                                     break;
                                 }
                             }
-                            
+
                             // For logical multi-cameras, also add their physical cameras
                             if (isLogicalMultiCamera && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
                                 java.util.Set<String> physicalCameraIds = characteristics.getPhysicalCameraIds();
                                 Log.d(TAG, "getAvailableDevices: Logical camera " + cameraId + " has " + physicalCameraIds.size() + " physical cameras");
-                                
+
                                 for (String physicalId : physicalCameraIds) {
                                     try {
                                         CameraCharacteristics physicalCharacteristics = cameraManager.getCameraCharacteristics(physicalId);
                                         String physicalDeviceType = detectDeviceType(physicalCharacteristics, physicalId);
                                         String physicalLabel = createLabel(physicalId, position, physicalDeviceType);
-                                        
-                                        Log.d(TAG, "getAvailableDevices: Adding physical camera - ID: " + physicalId + 
+
+                                        Log.d(TAG, "getAvailableDevices: Adding physical camera - ID: " + physicalId +
                                                  ", Label: " + physicalLabel + ", Type: " + physicalDeviceType);
-                                        
+
                                         devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(physicalId, physicalLabel, position, physicalDeviceType));
                                     } catch (Exception e) {
                                         Log.e(TAG, "getAvailableDevices: Error processing physical camera " + physicalId, e);
                                     }
                                 }
-                                
+
                                 // Also add the logical camera itself
                                 deviceType = "multi";
                                 label = createLabel(cameraId, position, deviceType);
@@ -799,16 +805,16 @@ public class Camera2View {
                         label = createLabel(cameraId, position, deviceType);
                     }
 
-                    Log.d(TAG, "getAvailableDevices: Adding device - ID: " + cameraId + 
+                    Log.d(TAG, "getAvailableDevices: Adding device - ID: " + cameraId +
                              ", Label: " + label + ", Position: " + position + ", Type: " + deviceType);
-                    
+
                     devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(cameraId, label, position, deviceType));
                 } catch (Exception e) {
                     Log.e(TAG, "getAvailableDevices: Error processing camera " + cameraId, e);
                     // Continue with next camera instead of failing completely
                 }
             }
-            
+
             Log.d(TAG, "getAvailableDevices: Successfully enumerated " + devices.size() + " cameras");
             return devices;
         } catch (CameraAccessException e) {
@@ -827,10 +833,10 @@ public class Camera2View {
             if (focalLengths != null && focalLengths.length > 0) {
                 float focalLength = focalLengths[0];
                 Log.d(TAG, "detectDeviceType: Camera " + cameraId + " focal length: " + focalLength);
-                
+
                 // Typical focal lengths (in mm equivalent):
                 // Ultra-wide: ~13-16mm (smartphone equivalent ~2.2-2.6mm)
-                // Wide: ~24-28mm (smartphone equivalent ~4-5mm)  
+                // Wide: ~24-28mm (smartphone equivalent ~4-5mm)
                 // Telephoto: ~52-85mm (smartphone equivalent ~8.5-14mm)
                 if (focalLength < 3.0f) {
                     return "ultraWide";
@@ -847,7 +853,7 @@ public class Camera2View {
     private String createLabel(String cameraId, String position, String deviceType) {
         String baseLabel = position.equals("front") ? "Front Camera" : "Rear Camera";
         String typeLabel = "";
-        
+
         switch (deviceType) {
             case "ultraWide":
                 typeLabel = " (Ultra-wide)";
@@ -862,7 +868,7 @@ public class Camera2View {
                 typeLabel = " (Multi)";
                 break;
         }
-        
+
         return baseLabel + " " + cameraId + typeLabel;
     }
 
@@ -885,7 +891,7 @@ public class Camera2View {
             // Get target dimensions
             int targetWidth = sessionConfig.getWidth();
             int targetHeight = sessionConfig.getHeight() - sessionConfig.getPaddingBottom();
-            
+
             Log.d(TAG, "getOptimalPreviewSize: Target dimensions: " + targetWidth + "x" + targetHeight);
 
             // Find the best size that fits our requirements
@@ -894,10 +900,10 @@ public class Camera2View {
 
             for (Size size : previewSizes) {
                 Log.d(TAG, "getOptimalPreviewSize: Available size: " + size.getWidth() + "x" + size.getHeight());
-                
+
                 // Calculate how well this size fits our target
                 int diff = Math.abs(size.getWidth() - targetWidth) + Math.abs(size.getHeight() - targetHeight);
-                
+
                 // Prefer sizes that don't exceed our target by too much
                 if (size.getWidth() <= targetWidth * 1.2 && size.getHeight() <= targetHeight * 1.2) {
                     if (diff < minDiff) {
@@ -910,7 +916,7 @@ public class Camera2View {
             // If no good fit found, use the first available size
             if (optimalSize == null && previewSizes.length > 0) {
                 optimalSize = previewSizes[0];
-                Log.d(TAG, "getOptimalPreviewSize: No good fit found, using first available: " + 
+                Log.d(TAG, "getOptimalPreviewSize: No good fit found, using first available: " +
                       optimalSize.getWidth() + "x" + optimalSize.getHeight());
             }
 
@@ -930,7 +936,7 @@ public class Camera2View {
             }
             return new ZoomFactors(1.0f, maxZoom, currentZoomRatio);
         }
-        
+
         // If no active session, check first available camera
         try {
             String[] cameraIdList = cameraManager.getCameraIdList();
@@ -945,7 +951,7 @@ public class Camera2View {
         } catch (CameraAccessException e) {
             Log.e(TAG, "getZoomFactors: Error checking zoom capabilities", e);
         }
-        
+
         return new ZoomFactors(1.0f, 1.0f, 1.0f);
     }
 
@@ -978,28 +984,17 @@ public class Camera2View {
                 int cropH = Math.round((float) activeArraySize.height() / zoomRatio);
                 int cropX = (activeArraySize.width() - cropW) / 2;
                 int cropY = (activeArraySize.height() - cropH) / 2;
-                
+
                 android.graphics.Rect cropRegion = new android.graphics.Rect(cropX, cropY, cropX + cropW, cropY + cropH);
                 previewRequestBuilder.set(CaptureRequest.SCALER_CROP_REGION, cropRegion);
-                
+
                 previewRequest = previewRequestBuilder.build();
                 captureSession.setRepeatingRequest(previewRequest, captureCallback, backgroundHandler);
-                
+
                 currentZoomRatio = zoomRatio;
             }
         } catch (CameraAccessException e) {
             Log.e(TAG, "Error setting zoom", e);
-        }
-    }
-
-    public String getFlashMode() {
-        switch (currentFlashMode) {
-            case CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH:
-                return "on";
-            case CameraMetadata.CONTROL_AE_MODE_ON_AUTO_FLASH:
-                return "auto";
-            default:
-                return "off";
         }
     }
 
@@ -1013,7 +1008,7 @@ public class Camera2View {
                 return Arrays.asList("off");
             }
         }
-        
+
         // If no active session, check first available camera
         try {
             String[] cameraIdList = cameraManager.getCameraIdList();
@@ -1021,41 +1016,70 @@ public class Camera2View {
                 CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraIdList[0]);
                 Boolean flashAvailable = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
                 if (flashAvailable != null && flashAvailable) {
-                    return Arrays.asList("off", "on", "auto");
+                    String[] flashModes = new String[] { "off", "on", "auto" };
+                    Log.d(TAG, "getSupportedFlashModes: Flash modes: " + Arrays.toString(flashModes));
+                    return Arrays.asList(flashModes);
                 }
             }
         } catch (CameraAccessException e) {
             Log.e(TAG, "getSupportedFlashModes: Error checking flash availability", e);
         }
-        
+
         return Arrays.asList("off");
     }
 
-    public void setFlashMode(String mode) throws Exception {
-        int newFlashMode;
-        switch (mode) {
-            case "on":
-                newFlashMode = CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH;
-                break;
-            case "auto":
-                newFlashMode = CameraMetadata.CONTROL_AE_MODE_ON_AUTO_FLASH;
-                break;
+    private boolean isExternalFlashAeModeAvailable() {
+        int[] availableAeModes = cameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES);
+
+        for (int aeMode : availableAeModes) {
+            if (aeMode == CaptureRequest.CONTROL_AE_MODE_ON_EXTERNAL_FLASH) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public String getFlashMode() {
+           switch (currentFlashMode) {
+            case CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH:
+            case CameraMetadata.FLASH_MODE_SINGLE:
+                return "on";
+            case CameraMetadata.CONTROL_AE_MODE_ON_AUTO_FLASH:
+                return "auto";
             default:
-                newFlashMode = CameraMetadata.CONTROL_AE_MODE_ON;
-                break;
+                return "off";
         }
+    }
 
-        if (previewRequestBuilder == null || captureSession == null) {
-            throw new Exception("Camera not ready");
-        }
+    public void setFlashMode(String mode) throws Exception {
+        if (isExternalFlashAeModeAvailable()) {
+            currentControlFlashMode = CaptureRequest.CONTROL_AE_MODE;
 
-        try {
-            currentFlashMode = newFlashMode;
-            previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
-            previewRequest = previewRequestBuilder.build();
-            captureSession.setRepeatingRequest(previewRequest, captureCallback, backgroundHandler);
-        } catch (CameraAccessException e) {
-            throw new Exception("Error setting flash mode: " + e.getMessage());
+            switch (mode) {
+                case "on":
+                    currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH;
+                    break;
+                case "auto":
+                    currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON_AUTO_FLASH;
+                    break;
+                default:
+                    currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON;
+                    break;
+            }
+        } else {
+            currentControlFlashMode = CaptureRequest.FLASH_MODE;
+
+            switch (mode) {
+                case "on":
+                    currentFlashMode = CameraMetadata.FLASH_MODE_SINGLE;
+                    break;
+                case "auto":
+                    currentFlashMode = CameraMetadata.FLASH_MODE_SINGLE;
+                    break;
+                default:
+                    currentFlashMode = CameraMetadata.FLASH_MODE_OFF;
+                    break;
+            }
         }
     }
 
@@ -1095,9 +1119,9 @@ public class Camera2View {
         Log.d(TAG, "flipCamera: Starting camera flip");
         String currentPosition = getCurrentPosition();
         String targetPosition = "front".equals(currentPosition) ? "rear" : "front";
-        
+
         Log.d(TAG, "flipCamera: Current position: " + currentPosition + ", target: " + targetPosition);
-        
+
         String newCameraId = getCameraIdByPosition(targetPosition);
         if (newCameraId == null) {
             Log.e(TAG, "flipCamera: No camera found for position: " + targetPosition);
@@ -1105,7 +1129,7 @@ public class Camera2View {
         }
 
         Log.d(TAG, "flipCamera: Found target camera ID: " + newCameraId);
-        
+
         // Store current session config for restart
         CameraSessionConfiguration currentConfig = sessionConfig;
         if (currentConfig != null) {
@@ -1129,7 +1153,7 @@ public class Camera2View {
         }
 
         final CameraSessionConfiguration finalConfig = currentConfig;
-        
+
         // Ensure UI operations run on main thread
         if (context instanceof Activity) {
             Activity activity = (Activity) context;
@@ -1139,7 +1163,7 @@ public class Camera2View {
                     try {
                         Log.d(TAG, "flipCamera: Stopping current session on UI thread");
                         stopSession();
-                        
+
                         // Start new session after a brief delay
                         android.os.Handler handler = new android.os.Handler();
                         handler.postDelayed(new Runnable() {
@@ -1149,7 +1173,7 @@ public class Camera2View {
                                 startSession(finalConfig);
                             }
                         }, 150);
-                        
+
                     } catch (Exception e) {
                         Log.e(TAG, "flipCamera: Error during UI thread execution", e);
                         if (listener != null) {
@@ -1204,14 +1228,14 @@ public class Camera2View {
             int rotation = 0;
             boolean isFrontCamera = false;
             Integer lensFacing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING);
-            
+
             if (lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
                 isFrontCamera = true;
                 // Front camera rotation calculation
                 // For most devices, front camera needs: (360 - sensorOrientation) % 360
                 // But some devices need different calculations
                 rotation = (360 - sensorOrientation) % 360;
-                
+
                 // Common adjustments for front cameras
                 if (rotation == 270) {
                     rotation = 90;  // Fix common upside-down issue
@@ -1223,17 +1247,17 @@ public class Camera2View {
                 rotation = sensorOrientation;
             }
 
-            Log.d(TAG, "correctImageRotation: Sensor orientation=" + sensorOrientation + 
+            Log.d(TAG, "correctImageRotation: Sensor orientation=" + sensorOrientation +
                   ", front camera=" + isFrontCamera + ", calculated rotation=" + rotation);
 
             // Apply transformations
             Matrix matrix = new Matrix();
-            
+
             // For front camera, mirror first, then rotate
             if (isFrontCamera) {
                 matrix.postScale(-1, 1);  // Mirror horizontally
             }
-            
+
             // Apply rotation
             if (rotation != 0) {
                 matrix.postRotate(rotation);
@@ -1254,4 +1278,4 @@ public class Camera2View {
             return imageBytes; // Return original if correction fails
         }
     }
-} 
+}

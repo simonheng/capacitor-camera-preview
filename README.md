@@ -595,7 +595,7 @@ Get the current deviceId.
 Available camera device types for iOS.
 Maps to AVCaptureDevice DeviceTypes in iOS.
 
-<code>'wideAngle' | 'ultraWide' | 'telephoto' | 'dual' | 'dualWide' | 'triple' | 'trueDepth'</code>
+<code>'wideAngle' | 'ultraWide' | 'telephoto' | 'dual' | 'dualWide' | 'triple' | 'trueDepth' | 'multi'</code>
 
 
 #### FlashMode
