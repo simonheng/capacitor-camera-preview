@@ -76,8 +76,8 @@ public class Camera2View {
     private CameraCharacteristics cameraCharacteristics;
     private CaptureRequest.Builder previewRequestBuilder;
     private CaptureRequest previewRequest;
-    private CaptureRequest.Key<Integer> currentControlFlashMode = CaptureRequest.FLASH_MODE;
-    private int currentFlashMode = CameraMetadata.FLASH_MODE_OFF;
+    private CaptureRequest.Key<Integer> currentControlFlashMode = CaptureRequest.CONTROL_AE_MODE;
+    private int currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON;
     private float currentZoomRatio = 1.0f;
 
     // Threading
@@ -438,6 +438,7 @@ public class Camera2View {
                         try {
                             Log.d(TAG, "captureSession.onConfigured: Setting up preview request");
                             previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                            // Set flash
                             previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
 
                             // Set initial zoom
@@ -540,11 +541,13 @@ public class Camera2View {
                             CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
                             captureBuilder.addTarget(imageReader.getSurface());
 
-                            // Auto-focus
+                            // Set auto-focus
                             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                            // set flash
-                            captureBuilder.set(currentControlFlashMode, currentFlashMode);
-                            // Set zoom if available
+
+                            // Set flash
+                            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
+
+                            // Set zoom
                             if (previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION) != null) {
                                 captureBuilder.set(CaptureRequest.SCALER_CROP_REGION, previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION));
                             }
@@ -609,7 +612,7 @@ public class Camera2View {
                             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
 
                             // Set flash
-                            captureBuilder.set(currentControlFlashMode, currentFlashMode);
+                            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
 
                             // Set zoom if available
                             if (previewRequestBuilder.get(CaptureRequest.SCALER_CROP_REGION) != null) {
@@ -1028,19 +1031,19 @@ public class Camera2View {
         return Arrays.asList("off");
     }
 
-    private boolean isExternalFlashAeModeAvailable() {
+    // Helper to check if a specific AE mode is supported
+    private boolean isAeModeSupported(int mode) {
+        if (cameraCharacteristics == null) return false;
         int[] availableAeModes = cameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES);
-
+        if (availableAeModes == null) return false;
         for (int aeMode : availableAeModes) {
-            if (aeMode == CaptureRequest.CONTROL_AE_MODE_ON_EXTERNAL_FLASH) {
-                return true;
-            }
+            if (aeMode == mode) return true;
         }
         return false;
     }
 
     public String getFlashMode() {
-           switch (currentFlashMode) {
+        switch (currentFlashMode) {
             case CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH:
             case CameraMetadata.FLASH_MODE_SINGLE:
                 return "on";
@@ -1052,35 +1055,42 @@ public class Camera2View {
     }
 
     public void setFlashMode(String mode) throws Exception {
-        if (isExternalFlashAeModeAvailable()) {
-            currentControlFlashMode = CaptureRequest.CONTROL_AE_MODE;
+        int requestedAeMode;
 
-            switch (mode) {
-                case "on":
-                    currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH;
-                    break;
-                case "auto":
-                    currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON_AUTO_FLASH;
-                    break;
-                default:
-                    currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON;
-                    break;
-            }
-        } else {
-            currentControlFlashMode = CaptureRequest.FLASH_MODE;
-
-            switch (mode) {
-                case "on":
-                    currentFlashMode = CameraMetadata.FLASH_MODE_SINGLE;
-                    break;
-                case "auto":
-                    currentFlashMode = CameraMetadata.FLASH_MODE_SINGLE;
-                    break;
-                default:
-                    currentFlashMode = CameraMetadata.FLASH_MODE_OFF;
-                    break;
-            }
+        switch (mode) {
+            case "on":
+                requestedAeMode = CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH;
+                break;
+            case "auto":
+                requestedAeMode = CameraMetadata.CONTROL_AE_MODE_ON_AUTO_FLASH;
+                break;
+            default:
+                requestedAeMode = CameraMetadata.CONTROL_AE_MODE_ON;
+                break;
         }
+
+        if (isAeModeSupported(requestedAeMode)) {
+            currentFlashMode = requestedAeMode;
+        }
+        // } else {
+        //     // Fallback to FLASH_MODE_SINGLE if AE mode is not supported
+        //     currentControlFlashMode = CaptureRequest.FLASH_MODE;
+        //     switch (mode) {
+        //         case "on":
+        //         case "auto":
+        //             currentFlashMode = CameraMetadata.FLASH_MODE_SINGLE;
+        //             break;
+        //         default:
+        //             currentFlashMode = CameraMetadata.FLASH_MODE_OFF;
+        //             break;
+        //     }
+        // }
+
+        int[] availableAeModes = cameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES);
+        Log.d(TAG, "Available AE modes: " + Arrays.toString(availableAeModes));
+
+        Boolean flashAvailable = cameraCharacteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+        Log.d(TAG, "Flash available: " + flashAvailable);
     }
 
     public String getCurrentDeviceId() {
@@ -1151,6 +1161,8 @@ public class Camera2View {
                 currentConfig.getZoomFactor()
             );
         }
+
+        Log.d(TAG, "flipCamera: Current config: " + currentConfig.getWidth() + ", " + currentConfig.getHeight());
 
         final CameraSessionConfiguration finalConfig = currentConfig;
 
