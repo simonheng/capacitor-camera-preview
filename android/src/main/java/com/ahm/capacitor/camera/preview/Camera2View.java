@@ -544,6 +544,9 @@ public class Camera2View {
                             // Set auto-focus
                             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
 
+                            // Set AE pre-capture trigger
+                            captureBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                                CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START);
                             // Set flash
                             captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
 
@@ -610,6 +613,10 @@ public class Camera2View {
 
                             // Set auto-focus
                             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+
+                             // Set AE pre-capture trigger
+                            captureBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                                CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START);
 
                             // Set flash
                             captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
