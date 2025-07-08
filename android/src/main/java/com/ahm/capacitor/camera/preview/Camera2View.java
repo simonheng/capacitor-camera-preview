@@ -15,6 +15,8 @@ import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
+import android.hardware.camera2.params.OutputConfiguration;
+import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
@@ -47,9 +49,27 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.io.FileOutputStream;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.concurrent.Executors;
 
 public class Camera2View {
     private static final String TAG = "Camera2View";
+
+    private static class CameraLens {
+        String id;
+        float minZoom; // Native min zoom (usually 1.0)
+        float maxZoom; // Native max zoom
+        float focalLength;
+        float baseZoomRatio; // User-facing base zoom (e.g. 0.6, 1.0, 2.0)
+
+        CameraLens(String id, float focalLength, float maxZoom) {
+            this.id = id;
+            this.focalLength = focalLength;
+            this.minZoom = 1.0f;
+            this.maxZoom = maxZoom;
+        }
+    }
 
     public interface Camera2ViewListener {
         void onPictureTaken(String result);
@@ -73,9 +93,12 @@ public class Camera2View {
 
     // Camera state
     private String currentCameraId;
+    private String currentLogicalCameraId; // For physical cameras, this is the parent logical camera
+    private boolean isCurrentCameraPhysical = false;
     private CameraCharacteristics cameraCharacteristics;
     private CaptureRequest.Builder previewRequestBuilder;
     private CaptureRequest previewRequest;
+    private List<CameraLens> sortedLenses;
     private CaptureRequest.Key<Integer> currentControlFlashMode = CaptureRequest.CONTROL_AE_MODE;
     private int currentFlashMode = CameraMetadata.CONTROL_AE_MODE_ON;
     private float currentZoomRatio = 1.0f;
@@ -159,6 +182,14 @@ public class Camera2View {
     }
 
     private void setupSurfaceView() {
+        Log.d(TAG, "setupSurfaceView: Setting up surface view");
+
+        // Remove existing surface view if any
+        if (surfaceView != null) {
+            Log.d(TAG, "setupSurfaceView: Removing existing surface view");
+            removeSurfaceView();
+        }
+
         // Make WebView transparent if needed
         if (sessionConfig.isToBack()) {
             webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
@@ -214,8 +245,14 @@ public class Camera2View {
                 Log.d(TAG, "surfaceCreated: Preview surface created");
                 previewSurface = holder.getSurface();
                 Log.d(TAG, "surfaceCreated: CameraDevice available: " + (cameraDevice != null));
-                if (cameraDevice != null) {
+                Log.d(TAG, "surfaceCreated: CaptureSession available: " + (captureSession != null));
+
+                // Only create session if we have camera device but no active session
+                if (cameraDevice != null && captureSession == null) {
+                    Log.d(TAG, "surfaceCreated: Creating camera preview session");
                     createCameraPreviewSession();
+                } else if (cameraDevice != null && captureSession != null) {
+                    Log.d(TAG, "surfaceCreated: Camera session already exists, skipping creation");
                 } else {
                     Log.w(TAG, "surfaceCreated: Camera device not ready, waiting for camera opening");
                 }
@@ -231,21 +268,35 @@ public class Camera2View {
             public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
                 Log.d(TAG, "surfaceDestroyed: Preview surface destroyed");
                 previewSurface = null;
+
+                // Close any existing session when surface is destroyed
+                if (captureSession != null) {
+                    Log.d(TAG, "surfaceDestroyed: Closing capture session");
+                    captureSession.close();
+                    captureSession = null;
+                }
             }
         });
     }
 
     private void removeSurfaceView() {
+        Log.d(TAG, "removeSurfaceView: Removing surface view and cleaning up");
+
+        // Clear surface reference first to prevent any usage during cleanup
+        previewSurface = null;
+
         if (surfaceView != null) {
             ViewGroup parent = (ViewGroup) surfaceView.getParent();
             if (parent != null) {
                 parent.removeView(surfaceView);
             }
             surfaceView = null;
+            Log.d(TAG, "removeSurfaceView: Surface view removed from parent");
         }
 
         // Reset WebView background
         webView.setBackgroundColor(android.graphics.Color.WHITE);
+        Log.d(TAG, "removeSurfaceView: Cleanup complete");
     }
 
     @SuppressLint("MissingPermission")
@@ -263,16 +314,91 @@ public class Camera2View {
             Log.d(TAG, "openCamera: Camera lock acquired");
 
             // Determine which camera to use
-            if (sessionConfig.getDeviceId() != null && !sessionConfig.getDeviceId().isEmpty()) {
-                currentCameraId = sessionConfig.getDeviceId();
-                Log.d(TAG, "openCamera: Using specified device ID: " + currentCameraId);
+            String cameraIdToOpen;
+            if (currentLogicalCameraId != null) {
+                // We're switching cameras and already have the logical camera ID set
+                cameraIdToOpen = currentLogicalCameraId;
+                Log.d(TAG, "openCamera: Using stored logical camera ID: " + cameraIdToOpen +
+                           " (for " + (isCurrentCameraPhysical ? "physical" : "logical") + " camera " + currentCameraId + ")");
+            } else if (sessionConfig.getDeviceId() != null && !sessionConfig.getDeviceId().isEmpty()) {
+                // Initial camera setup from session config - need to check if it's physical or logical
+                String requestedDeviceId = sessionConfig.getDeviceId();
+                Log.d(TAG, "openCamera: Checking if device ID " + requestedDeviceId + " is logical or physical");
+
+                // Check if it's a logical camera first
+                String[] logicalCameraIds;
+                try {
+                    logicalCameraIds = cameraManager.getCameraIdList();
+                } catch (CameraAccessException e) {
+                    Log.e(TAG, "openCamera: Error getting camera list: " + e.getMessage());
+                    if (listener != null) {
+                        listener.onCameraStartError("Error getting camera list: " + e.getMessage());
+                    }
+                    cameraOpenCloseLock.release();
+                    return;
+                }
+
+                boolean isLogical = false;
+                for (String logicalId : logicalCameraIds) {
+                    if (logicalId.equals(requestedDeviceId)) {
+                        isLogical = true;
+                        break;
+                    }
+                }
+
+                if (isLogical) {
+                    // It's a logical camera
+                    currentCameraId = requestedDeviceId;
+                    currentLogicalCameraId = requestedDeviceId;
+                    isCurrentCameraPhysical = false;
+                    cameraIdToOpen = requestedDeviceId;
+                    Log.d(TAG, "openCamera: Device " + requestedDeviceId + " is a logical camera");
+                } else {
+                    // Check if it's a physical camera
+                    String parentLogicalId = null;
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                        for (String logicalId : logicalCameraIds) {
+                            try {
+                                CameraCharacteristics chars = cameraManager.getCameraCharacteristics(logicalId);
+                                java.util.Set<String> physicalIds = chars.getPhysicalCameraIds();
+                                if (physicalIds.contains(requestedDeviceId)) {
+                                    parentLogicalId = logicalId;
+                                    Log.d(TAG, "openCamera: Device " + requestedDeviceId + " is a physical camera under logical camera " + logicalId);
+                                    break;
+                                }
+                            } catch (Exception e) {
+                                Log.w(TAG, "openCamera: Error checking physical cameras for " + logicalId + ": " + e.getMessage());
+                            }
+                        }
+                    }
+
+                    if (parentLogicalId != null) {
+                        // It's a physical camera
+                        currentCameraId = requestedDeviceId;
+                        currentLogicalCameraId = parentLogicalId;
+                        isCurrentCameraPhysical = true;
+                        cameraIdToOpen = parentLogicalId;
+                        Log.d(TAG, "openCamera: Will open logical camera " + parentLogicalId + " to access physical camera " + requestedDeviceId);
+                    } else {
+                        // Not found as logical or physical - treat as logical and let it fail gracefully
+                        Log.w(TAG, "openCamera: Device " + requestedDeviceId + " not found as logical or physical camera, treating as logical");
+                        currentCameraId = requestedDeviceId;
+                        currentLogicalCameraId = requestedDeviceId;
+                        isCurrentCameraPhysical = false;
+                        cameraIdToOpen = requestedDeviceId;
+                    }
+                }
             } else {
+                // Find camera by position
                 Log.d(TAG, "openCamera: Looking for camera by position: " + sessionConfig.getPosition());
                 currentCameraId = getCameraIdByPosition(sessionConfig.getPosition());
+                currentLogicalCameraId = currentCameraId;
+                isCurrentCameraPhysical = false;
+                cameraIdToOpen = currentCameraId;
                 Log.d(TAG, "openCamera: Found camera ID for position: " + currentCameraId);
             }
 
-            if (currentCameraId == null) {
+            if (cameraIdToOpen == null) {
                 Log.e(TAG, "openCamera: No camera found for position: " + sessionConfig.getPosition());
                 if (listener != null) {
                     listener.onCameraStartError("No camera found for position: " + sessionConfig.getPosition());
@@ -281,8 +407,11 @@ public class Camera2View {
                 return;
             }
 
-            Log.d(TAG, "openCamera: Getting camera characteristics for: " + currentCameraId);
-            cameraCharacteristics = cameraManager.getCameraCharacteristics(currentCameraId);
+            Log.d(TAG, "openCamera: Getting camera characteristics for: " + cameraIdToOpen);
+            cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraIdToOpen);
+
+            // Setup physical lenses for seamless zoom
+            setupLenses();
 
             StreamConfigurationMap streamMap = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             if (streamMap == null) {
@@ -315,8 +444,8 @@ public class Camera2View {
             sampleImageReader = ImageReader.newInstance(width / 2, height / 2, ImageFormat.JPEG, 1);
             sampleImageReader.setOnImageAvailableListener(onSampleImageAvailableListener, backgroundHandler);
 
-            Log.d(TAG, "openCamera: Opening camera device: " + currentCameraId);
-            cameraManager.openCamera(currentCameraId, deviceStateCallback, backgroundHandler);
+            Log.d(TAG, "openCamera: Opening camera device: " + cameraIdToOpen);
+            cameraManager.openCamera(cameraIdToOpen, deviceStateCallback, backgroundHandler);
 
         } catch (CameraAccessException e) {
             Log.e(TAG, "Error opening camera", e);
@@ -330,11 +459,70 @@ public class Camera2View {
         }
     }
 
+    private void setupLenses() {
+        sortedLenses = new ArrayList<>();
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.P) {
+            return;
+        }
+
+        try {
+            Set<String> physicalCameraIds = cameraCharacteristics.getPhysicalCameraIds();
+            if (physicalCameraIds.isEmpty()) {
+                // Not a logical camera, just add itself as a single lens
+                float[] focalLengths = cameraCharacteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                Float maxZoom = cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+                if (focalLengths != null && focalLengths.length > 0 && maxZoom != null) {
+                    CameraLens lens = new CameraLens(currentLogicalCameraId, focalLengths[0], maxZoom);
+                    lens.baseZoomRatio = 1.0f;
+                    sortedLenses.add(lens);
+                }
+                return;
+            }
+
+            float minFocalLength = Float.MAX_VALUE;
+            for (String id : physicalCameraIds) {
+                CameraCharacteristics chars = cameraManager.getCameraCharacteristics(id);
+                float[] focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                if (focalLengths != null && focalLengths.length > 0) {
+                    minFocalLength = Math.min(minFocalLength, focalLengths[0]);
+                }
+            }
+
+            for (String id : physicalCameraIds) {
+                CameraCharacteristics chars = cameraManager.getCameraCharacteristics(id);
+                float[] focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+
+                Log.d(TAG, "setupLenses: Camera id: " + id);
+                Log.d(TAG, "setupLenses: Focal lengths: " + Arrays.toString(focalLengths));
+                Log.d(TAG, "setupLenses: facing: " + chars.get(CameraCharacteristics.LENS_FACING));
+                Float maxZoom = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+                Log.d(TAG, "setupLenses: Max zoom: " + maxZoom);
+
+                if (focalLengths != null && focalLengths.length > 0 && maxZoom != null) {
+                    CameraLens lens = new CameraLens(id, focalLengths[0], maxZoom);
+                    lens.baseZoomRatio = focalLengths[0] / minFocalLength;
+                    sortedLenses.add(lens);
+                }
+            }
+
+            Collections.sort(sortedLenses, Comparator.comparingDouble(l -> l.focalLength));
+
+            Log.d(TAG, "setupLenses: Found " + sortedLenses.size() + " lenses.");
+            for (CameraLens lens : sortedLenses) {
+                Log.d(TAG, "Lens: id=" + lens.id + ", focalLength=" + lens.focalLength + ", baseZoom=" + lens.baseZoomRatio + ", maxZoom=" + lens.maxZoom);
+            }
+
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "setupLenses: Error accessing camera characteristics for physical devices.", e);
+        }
+    }
+
     private String getCameraIdByPosition(String position) {
         Log.d(TAG, "getCameraIdByPosition: Looking for position: " + position);
         try {
             String[] cameraIdList = cameraManager.getCameraIdList();
             Log.d(TAG, "getCameraIdByPosition: Found " + cameraIdList.length + " cameras");
+            Log.d(TAG, "getCameraIdByPosition: Camera IDs: " + Arrays.toString(cameraIdList));
 
             for (String cameraId : cameraIdList) {
                 CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
@@ -363,10 +551,13 @@ public class Camera2View {
         @Override
         public void onOpened(@NonNull CameraDevice camera) {
             Log.d(TAG, "deviceStateCallback.onOpened: Camera device opened successfully");
+            Log.d(TAG, "deviceStateCallback.onOpened: Requested camera ID: " + currentCameraId +
+                      " (logical: " + currentLogicalCameraId + ", isPhysical: " + isCurrentCameraPhysical + ")");
+            Log.d(TAG, "deviceStateCallback.onOpened: Opened camera device ID: " + camera.getId());
             cameraOpenCloseLock.release();
             cameraDevice = camera;
 
-            // Now that we have camera characteristics, set up surface view with proper dimensions on UI thread
+                        // Now that we have camera characteristics, set up surface view with proper dimensions on UI thread
             Log.d(TAG, "deviceStateCallback.onOpened: Setting up surface view with camera characteristics");
             if (context instanceof Activity) {
                 Activity activity = (Activity) context;
@@ -381,11 +572,12 @@ public class Camera2View {
             }
 
             Log.d(TAG, "deviceStateCallback.onOpened: PreviewSurface available: " + (previewSurface != null));
-            if (previewSurface != null) {
-                createCameraPreviewSession();
-            } else {
-                Log.w(TAG, "deviceStateCallback.onOpened: Preview surface not ready, waiting for surface creation");
-            }
+            Log.d(TAG, "deviceStateCallback.onOpened: CaptureSession available: " + (captureSession != null));
+
+            // Don't create session here - let surfaceCreated callback handle it
+            // This prevents the race condition where setupSurfaceView destroys the old surface
+            // but the new surface isn't ready yet
+            Log.d(TAG, "deviceStateCallback.onOpened: Waiting for surface creation to complete before creating session");
         }
 
         @Override
@@ -411,69 +603,76 @@ public class Camera2View {
     private void createCameraPreviewSession() {
         Log.d(TAG, "createCameraPreviewSession: Starting camera preview session creation");
         try {
-            if (cameraDevice == null || previewSurface == null) {
-                Log.e(TAG, "createCameraPreviewSession: Cannot create session - camera device: " +
-                      (cameraDevice != null) + ", preview surface: " + (previewSurface != null));
+            if (cameraDevice == null) {
+                Log.e(TAG, "createCameraPreviewSession: Cannot create session - camera device is null");
                 return;
             }
 
-            Log.d(TAG, "createCameraPreviewSession: Creating capture request");
+            if (previewSurface == null) {
+                Log.e(TAG, "createCameraPreviewSession: Cannot create session - preview surface is null");
+                return;
+            }
+
+            if (!previewSurface.isValid()) {
+                Log.e(TAG, "createCameraPreviewSession: Cannot create session - preview surface is not valid");
+                return;
+            }
+
+            Log.d(TAG, "createCameraPreviewSession: All prerequisites met - camera device and valid surface available");
+
             previewRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             previewRequestBuilder.addTarget(previewSurface);
 
-            Log.d(TAG, "createCameraPreviewSession: Creating capture session with preview surface only");
-            // Start with preview surface only to avoid stream configuration conflicts
-            cameraDevice.createCaptureSession(
-                Arrays.asList(previewSurface),
-                new CameraCaptureSession.StateCallback() {
-                    @Override
-                    public void onConfigured(@NonNull CameraCaptureSession session) {
-                        Log.d(TAG, "captureSession.onConfigured: Camera session configured successfully");
-                        if (cameraDevice == null) {
-                            Log.e(TAG, "captureSession.onConfigured: Camera device became null");
-                            return;
+            Log.d(TAG, "createCameraPreviewSession: Creating capture session...");
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                OutputConfiguration previewOutputConfig = new OutputConfiguration(previewSurface);
+                List<OutputConfiguration> outputs = new ArrayList<>();
+                outputs.add(previewOutputConfig);
+
+                // If we're using a physical lens on a logical camera, specify it.
+                if (isCurrentCameraPhysical) {
+                    previewOutputConfig.setPhysicalCameraId(currentCameraId);
+                    Log.d(TAG, "createCameraPreviewSession: Targeting physical camera " + currentCameraId);
+                }
+
+                SessionConfiguration sessionConfig = new SessionConfiguration(
+                    SessionConfiguration.SESSION_REGULAR,
+                    outputs,
+                    backgroundHandler::post, // Use background handler for callbacks
+                    new CameraCaptureSession.StateCallback() {
+                        @Override
+                        public void onConfigured(@NonNull CameraCaptureSession session) {
+                           handleSessionConfigured(session);
                         }
 
-                        captureSession = session;
-                        try {
-                            Log.d(TAG, "captureSession.onConfigured: Setting up preview request");
-                            previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                            // Set flash
-                            previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
-
-                            // Set initial zoom
-                            if (sessionConfig.getZoomFactor() != 1.0f) {
-                                Log.d(TAG, "captureSession.onConfigured: Setting initial zoom: " + sessionConfig.getZoomFactor());
-                                setZoomInternal(sessionConfig.getZoomFactor());
-                            }
-
-                            previewRequest = previewRequestBuilder.build();
-                            Log.d(TAG, "captureSession.onConfigured: Starting repeating capture request");
-                            captureSession.setRepeatingRequest(previewRequest, captureCallback, backgroundHandler);
-
-                            isRunning = true;
-                            Log.d(TAG, "captureSession.onConfigured: Camera preview started successfully");
-                            if (listener != null) {
-                                listener.onCameraStarted();
-                            }
-                        } catch (CameraAccessException e) {
-                            Log.e(TAG, "captureSession.onConfigured: Error starting preview", e);
-                            if (listener != null) {
-                                listener.onCameraStartError("Error starting preview: " + e.getMessage());
-                            }
+                        @Override
+                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                            handleSessionConfigureFailed(session);
                         }
                     }
+                );
+                cameraDevice.createCaptureSession(sessionConfig);
 
-                    @Override
-                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                        Log.e(TAG, "captureSession.onConfigureFailed: Camera session configuration failed");
-                        if (listener != null) {
-                            listener.onCameraStartError("Camera configuration failed");
+            } else {
+                 // Fallback for older APIs that don't support physical cameras
+                cameraDevice.createCaptureSession(
+                    Arrays.asList(previewSurface),
+                    new CameraCaptureSession.StateCallback() {
+                        @Override
+                        public void onConfigured(@NonNull CameraCaptureSession session) {
+                            handleSessionConfigured(session);
                         }
-                    }
-                },
-                null
-            );
+
+                        @Override
+                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                           handleSessionConfigureFailed(session);
+                        }
+                    },
+                    null
+                );
+            }
+
         } catch (CameraAccessException e) {
             Log.e(TAG, "createCameraPreviewSession: Error creating session", e);
             if (listener != null) {
@@ -484,6 +683,50 @@ public class Camera2View {
             if (listener != null) {
                 listener.onCameraStartError("Unexpected error creating preview session: " + e.getMessage());
             }
+        }
+    }
+
+    private void handleSessionConfigured(CameraCaptureSession session) {
+        Log.d(TAG, "handleSessionConfigured: Camera session configured successfully");
+        if (cameraDevice == null) {
+            Log.e(TAG, "handleSessionConfigured: Camera device became null");
+            return;
+        }
+
+        captureSession = session;
+        try {
+            Log.d(TAG, "handleSessionConfigured: Setting up preview request");
+            previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+            // Set flash
+            previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, currentFlashMode);
+
+            // Set initial zoom
+            if (sessionConfig.getZoomFactor() != 1.0f) {
+                Log.d(TAG, "handleSessionConfigured: Setting initial zoom: " + sessionConfig.getZoomFactor());
+                setZoomInternal(sessionConfig.getZoomFactor());
+            }
+
+            previewRequest = previewRequestBuilder.build();
+            Log.d(TAG, "handleSessionConfigured: Starting repeating capture request");
+            captureSession.setRepeatingRequest(previewRequest, captureCallback, backgroundHandler);
+
+            isRunning = true;
+            Log.d(TAG, "handleSessionConfigured: Camera preview started successfully");
+            if (listener != null) {
+                listener.onCameraStarted();
+            }
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "handleSessionConfigured: Error starting preview", e);
+            if (listener != null) {
+                listener.onCameraStartError("Error starting preview: " + e.getMessage());
+            }
+        }
+    }
+
+    private void handleSessionConfigureFailed(CameraCaptureSession session) {
+        Log.e(TAG, "handleSessionConfigureFailed: Camera session configuration failed");
+        if (listener != null) {
+            listener.onCameraStartError("Camera configuration failed");
         }
     }
 
@@ -735,6 +978,9 @@ public class Camera2View {
 
             String[] cameraIdList = cameraManager.getCameraIdList();
             Log.d(TAG, "getAvailableDevices: Found " + cameraIdList.length + " camera IDs");
+            Log.d(TAG, "getAvailableDevices: Camera IDs: " + Arrays.toString(cameraIdList));
+            Log.d(TAG, "getAvailableDevices: Current active camera: " + currentCameraId +
+                      ", isRunning: " + isRunning + ", cameraDevice: " + (cameraDevice != null));
 
             java.util.List<com.ahm.capacitor.camera.preview.model.CameraDevice> devices = new java.util.ArrayList<>();
 
@@ -771,8 +1017,9 @@ public class Camera2View {
                     // Enhanced device type detection
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
                         int[] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
-                        if (capabilities != null) {
-                            Log.d(TAG, "getAvailableDevices: Camera " + cameraId + " capabilities count: " + capabilities.length);
+                        Log.d(TAG, "getAvailableDevices: Camera " + cameraId + " characteristics: " + characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM));
+
+                        if (capabilities != null) {;
                             boolean isLogicalMultiCamera = false;
                             for (int capability : capabilities) {
                                 if (capability == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) {
@@ -784,8 +1031,10 @@ public class Camera2View {
 
                             // For logical multi-cameras, also add their physical cameras
                             if (isLogicalMultiCamera && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                                /*
                                 java.util.Set<String> physicalCameraIds = characteristics.getPhysicalCameraIds();
                                 Log.d(TAG, "getAvailableDevices: Logical camera " + cameraId + " has " + physicalCameraIds.size() + " physical cameras");
+                                Log.d(TAG, "getAvailableDevices: Physical camera IDs: " + physicalCameraIds.toString());
 
                                 for (String physicalId : physicalCameraIds) {
                                     try {
@@ -801,6 +1050,7 @@ public class Camera2View {
                                         Log.e(TAG, "getAvailableDevices: Error processing physical camera " + physicalId, e);
                                     }
                                 }
+                                */
 
                                 // Also add the logical camera itself
                                 deviceType = "multi";
@@ -825,7 +1075,11 @@ public class Camera2View {
                 }
             }
 
-            Log.d(TAG, "getAvailableDevices: Successfully enumerated " + devices.size() + " cameras");
+            Log.d(TAG, "getAvailableDevices: Successfully enumerated " + devices.size() + " total camera devices");
+            Log.d(TAG, "getAvailableDevices: Final device list summary:");
+            for (com.ahm.capacitor.camera.preview.model.CameraDevice device : devices) {
+                Log.d(TAG, "  - Device ID: " + device.getDeviceId() + ", Position: " + device.getPosition() + ", Type: " + device.getDeviceType());
+            }
             return devices;
         } catch (CameraAccessException e) {
             Log.e(TAG, "getAvailableDevices: Error getting camera list", e);
@@ -840,6 +1094,7 @@ public class Camera2View {
         // Try to detect camera types based on focal length
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+            Log.d(TAG, "detectDeviceType: Camera " + cameraId + " zoom: " + characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE));
             if (focalLengths != null && focalLengths.length > 0) {
                 float focalLength = focalLengths[0];
                 Log.d(TAG, "detectDeviceType: Camera " + cameraId + " focal length: " + focalLength);
@@ -938,7 +1193,14 @@ public class Camera2View {
     }
 
     public ZoomFactors getZoomFactors() {
-        // Use current camera characteristics if available
+        if (sortedLenses != null && !sortedLenses.isEmpty()) {
+            float minZoom = sortedLenses.get(0).baseZoomRatio;
+            CameraLens maxLens = sortedLenses.get(sortedLenses.size() - 1);
+            float maxZoom = maxLens.baseZoomRatio * maxLens.maxZoom;
+            return new ZoomFactors(minZoom, maxZoom, currentZoomRatio);
+        }
+
+        // Fallback for single-lens cameras or older APIs
         if (cameraCharacteristics != null) {
             Float maxZoom = cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
             if (maxZoom == null) {
@@ -966,20 +1228,47 @@ public class Camera2View {
     }
 
     public void setZoom(float zoomRatio) throws Exception {
-        if (cameraCharacteristics == null) {
-            throw new Exception("Camera not initialized");
+        if (cameraCharacteristics == null || sortedLenses == null || sortedLenses.isEmpty()) {
+            throw new Exception("Camera not initialized or does not support zoom");
         }
 
-        Float maxZoom = cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
-        if (maxZoom == null) {
-            maxZoom = 1.0f;
+        // Find the best lens for the requested zoom ratio
+        CameraLens targetLens = sortedLenses.get(0);
+        for (CameraLens lens : sortedLenses) {
+            if (zoomRatio >= lens.baseZoomRatio) {
+                targetLens = lens;
+            } else {
+                break;
+            }
         }
 
-        if (zoomRatio < 1.0f || zoomRatio > maxZoom) {
-            throw new Exception("Zoom ratio out of range: " + zoomRatio);
+        float digitalZoom = zoomRatio / targetLens.baseZoomRatio;
+        if (digitalZoom > targetLens.maxZoom) {
+            digitalZoom = targetLens.maxZoom;
+        }
+        if (digitalZoom < 1.0f) {
+            digitalZoom = 1.0f;
         }
 
-        setZoomInternal(zoomRatio);
+        final float finalDigitalZoom = digitalZoom;
+        final CameraLens finalTargetLens = targetLens;
+
+        // Switch to the target lens if it's not the active one
+        if (!finalTargetLens.id.equals(currentCameraId)) {
+            Log.d(TAG, "setZoom: Switching lens from " + currentCameraId + " to " + finalTargetLens.id + " for zoom " + zoomRatio);
+            currentCameraId = finalTargetLens.id;
+            // All lenses we target for zoom are physical lenses that are part of a logical camera group
+            isCurrentCameraPhysical = true;
+
+            // Reconfigure the session for the new physical camera
+            createCameraPreviewSession();
+        } else {
+             Log.d(TAG, "setZoom: Staying on lens " + currentCameraId + " for zoom " + zoomRatio);
+        }
+
+        // Apply digital zoom
+        Log.d(TAG, "setZoom: Applying digital zoom " + finalDigitalZoom + " on lens " + finalTargetLens.id);
+        setZoomInternal(finalDigitalZoom);
     }
 
     private void setZoomInternal(float zoomRatio) {
@@ -1104,37 +1393,111 @@ public class Camera2View {
         return currentCameraId;
     }
 
-    public void switchToDevice(String deviceId) throws Exception {
+        public void switchToDevice(String deviceId) throws Exception {
         if (deviceId == null || deviceId.equals(currentCameraId)) {
             return;
         }
 
-        // Verify the device exists
-        boolean deviceExists = false;
+        // Log current camera state before switch
+        Log.d(TAG, "switchToDevice: Current camera ID: " + currentCameraId + ", Target ID: " + deviceId);
+        Log.d(TAG, "switchToDevice: Camera running: " + isRunning + ", Camera device: " + (cameraDevice != null));
+
+        // Verify the device exists (checking both logical and physical cameras)
+        String targetLogicalCameraId = null;
+        boolean isPhysicalCamera = false;
+
         try {
-            for (String id : cameraManager.getCameraIdList()) {
+            String[] cameraIds = cameraManager.getCameraIdList();
+            Log.d(TAG, "switchToDevice: Total logical cameras available: " + cameraIds.length);
+            Log.d(TAG, "switchToDevice: Logical camera IDs: " + Arrays.toString(cameraIds));
+
+            // First check if it's a logical camera
+            for (String id : cameraIds) {
                 if (id.equals(deviceId)) {
-                    deviceExists = true;
+                    targetLogicalCameraId = deviceId;
+                    Log.d(TAG, "switchToDevice: Target is logical camera: " + deviceId);
                     break;
                 }
             }
+
+            // If not found as logical camera, check if it's a physical camera
+            if (targetLogicalCameraId == null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                Log.d(TAG, "switchToDevice: Target not found as logical camera, checking physical cameras");
+
+                for (String logicalId : cameraIds) {
+                    try {
+                        CameraCharacteristics chars = cameraManager.getCameraCharacteristics(logicalId);
+
+                        // Check if this logical camera has the requested physical camera
+                        java.util.Set<String> physicalCameraIds = chars.getPhysicalCameraIds();
+                        Log.d(TAG, "switchToDevice: Logical camera " + logicalId + " physical cameras: " + physicalCameraIds.toString());
+
+                        if (physicalCameraIds.contains(deviceId)) {
+                            targetLogicalCameraId = logicalId;
+                            isPhysicalCamera = true;
+                            Log.d(TAG, "switchToDevice: Found target " + deviceId + " as physical camera in logical camera " + logicalId);
+                            break;
+                        }
+                    } catch (Exception e) {
+                        Log.w(TAG, "switchToDevice: Error checking physical cameras for " + logicalId + ": " + e.getMessage());
+                    }
+                }
+            }
+
         } catch (CameraAccessException e) {
+            Log.e(TAG, "switchToDevice: Error getting camera ID list: " + e.getMessage());
             throw new Exception("Error checking device existence: " + e.getMessage());
         }
 
-        if (!deviceExists) {
+        if (targetLogicalCameraId == null) {
+            Log.e(TAG, "switchToDevice: Device not found: " + deviceId);
             throw new Exception("Device not found: " + deviceId);
         }
 
-        // Close current camera and open new one
+        Log.d(TAG, "switchToDevice: Using logical camera " + targetLogicalCameraId +
+                   (isPhysicalCamera ? " with physical camera " + deviceId : ""));
+
+        Log.d(TAG, "switchToDevice: Switching from " + currentCameraId + " to " + deviceId);
+
+        // Store the current running state - we want to maintain it during the switch
+        boolean wasRunning = isRunning;
+
+        // Close current camera but keep session alive
         closeCamera();
+
+        // Log camera state after closing
+        try {
+            String[] cameraIdsAfterClose = cameraManager.getCameraIdList();
+            Log.d(TAG, "switchToDevice: After closeCamera - Total cameras available: " + cameraIdsAfterClose.length);
+            Log.d(TAG, "switchToDevice: After closeCamera - Camera IDs: " + Arrays.toString(cameraIdsAfterClose));
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "switchToDevice: Error getting camera ID list after close: " + e.getMessage());
+        }
+
+                // Update camera state
         currentCameraId = deviceId;
-        openCamera();
+        currentLogicalCameraId = targetLogicalCameraId;
+        isCurrentCameraPhysical = isPhysicalCamera;
+
+        Log.d(TAG, "switchToDevice: Camera state updated - currentCameraId: " + currentCameraId +
+                   ", currentLogicalCameraId: " + currentLogicalCameraId +
+                   ", isPhysical: " + isCurrentCameraPhysical);
+
+        // If camera was running, restore running state and reopen camera
+        if (wasRunning) {
+            // Keep isRunning true during the switch to avoid showing "stopped" status
+            isRunning = true;
+            openCamera();
+        }
     }
 
     public void flipCamera() throws Exception {
         Log.d(TAG, "flipCamera: Starting camera flip");
         String currentPosition = getCurrentPosition();
+        if (currentPosition == null) {
+            throw new Exception("Could not determine current camera position to flip.");
+        }
+
         String targetPosition = "front".equals(currentPosition) ? "rear" : "front";
 
         Log.d(TAG, "flipCamera: Current position: " + currentPosition + ", target: " + targetPosition);
@@ -1145,70 +1508,16 @@ public class Camera2View {
             throw new Exception("No camera found for position: " + targetPosition);
         }
 
-        Log.d(TAG, "flipCamera: Found target camera ID: " + newCameraId);
+        Log.d(TAG, "flipCamera: Found target camera ID: " + newCameraId + ". Switching device.");
 
-        // Store current session config for restart
-        CameraSessionConfiguration currentConfig = sessionConfig;
-        if (currentConfig != null) {
-            // Update position in config
-            currentConfig = new CameraSessionConfiguration(
-                newCameraId,
-                targetPosition.equals("rear") ? "back" : targetPosition,
-                currentConfig.getX(),
-                currentConfig.getY(),
-                currentConfig.getWidth(),
-                currentConfig.getHeight(),
-                currentConfig.getPaddingBottom(),
-                currentConfig.isToBack(),
-                currentConfig.isStoreToFile(),
-                currentConfig.isEnableOpacity(),
-                currentConfig.isEnableZoom(),
-                currentConfig.isDisableExifHeaderStripping(),
-                currentConfig.isDisableAudio(),
-                currentConfig.getZoomFactor()
-            );
-        }
-
-        Log.d(TAG, "flipCamera: Current config: " + currentConfig.getWidth() + ", " + currentConfig.getHeight());
-
-        final CameraSessionConfiguration finalConfig = currentConfig;
-
-        // Ensure UI operations run on main thread
-        if (context instanceof Activity) {
-            Activity activity = (Activity) context;
-            activity.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        Log.d(TAG, "flipCamera: Stopping current session on UI thread");
-                        stopSession();
-
-                        // Start new session after a brief delay
-                        android.os.Handler handler = new android.os.Handler();
-                        handler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                Log.d(TAG, "flipCamera: Starting new session with camera: " + newCameraId);
-                                startSession(finalConfig);
-                            }
-                        }, 150);
-
-                    } catch (Exception e) {
-                        Log.e(TAG, "flipCamera: Error during UI thread execution", e);
-                        if (listener != null) {
-                            listener.onCameraStartError("Failed to flip camera: " + e.getMessage());
-                        }
-                    }
-                }
-            });
-        } else {
-            throw new Exception("Context is not an Activity - cannot access UI thread");
-        }
+        // Use switchToDevice for a more efficient switch that preserves the session config
+        switchToDevice(newCameraId);
     }
 
     private String getCurrentPosition() {
         if (cameraCharacteristics == null) {
-            return "rear";
+            Log.w(TAG, "getCurrentPosition: cameraCharacteristics is null, cannot determine position.");
+            return null;
         }
 
         Integer lensFacing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING);
@@ -1222,7 +1531,9 @@ public class Camera2View {
                     return "external";
             }
         }
-        return "rear";
+
+        Log.w(TAG, "getCurrentPosition: Lens facing is null, cannot determine position.");
+        return null;
     }
 
     private byte[] correctImageRotation(byte[] imageBytes) {
@@ -1298,3 +1609,4 @@ public class Camera2View {
         }
     }
 }
+

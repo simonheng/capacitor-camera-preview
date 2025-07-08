@@ -90,7 +90,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly flashMode = signal<FlashMode>('auto');
   protected readonly isCapturingPhoto = signal(false);
   protected readonly currentZoomFactor = signal(1.0);
-  protected readonly minZoom = signal(1.0);
+  protected readonly minZoom = signal(0.5);
   protected readonly maxZoom = signal(10.0);
   protected readonly availableDevices = signal<CameraDevice[]>([]);
   protected readonly currentDeviceId = signal<string>('');
@@ -101,12 +101,16 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly currentOpacity = signal(100);
   protected readonly testResults = signal<string>('');
 
+  // Camera switching functionality
+  protected readonly availableCameras = signal<CameraDevice[]>([]);
+  protected readonly selectedCameraIndex = signal<number>(0);
+
   protected readonly canZoomIn = computed(() => {
-    return this.currentZoomFactor() + 0.5 <= this.maxZoom();
+    return this.currentZoomFactor() + 0.25 <= this.maxZoom();
   });
 
   protected readonly canZoomOut = computed(() => {
-    return this.currentZoomFactor() - 0.5 >= this.minZoom();
+    return this.currentZoomFactor() - 0.25 >= this.minZoom();
   });
 
   protected readonly isWeb = Capacitor.getPlatform() === 'web';
@@ -155,10 +159,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.#initializeDevices(),
       this.#updateRunningStatus(),
       this.#updateCurrentDeviceId(),
-      this.#setInitialOpacity(),
     ]);
 
     this.currentZoomFactor.set(this.initialZoomFactor());
+
+    // Setup camera switching after devices are loaded
+    this.#setupCameraSwitchButtons();
   }
 
   protected async stopCamera(): Promise<void> {
@@ -189,8 +195,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       };
 
       const photo = await this.#cameraViewService.capture(this.quality(), captureOptions);
-      this.#modalController.dismiss({ 
-        photo, 
+      this.#modalController.dismiss({
+        photo,
         options: captureOptions,
         type: 'standard'
       });
@@ -210,7 +216,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     this.isCapturingPhoto.set(true);
     try {
       const photo = await this.#cameraViewService.captureSample(this.pictureQuality());
-      this.#modalController.dismiss({ 
+      this.#modalController.dismiss({
         photo,
         type: 'sample'
       });
@@ -246,14 +252,14 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async zoomIn(): Promise<void> {
     if (this.canZoomIn()) {
-      this.currentZoomFactor.update((curr) => curr + 0.5);
+      this.currentZoomFactor.update((curr) => curr + 0.25);
       await this.#cameraViewService.setZoom(this.currentZoomFactor(), true);
     }
   }
 
   protected async zoomOut(): Promise<void> {
     if (this.canZoomOut()) {
-      this.currentZoomFactor.update((curr) => curr - 0.5);
+      this.currentZoomFactor.update((curr) => curr - 0.25);
       await this.#cameraViewService.setZoom(this.currentZoomFactor(), true);
     }
   }
@@ -264,6 +270,13 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       await this.#updateCurrentDeviceId();
       await this.#initializeZoomLimits();
       await this.#initializeFlashModes();
+
+      // Update selected camera index to match the new device
+      const cameras = this.availableCameras();
+      const foundIndex = cameras.findIndex(camera => camera.deviceId === deviceId);
+      if (foundIndex >= 0) {
+        this.selectedCameraIndex.set(foundIndex);
+      }
     } catch (error) {
       console.error('Failed to switch device', error);
     }
@@ -279,20 +292,20 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async testAllFeatures(): Promise<void> {
     let results = '=== Camera Modal Test Results ===\n';
-    
+
     try {
       // Test running status
       const running = await this.#cameraViewService.isRunning();
       results += `\n✓ Camera running: ${running}`;
-      
+
       // Test current device ID
       const currentId = await this.#cameraViewService.getDeviceId();
       results += `\n✓ Current device: ${currentId}`;
-      
+
       // Test zoom capabilities
       const zoom = await this.#cameraViewService.getZoom();
       results += `\n✓ Zoom: ${zoom.min} - ${zoom.max} (current: ${zoom.current})`;
-      
+
       // Test flash mode
       const flashMode = await this.#cameraViewService.getFlashMode();
       results += `\n✓ Flash mode: ${flashMode}`;
@@ -325,7 +338,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     try {
       const result = await this.#cameraViewService.stopRecordVideo();
       this.isRecording.set(false);
-      this.#modalController.dismiss({ 
+      this.#modalController.dismiss({
         video: result.videoFilePath,
         type: 'video'
       });
@@ -341,14 +354,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     await this.#cameraViewService.setZoom(zoomFactor, false);
   }
 
-  async #setInitialOpacity(): Promise<void> {
-    try {
-      this.currentOpacity.set(this.opacity());
-      await this.#cameraViewService.setOpacity(this.opacity() / 100);
-    } catch (error) {
-      console.warn('Failed to set initial opacity', error);
-    }
-  }
 
   async #initializeZoomLimits(): Promise<void> {
     try {
@@ -379,6 +384,84 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.warn('Failed to get available devices', error);
     }
+  }
+
+  /**
+   * Setup camera switch buttons based on available devices
+   * Groups cameras by position and assigns them as zoom levels
+   */
+  #setupCameraSwitchButtons(): void {
+    const devices = this.availableDevices();
+
+    // Filter cameras by current position preference
+    const currentPosition = this.position();
+    const camerasForPosition = devices.filter(device =>
+      device.position === currentPosition
+    );
+
+    console.log('camerasForPosition:', JSON.stringify(camerasForPosition, null, 2));
+
+    // Sort cameras by device type to create a logical progression
+    const sortedCameras = camerasForPosition.sort((a, b) => {
+      const typeOrder: { [key: string]: number } = { 'ultraWide': 0, 'wideAngle': 1, 'telephoto': 2, 'multi': 3 };
+      const aOrder = typeOrder[a.deviceType || 'unknown'] ?? 4;
+      const bOrder = typeOrder[b.deviceType || 'unknown'] ?? 4;
+      return aOrder - bOrder;
+    });
+
+    this.availableCameras.set(sortedCameras);
+
+    // Set initial camera selection to match current device if possible
+    const currentDeviceId = this.currentDeviceId();
+    let initialIndex = 0;
+    if (currentDeviceId !== null && currentDeviceId !== undefined) {
+      const foundIndex = sortedCameras.findIndex(camera => camera.deviceId === currentDeviceId);
+      if (foundIndex >= 0) {
+        initialIndex = foundIndex;
+      }
+    }
+    this.selectedCameraIndex.set(initialIndex);
+
+    console.log('Current device ID:', this.currentDeviceId());
+    console.log('selectedCameraIndex:', this.selectedCameraIndex());
+  }
+
+  /**
+   * Switch to a specific camera by index
+   */
+  protected switchToCameraByIndex(index: number): Promise<void> {
+    const cameras = this.availableCameras();
+    if (index >= 0 && index < cameras.length) {
+      this.selectedCameraIndex.set(index);
+      const camera = cameras[index];
+
+      // Update test results
+      // const results = this.testResults() + `\n✓ Switched to camera: ${camera.label} (${camera.deviceType})`;
+      // this.testResults.set(results);
+
+      return this.switchToDevice(camera.deviceId);
+    }
+    return Promise.resolve();
+  }
+
+  /**
+   * Get the label for a camera switch button
+   */
+  protected getCameraSwitchLabel(index: number): string {
+    const cameras = this.availableCameras();
+    if (index >= cameras.length) return '';
+
+    const camera = cameras[index];
+
+    // Map device types to user-friendly zoom descriptions
+    const typeLabels: { [key: string]: string } = {
+      'ultraWide': '0.5x',
+      'wideAngle': '1x',
+      'telephoto': index === 2 ? '2x' : '3x',
+      'multi': `${index + 1}x`
+    };
+
+    return typeLabels[camera.deviceType || 'unknown'] || `${index + 1}x`;
   }
 
   async #updateRunningStatus(): Promise<void> {

@@ -23,6 +23,7 @@ import {
 } from '@ionic/angular/standalone';
 import {
   CameraDevice,
+  CameraPosition,
   FlashMode,
   PictureFormat,
 } from '@capgo/camera-preview';
@@ -65,7 +66,7 @@ export class CameraSettingsPage implements OnInit {
 
   // Basic camera settings
   protected deviceId = model<string | null>(null);
-  protected position = model<string>('back');
+  protected position = model<CameraPosition>('rear');
   protected quality = model<number>(85);
   protected useTripleCameraIfAvailable = model<boolean>(false);
   protected initialZoomFactor = model<number>(1.0);
@@ -83,8 +84,6 @@ export class CameraSettingsPage implements OnInit {
   protected disableAudio = model<boolean>(false);
   protected enableHighResolution = model<boolean>(false);
   protected lockAndroidOrientation = model<boolean>(false);
-
-
 
   ngOnInit() {
     setTimeout(() => {
@@ -136,8 +135,6 @@ export class CameraSettingsPage implements OnInit {
       }
       this.testResults.set(results);
     }
-
-
   }
 
   // Testing Methods
@@ -187,7 +184,7 @@ export class CameraSettingsPage implements OnInit {
 
   protected async testErrorScenarios(): Promise<void> {
     let results = this.testResults() + `\n=== Error Scenario Testing ===`;
-    
+
     // Test invalid device ID
     try {
       await this.#cameraViewService.setDeviceId('invalid-device-id');
@@ -209,16 +206,16 @@ export class CameraSettingsPage implements OnInit {
 
   protected async testAllFeatures(): Promise<void> {
     let results = '=== Comprehensive Camera Test ===\n';
-    
+
     try {
       // Test running status
       const running = await this.#cameraViewService.isRunning();
       results += `\n✓ Camera running: ${running}`;
-      
+
       // Test available devices
       const devices = await this.#cameraViewService.getAvailableDevices();
       results += `\n✓ Available devices: ${devices.length}`;
-      
+
       // Test supported flash modes
       const flashModes = await this.#cameraViewService.getSupportedFlashModes();
       results += `\n✓ Flash modes: ${flashModes.join(', ')}`;
@@ -284,9 +281,5 @@ export class CameraSettingsPage implements OnInit {
 
   async getZoom() {
     console.log(await this.#cameraViewService.getZoom());
-  }
-
-  async setZoomFactor(zoomFactor: number) {
-    return this.#cameraViewService.setZoom(zoomFactor);
   }
 }

@@ -9,11 +9,11 @@ h3 {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: center;
-  
+
   ion-button {
     flex: 1;
     min-width: 120px;
-    
+
     @media (max-width: 480px) {
       min-width: 100px;
       font-size: 0.8rem;
@@ -39,7 +39,7 @@ ion-list {
   ion-item {
     &[button] {
       --ripple-color: var(--ion-color-primary-tint);
-      
+
       &:hover {
         --background: var(--ion-color-light);
       }
@@ -53,13 +53,13 @@ ion-list {
     font-size: 1.1rem;
     margin: 15px 0 8px 0;
   }
-  
-  .quick-tests {
+
+    .quick-tests {
     flex-direction: column;
     gap: 6px;
-    
+
     ion-button {
       min-width: auto;
     }
   }
-} 
+}

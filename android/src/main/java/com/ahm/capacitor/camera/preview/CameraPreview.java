@@ -83,7 +83,7 @@ public class CameraPreview
       call.reject("Camera is not running");
       return;
     }
-    
+
     Logger.debug(getLogTag(), "flip: Starting camera flip");
     try {
       camera2View.flipCamera();
@@ -112,7 +112,7 @@ public class CameraPreview
       call.reject("Camera is not running");
       return;
     }
-    
+
     bridge.saveCall(call);
     captureCallbackId = call.getCallbackId();
 
@@ -126,7 +126,7 @@ public class CameraPreview
       call.reject("Camera is not running");
       return;
     }
-    
+
     bridge.saveCall(call);
     snapshotCallbackId = call.getCallbackId();
 
@@ -142,35 +142,35 @@ public class CameraPreview
       }
 
       JSArray ret = new JSArray();
-      
+
       // Get available devices and their picture sizes
       List<CameraDevice> devices = camera2View.getAvailableDevices();
       for (CameraDevice device : devices) {
         JSObject cameraInfo = new JSObject();
         cameraInfo.put("facing", device.getPosition().equals("front") ? "Front" : "Back");
-        
+
         JSArray supportedPictureSizes = new JSArray();
-        
+
         // Add some common sizes (could be enhanced to get actual sizes from camera characteristics)
         JSObject size1 = new JSObject();
         size1.put("width", 1920);
         size1.put("height", 1080);
         supportedPictureSizes.put(size1);
-        
+
         JSObject size2 = new JSObject();
         size2.put("width", 1280);
         size2.put("height", 720);
         supportedPictureSizes.put(size2);
-        
+
         JSObject size3 = new JSObject();
         size3.put("width", 640);
         size3.put("height", 480);
         supportedPictureSizes.put(size3);
-        
+
         cameraInfo.put("supportedPictureSizes", supportedPictureSizes);
         ret.put(cameraInfo);
       }
-      
+
       JSObject finalRet = new JSObject();
       finalRet.put("supportedPictureSizes", ret);
       call.resolve(finalRet);
@@ -277,7 +277,7 @@ public class CameraPreview
   @PluginMethod
   public void getAvailableDevices(PluginCall call) {
     Logger.debug(getLogTag(), "getAvailableDevices called");
-    
+
     if (camera2View == null) {
       Logger.debug(getLogTag(), "Creating temporary Camera2View to get device list");
       camera2View = new Camera2View(getContext(), getBridge().getWebView());
@@ -286,15 +286,15 @@ public class CameraPreview
     try {
       List<CameraDevice> devices = camera2View.getAvailableDevices();
       Logger.debug(getLogTag(), "Found " + devices.size() + " camera devices");
-      
+
       JSArray devicesArray = new JSArray();
-      
+
       for (CameraDevice device : devices) {
-        Logger.debug(getLogTag(), "Device: ID=" + device.getDeviceId() + 
-                    ", Label=" + device.getLabel() + 
-                    ", Position=" + device.getPosition() + 
+        Logger.debug(getLogTag(), "Device: ID=" + device.getDeviceId() +
+                    ", Label=" + device.getLabel() +
+                    ", Position=" + device.getPosition() +
                     ", Type=" + device.getDeviceType());
-        
+
         JSObject deviceJson = new JSObject();
         deviceJson.put("deviceId", device.getDeviceId());
         deviceJson.put("label", device.getLabel());
@@ -321,6 +321,7 @@ public class CameraPreview
       }
 
       ZoomFactors zoomFactors = camera2View.getZoomFactors();
+      Logger.debug(getLogTag(), "Zoom factors: " + zoomFactors.getMin() + ", " + zoomFactors.getMax() + ", " + zoomFactors.getCurrent());
       JSObject result = new JSObject();
       result.put("min", zoomFactors.getMin());
       result.put("max", zoomFactors.getMax());
@@ -425,7 +426,7 @@ public class CameraPreview
 
   private void startCamera(final PluginCall call) {
     Logger.debug(getLogTag(), "startCamera called");
-    
+
     String positionParam = call.getString("position");
     final String deviceId = call.getString("deviceId");
 
@@ -471,9 +472,9 @@ public class CameraPreview
       call.getBoolean("lockAndroidOrientation", false)
     );
     final Boolean disableAudio = call.getBoolean("disableAudio", true); // Default to true (camera only)
-    
+
     Logger.debug(getLogTag(), "Camera dimensions - x:" + x + ", y:" + y + ", width:" + width + ", height:" + height);
-    
+
     previousOrientationRequest = getBridge()
       .getActivity()
       .getRequestedOrientation();
@@ -496,7 +497,7 @@ public class CameraPreview
           @Override
           public void run() {
             Logger.debug(getLogTag(), "Starting camera configuration on UI thread");
-            
+
             DisplayMetrics metrics = getBridge()
               .getActivity()
               .getResources()
@@ -584,7 +585,7 @@ public class CameraPreview
                 computedPaddingBottom;
             }
 
-            Logger.debug(getLogTag(), "Computed dimensions - x:" + computedX + ", y:" + computedY + 
+            Logger.debug(getLogTag(), "Computed dimensions - x:" + computedX + ", y:" + computedY +
                         ", width:" + computedWidth + ", height:" + computedHeight + ", paddingBottom:" + computedPaddingBottom);
 
             // Create camera session configuration

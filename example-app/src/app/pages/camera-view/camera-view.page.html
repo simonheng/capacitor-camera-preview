@@ -59,7 +59,7 @@
         [(ngModel)]="initialZoomFactor"
         min="1.0"
         max="3.0"
-        step="0.25"
+        step="0.1"
         snaps="true"
         [label]="'Initial Zoom Level (' + initialZoomFactor() + 'x)'"
         labelPlacement="stacked"
@@ -82,7 +82,7 @@
 
   <!-- Advanced Picture Settings -->
   <h3>Picture Settings</h3>
-  <ion-list lines="full" class="ion-margin-bottom">
+  <!-- <ion-list lines="full" class="ion-margin-bottom">
     <ion-item>
       <ion-select
         [(ngModel)]="pictureFormat"
@@ -138,7 +138,7 @@
         ></ion-input>
       </ion-item>
     }
-  </ion-list>
+  </ion-list> -->
 
   <!-- Camera Behavior Settings -->
   <h3>Camera Behavior</h3>
@@ -200,7 +200,7 @@
 
   <!-- Testing Features -->
   <h3>Advanced Testing</h3>
-  <ion-list lines="full" class="ion-margin-bottom">
+  <!-- <ion-list lines="full" class="ion-margin-bottom">
     <ion-item button (click)="testHorizontalFov()">
       <ion-icon name="scan-outline" slot="start"></ion-icon>
       <ion-label>Test Horizontal FOV</ion-label>
@@ -230,7 +230,7 @@
       <ion-icon name="bug-outline" slot="start"></ion-icon>
       <ion-label>Run All Tests</ion-label>
     </ion-item>
-  </ion-list>
+  </ion-list> -->
 
   <!-- Start Camera Button -->
   <ion-button (click)="startCamera()" expand="block" size="large">

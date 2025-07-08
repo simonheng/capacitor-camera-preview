@@ -35,11 +35,11 @@
           <span class="label">Opacity:</span>
           <span class="value">{{ currentOpacity() }}%</span>
         </div>
-        
-        @if (availableDevices().length > 0) {
+
+        <!-- @if (availableDevices().length > 0) {
           <div class="device-selector">
-            <ion-select 
-              [value]="currentDeviceId()" 
+            <ion-select
+              [value]="currentDeviceId()"
               (ionChange)="switchToDevice($event.detail.value)"
               placeholder="Select Camera Device"
               fill="outline"
@@ -52,7 +52,7 @@
               }
             </ion-select>
           </div>
-        }
+        } -->
       </ion-card-content>
     </ion-card>
   </div>
@@ -68,9 +68,9 @@
       <ion-icon name="close-outline"></ion-icon>
     </ion-fab-button>
 
-    <ion-fab-button (click)="testAllFeatures()" size="small">
+    <!-- <ion-fab-button (click)="testAllFeatures()" size="small">
       <ion-icon name="bug-outline"></ion-icon>
-    </ion-fab-button>
+    </ion-fab-button> -->
 
     <ion-fab-button (click)="refreshDeviceInfo()" size="small">
       <ion-icon name="refresh-outline"></ion-icon>
@@ -112,8 +112,23 @@
 
   @if (cameraStarted()) {
 
+    <!-- Camera Switching Buttons -->
+    @if (availableCameras().length > 1) {
+      <div class="camera-switch-container">
+        @for (camera of availableCameras(); track camera.deviceId; let i = $index) {
+          <ion-fab-button
+            [class.selected]="selectedCameraIndex() === i"
+            size="small"
+            (click)="switchToDevice(camera.deviceId)"
+          >
+            {{ getCameraSwitchLabel(i) }}
+          </ion-fab-button>
+        }
+      </div>
+    }
+
     <!-- Video Recording Controls -->
-    <ion-fab
+    <!-- <ion-fab
       class="video-controls"
       slot="fixed"
       horizontal="start"
@@ -128,7 +143,7 @@
           <ion-icon name="stop"></ion-icon>
         </ion-fab-button>
       }
-    </ion-fab>
+    </ion-fab> -->
 
     <ion-fab
       class="camera-trigger"
@@ -146,7 +161,7 @@
     </ion-fab>
 
     <!-- Sample Capture -->
-    <ion-fab
+    <!-- <ion-fab
       class="capture-options"
       slot="fixed"
       horizontal="end"
@@ -155,7 +170,7 @@
       <ion-fab-button (click)="captureSample()" size="small">
         <ion-icon name="aperture"></ion-icon>
       </ion-fab-button>
-    </ion-fab>
+    </ion-fab> -->
 
     <!-- Test Results Display -->
     @if (testResults()) {
