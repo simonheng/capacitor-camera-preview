@@ -77,6 +77,38 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     var highResolutionOutput: Bool = false
     var disableAudio: Bool = false
 
+    // MARK: - Transparency Methods
+    
+    private func makeWebViewTransparent() {
+        guard let webView = self.webView else { return }
+        
+        // Set basic transparency properties
+        webView.isOpaque = false
+        webView.backgroundColor = UIColor.clear
+        webView.scrollView.backgroundColor = UIColor.clear
+        
+        // Make all subviews transparent
+        webView.subviews.forEach { subview in
+            if subview != webView.scrollView {
+                subview.backgroundColor = UIColor.clear
+            }
+        }
+        
+        // Specifically handle the scroll view's subviews
+        webView.scrollView.subviews.forEach { subview in
+            subview.backgroundColor = UIColor.clear
+        }
+        
+        // Set the superview background to clear if it exists
+        webView.superview?.backgroundColor = UIColor.clear
+        
+        // Force a layout pass to apply changes
+        DispatchQueue.main.async {
+            webView.setNeedsLayout()
+            webView.layoutIfNeeded()
+        }
+    }
+
     @objc func rotated() {
         guard let previewView = self.previewView,
               let posX = self.posX,
@@ -114,6 +146,27 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
 
         cameraController.updateVideoOrientation()
+        
+        // Ensure webview remains transparent after rotation
+        if self.isInitialized {
+            self.makeWebViewTransparent()
+        }
+    }
+    
+    @objc func appDidBecomeActive() {
+        if self.isInitialized {
+            DispatchQueue.main.async {
+                self.makeWebViewTransparent()
+            }
+        }
+    }
+    
+    @objc func appWillEnterForeground() {
+        if self.isInitialized {
+            DispatchQueue.main.async {
+                self.makeWebViewTransparent()
+            }
+        }
     }
 
     struct CameraInfo {
@@ -254,9 +307,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         }
                         let height = self.paddingBottom != nil ? self.height! - self.paddingBottom!: self.height!
                         self.previewView = UIView(frame: CGRect(x: self.posX ?? 0, y: self.posY ?? 0, width: self.width!, height: height))
-                        self.webView?.isOpaque = false
-                        self.webView?.backgroundColor = UIColor.clear
-                        self.webView?.scrollView.backgroundColor = UIColor.clear
+                        
+                        // Make webview transparent - comprehensive approach
+                        self.makeWebViewTransparent()
+                        
                         self.webView?.superview?.addSubview(self.previewView)
                         if self.toBack! {
                             self.webView?.superview?.bringSubviewToFront(self.webView!)
@@ -269,6 +323,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         if self.rotateWhenOrientationChanged == true {
                             NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.rotated), name: UIDevice.orientationDidChangeNotification, object: nil)
                         }
+                        
+                        // Add observers for app state changes to maintain transparency
+                        NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+                        NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
 
                         self.isInitializing = false
                         self.isInitialized = true
@@ -309,6 +367,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                             self.cameraController.previewLayer?.frame = self.previewView.bounds
                             self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                             self.previewView.isUserInteractionEnabled = true
+                            
+                            // Ensure webview remains transparent after flip
+                            self.makeWebViewTransparent()
+                            
                             call.resolve()
                         }
                     } catch {
@@ -354,6 +416,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             self.isInitialized = false
             self.isInitializing = false
             self.cameraController.cleanup()
+            
+            // Remove notification observers
+            NotificationCenter.default.removeObserver(self)
 
             call.resolve()
         }
@@ -668,6 +733,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         self.cameraController.previewLayer?.frame = self.previewView.bounds
                         self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                         self.previewView.isUserInteractionEnabled = true
+                        
+                        // Ensure webview remains transparent after device switch
+                        self.makeWebViewTransparent()
+                        
                         call.resolve()
                     }
                 } catch {
