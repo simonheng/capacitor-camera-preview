@@ -56,13 +56,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setDeviceId", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getAvailableLenses", returnType: CAPPluginReturnPromise),
-<<<<<<< Updated upstream
-        CAPPluginMethod(name: "getCurrentLens", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setZoomLogical", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getZoomLogical", returnType: CAPPluginReturnPromise)
-=======
         CAPPluginMethod(name: "getCurrentLens", returnType: CAPPluginReturnPromise)
->>>>>>> Stashed changes
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -728,44 +722,4 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-<<<<<<< Updated upstream
-    @objc func setZoomLogical(_ call: CAPPluginCall) {
-        guard isInitialized else {
-            call.reject("Camera not initialized")
-            return
-        }
-
-        guard let level = call.getFloat("level") else {
-            call.reject("level parameter is required")
-            return
-        }
-
-        do {
-            try self.cameraController.setZoomLogical(level: CGFloat(level))
-            call.resolve()
-        } catch {
-            call.reject("Failed to set zoom logical: \(error.localizedDescription)")
-        }
-    }
-
-    @objc func getZoomLogical(_ call: CAPPluginCall) {
-        guard isInitialized else {
-            call.reject("Camera not initialized")
-            return
-        }
-
-        do {
-            let zoomInfo = try self.cameraController.getZoomLogical()
-            call.resolve([
-                "min": zoomInfo.min,
-                "max": zoomInfo.max,
-                "current": zoomInfo.current
-            ])
-        } catch {
-            call.reject("Failed to get zoom logical: \(error.localizedDescription)")
-        }
-    }
-
-=======
->>>>>>> Stashed changes
 }
