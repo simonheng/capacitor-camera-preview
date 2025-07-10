@@ -450,49 +450,6 @@ public class CameraPreview
     }
   }
 
-
-
-  @PluginMethod
-  public void setZoomLogical(PluginCall call) {
-    if (camera2View == null || !camera2View.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-
-    Float level = call.getFloat("level");
-    if (level == null) {
-      call.reject("level parameter is required");
-      return;
-    }
-
-    try {
-      camera2View.setZoomLogical(level);
-      call.resolve();
-    } catch (Exception e) {
-      call.reject("Failed to set logical zoom: " + e.getMessage());
-    }
-  }
-
-  @PluginMethod
-  public void getZoomLogical(PluginCall call) {
-    try {
-      if (camera2View == null) {
-        camera2View = new Camera2View(getContext(), getBridge().getWebView());
-      }
-
-      ZoomFactors zoomFactors = camera2View.getZoomLogical();
-      Logger.debug(getLogTag(), "Logical zoom factors: " + zoomFactors.getMin() + ", " + zoomFactors.getMax() + ", " + zoomFactors.getCurrent());
-      JSObject result = new JSObject();
-      result.put("min", zoomFactors.getMin());
-      result.put("max", zoomFactors.getMax());
-      result.put("current", zoomFactors.getCurrent());
-      call.resolve(result);
-    } catch (Exception e) {
-      Logger.debug(getLogTag(), "Error getting logical zoom capabilities: " + e.getMessage());
-      call.reject("Error getting logical zoom capabilities: " + e.getMessage());
-    }
-  }
-
   @PluginMethod
   public void setDeviceId(PluginCall call) {
     String deviceId = call.getString("deviceId");

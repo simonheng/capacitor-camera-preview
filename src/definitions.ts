@@ -310,12 +310,4 @@ export interface CameraPreviewPlugin {
    * @since 7.5.0
    */
   getCurrentLens(): Promise<{ lens: CameraLens }>;
-  /**
-   * Alternative setZoom using only logical camera's native zoom characteristics.
-   * Uses the logical camera's built-in zoom capabilities without lens switching.
-   * @param options the zoom options
-   * @returns {Promise<void>} an Promise that resolves when zoom is set
-   * @throws An error if something went wrong
-   * @since 7.5.0
-   */
 }

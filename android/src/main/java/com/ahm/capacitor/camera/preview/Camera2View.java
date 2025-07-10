@@ -57,21 +57,6 @@ import java.util.concurrent.Executors;
 public class Camera2View {
     private static final String TAG = "Camera2View";
 
-    private static class CameraLens {
-        String id;
-        float minZoom; // Native min zoom (usually 1.0)
-        float maxZoom; // Native max zoom
-        float focalLength;
-        float baseZoomRatio; // User-facing base zoom (e.g. 0.6, 1.0, 2.0)
-
-        CameraLens(String id, float focalLength, float maxZoom) {
-            this.id = id;
-            this.focalLength = focalLength;
-            this.minZoom = 1.0f;
-            this.maxZoom = maxZoom;
-        }
-    }
-
     public interface Camera2ViewListener {
         void onPictureTaken(String result);
         void onPictureTakenError(String message);

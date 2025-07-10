@@ -10,6 +10,7 @@ import {
   FlashMode,
   PictureFormat,
 } from '@capgo/camera-preview';
+import type { CameraLens } from '../../../../src/definitions';
 import { BehaviorSubject } from 'rxjs';
 // import { BehaviorSubject, Subject } from 'rxjs';
 
@@ -199,6 +200,22 @@ export class CapacitorCameraViewService {
    */
   async stopRecordVideo(): Promise<{ videoFilePath: string }> {
     return this.#cameraView.stopRecordVideo();
+  }
+
+  /**
+   * Get available camera lenses for the current camera position
+   * @returns Array of available camera lenses
+   */
+  async getAvailableLenses(): Promise<Array<CameraLens>> {
+    return (await this.#cameraView.getAvailableLenses()).lenses;
+  }
+
+  /**
+   * Get the currently active lens based on zoom level
+   * @returns The currently active camera lens
+   */
+  async getCurrentLens(): Promise<CameraLens> {
+    return (await this.#cameraView.getCurrentLens()).lens;
   }
 
   /**

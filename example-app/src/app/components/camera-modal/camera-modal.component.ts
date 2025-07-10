@@ -25,7 +25,13 @@ import {
   IonSpinner,
   ModalController,
 } from '@ionic/angular/standalone';
-import { type CameraDevice, type CameraPosition, type FlashMode, type PictureFormat } from '@capgo/camera-preview';
+import {
+  type CameraDevice,
+  type CameraLens,
+  type CameraPosition,
+  type FlashMode,
+  type PictureFormat
+} from '@capgo/camera-preview';
 import { CapacitorCameraViewService } from '../../core/capacitor-camera-preview.service';
 
 function getDistance(touch1: Touch, touch2: Touch): number {
@@ -90,10 +96,16 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly flashMode = signal<FlashMode>('auto');
   protected readonly isCapturingPhoto = signal(false);
   protected readonly currentZoomFactor = signal(1.0);
-  protected readonly minZoom = signal(0.5);
-  protected readonly maxZoom = signal(10.0);
+  protected readonly MIN_ZOOM = 0.5;
+  protected readonly MAX_ZOOM = 8.0;
+  protected readonly minZoom = signal(this.MIN_ZOOM);
+  protected readonly maxZoom = signal(this.MAX_ZOOM);
+  protected readonly minZoomReel = signal(1.0);
+  protected readonly maxZoomReel = signal(8.0);
   protected readonly availableDevices = signal<CameraDevice[]>([]);
   protected readonly currentDeviceId = signal<string>('');
+  protected readonly availableLenses = signal<CameraLens[]>([]);
+  protected readonly currentLens = signal<CameraLens | null>(null);
   protected readonly isRunning = signal(false);
 
   // Video recording and testing state
@@ -106,11 +118,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly selectedCameraIndex = signal<number>(0);
 
   protected readonly canZoomIn = computed(() => {
-    return this.currentZoomFactor() + 0.25 <= this.maxZoom();
+    return this.currentZoomFactor() + 0.1 <= this.maxZoom();
   });
 
   protected readonly canZoomOut = computed(() => {
-    return this.currentZoomFactor() - 0.25 >= this.minZoom();
+    return this.currentZoomFactor() - 0.1 >= this.minZoom();
   });
 
   protected readonly isWeb = Capacitor.getPlatform() === 'web';
@@ -122,6 +134,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   constructor() {
     effect(() => {
       const flashModes = this.#supportedFlashModes();
+
       if (!flashModes.includes(this.flashMode())) {
         this.flashMode.set((flashModes[0] as FlashMode) ?? 'off');
       }
@@ -157,6 +170,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.#initializeZoomLimits(),
       this.#initializeFlashModes(),
       this.#initializeDevices(),
+      this.#initializeLenses(),
       this.#updateRunningStatus(),
       this.#updateCurrentDeviceId(),
     ]);
@@ -234,6 +248,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async flipCamera(): Promise<void> {
     await this.#cameraViewService.flipCamera();
+    await this.#setZoom(1.0);
     await this.#initializeZoomLimits();
   }
 
@@ -252,15 +267,15 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async zoomIn(): Promise<void> {
     if (this.canZoomIn()) {
-      this.currentZoomFactor.update((curr) => curr + 0.25);
-      await this.#cameraViewService.setZoom(this.currentZoomFactor(), true);
+      this.currentZoomFactor.update((curr) => curr + 0.1);
+      await this.#setZoom(this.currentZoomFactor());
     }
   }
 
   protected async zoomOut(): Promise<void> {
     if (this.canZoomOut()) {
-      this.currentZoomFactor.update((curr) => curr - 0.25);
-      await this.#cameraViewService.setZoom(this.currentZoomFactor(), true);
+      this.currentZoomFactor.update((curr) => curr - 0.1);
+      await this.#setZoom(this.currentZoomFactor());
     }
   }
 
@@ -349,9 +364,39 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+ * Mappe un zoom utilisateur (0.5x - 10x) vers un zoom réel (zoomMin - zoomMax)
+ */
+  private mapUserZoomToCameraZoom(userZoom: number): number {
+    const currentLens = this.currentLens();
+    // if (currentLens?.deviceType === 'wideAngle') {
+    //   userZoom = userZoom + 0.2;
+    // }
+
+    const clampedZoom = Math.max(this.minZoom(), Math.min(this.maxZoom(), userZoom));
+    const t = (clampedZoom - this.minZoom()) / (this.maxZoom() - this.minZoom());
+
+    return this.minZoomReel() + t * (this.maxZoomReel() - this.minZoomReel());
+  }
+
+  /**
+ * Mappe un zoom réel (zoomMin - zoomMax) vers un zoom utilisateur (0.5x - 10x)
+ */
+  // private mapCameraZoomToUserZoom(cameraZoom: number): number {
+  //   const clampedZoom = Math.max(this.minZoomReel(), Math.min(this.maxZoomReel(), cameraZoom));
+  //   const t = (clampedZoom - this.minZoomReel()) / (this.maxZoomReel() - this.minZoomReel());
+
+  //   return this.minZoom() + t * (this.maxZoom() - this.minZoom());
+  // }
+
   async #setZoom(zoomFactor: number): Promise<void> {
     this.currentZoomFactor.set(zoomFactor);
-    await this.#cameraViewService.setZoom(zoomFactor, false);
+    console.log('availableLenses:', JSON.stringify(this.availableLenses(), null, 2));
+    console.log('currentZoomFactor:', zoomFactor);
+    console.log('mapUserZoomToCameraZoom:', this.mapUserZoomToCameraZoom(zoomFactor));
+    await this.#cameraViewService.setZoom(this.mapUserZoomToCameraZoom(zoomFactor), false);
+    await this.#updateCurrentDeviceId();
+    await this.#updateAvailableLenses();
   }
 
 
@@ -360,11 +405,32 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       const zoomRange = await this.#cameraViewService.getZoom();
 
       if (zoomRange) {
-        this.minZoom.set(zoomRange.min);
-        this.maxZoom.set(zoomRange.max);
+        this.minZoomReel.set(zoomRange.min);
+        this.maxZoomReel.set(zoomRange.max);
       }
     } catch (error) {
       console.warn('Failed to get zoom range, using default values.', error);
+    }
+  }
+  async #initializeLenses(): Promise<void> {
+    try {
+      const lenses = await this.#cameraViewService.getAvailableLenses();
+      const currentLens = await this.#cameraViewService.getCurrentLens();
+      this.availableLenses.set(lenses);
+      this.currentLens.set(currentLens);
+    } catch (error) {
+      console.warn('Failed to get available lenses', error);
+    }
+  }
+
+  async #updateAvailableLenses(): Promise<void> {
+    try {
+      const lenses = await this.#cameraViewService.getAvailableLenses();
+      const currentLens = await this.#cameraViewService.getCurrentLens();
+      this.availableLenses.set(lenses);
+      this.currentLens.set(currentLens);
+    } catch (error) {
+      console.warn('Failed to update available lenses', error);
     }
   }
 

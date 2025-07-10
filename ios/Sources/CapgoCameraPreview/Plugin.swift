@@ -56,9 +56,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setDeviceId", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getAvailableLenses", returnType: CAPPluginReturnPromise),
+<<<<<<< Updated upstream
         CAPPluginMethod(name: "getCurrentLens", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setZoomLogical", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getZoomLogical", returnType: CAPPluginReturnPromise)
+=======
+        CAPPluginMethod(name: "getCurrentLens", returnType: CAPPluginReturnPromise)
+>>>>>>> Stashed changes
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -724,6 +728,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+<<<<<<< Updated upstream
     @objc func setZoomLogical(_ call: CAPPluginCall) {
         guard isInitialized else {
             call.reject("Camera not initialized")
@@ -761,4 +766,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+=======
+>>>>>>> Stashed changes
 }
