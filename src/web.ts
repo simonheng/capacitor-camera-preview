@@ -2,6 +2,7 @@ import { WebPlugin } from "@capacitor/core";
 
 import type {
   CameraDevice,
+  CameraLens,
   CameraOpacityOptions,
   CameraPosition,
   CameraPreviewFlashMode,
@@ -224,10 +225,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     // Stop current stream
     this.stopStream(video.srcObject);
-    
+
     // Toggle camera position
     this.isBackCamera = !this.isBackCamera;
-    
+
     // Get new constraints
     const constraints: MediaStreamConstraints = {
       video: {
@@ -240,13 +241,13 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = stream;
-      
+
       // Update current device ID from the new stream
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         this.currentDeviceId = videoTrack.getSettings().deviceId || null;
       }
-      
+
       // Update video transform based on camera
       if (this.isBackCamera) {
         video.style.transform = "none";
@@ -255,7 +256,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         video.style.transform = "scaleX(-1)";
         video.style.webkitTransform = "scaleX(-1)";
       }
-      
+
       await video.play();
     } catch (error) {
       throw new Error(`Failed to flip camera: ${error}`);
@@ -277,17 +278,17 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     if (!navigator.mediaDevices?.enumerateDevices) {
       throw new Error("getAvailableDevices not supported under the web platform");
     }
-    
+
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices
       .filter(device => device.kind === 'videoinput')
       .map((device, index) => {
         const label = device.label || `Camera ${index + 1}`;
         const labelLower = label.toLowerCase();
-        
+
         // Determine position
         const position = (labelLower.includes('back') || labelLower.includes('rear')) ? 'rear' as CameraPosition : 'front' as CameraPosition;
-        
+
         // Determine device type based on label
         let deviceType: 'wideAngle' | 'ultraWide' | 'telephoto' | 'trueDepth' = 'wideAngle';
         if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
@@ -299,7 +300,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         } else if (labelLower.includes('wide')) {
           deviceType = 'wideAngle';
         }
-        
+
         return {
           deviceId: device.deviceId,
           label,
@@ -307,7 +308,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
           deviceType
         };
       });
-    
+
     return { devices: videoDevices };
   }
 
@@ -319,14 +320,14 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     const stream = video.srcObject as MediaStream;
     const videoTrack = stream.getVideoTracks()[0];
-    
+
     if (!videoTrack) {
       throw new Error("no video track found");
     }
 
     const capabilities = videoTrack.getCapabilities() as any;
     const settings = videoTrack.getSettings() as any;
-    
+
     if (!capabilities.zoom) {
       throw new Error("zoom not supported by this device");
     }
@@ -346,13 +347,13 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     const stream = video.srcObject as MediaStream;
     const videoTrack = stream.getVideoTracks()[0];
-    
+
     if (!videoTrack) {
       throw new Error("no video track found");
     }
 
     const capabilities = videoTrack.getCapabilities() as any;
-    
+
     if (!capabilities.zoom) {
       throw new Error("zoom not supported by this device");
     }
@@ -387,10 +388,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     // Stop current stream
     this.stopStream(video.srcObject);
-    
+
     // Update current device ID
     this.currentDeviceId = options.deviceId;
-    
+
     // Get new constraints with specific device ID
     const constraints: MediaStreamConstraints = {
       video: {
@@ -405,10 +406,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const device = devices.find(d => d.deviceId === options.deviceId);
       this.isBackCamera = device?.label.toLowerCase().includes('back') || device?.label.toLowerCase().includes('rear') || false;
-      
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = stream;
-      
+
       // Update video transform based on camera
       if (this.isBackCamera) {
         video.style.transform = "none";
@@ -417,10 +418,41 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         video.style.transform = "scaleX(-1)";
         video.style.webkitTransform = "scaleX(-1)";
       }
-      
+
       await video.play();
     } catch (error) {
       throw new Error(`Failed to swap to device ${options.deviceId}: ${error}`);
     }
+  }
+
+  async getAvailableLenses(): Promise<{ lenses: CameraLens[] }> {
+    const devices = await this.getAvailableDevices();
+
+    // For web, convert devices to lenses
+    const lenses: CameraLens[] = devices.devices.map((device) => ({
+      id: device.deviceId,
+      label: device.label,
+      position: device.position,
+      deviceType: device.deviceType || 'wideAngle',
+      focalLength: 4.25, // Approximate web camera focal length
+      minZoom: 1.0,
+      maxZoom: 1.0, // Web cameras typically don't support hardware zoom
+      baseZoomRatio: device.deviceType === 'ultraWide' ? 0.5 :
+                     device.deviceType === 'telephoto' ? 2.0 : 1.0,
+      isActive: device.deviceId === this.currentDeviceId
+    }));
+
+    return { lenses };
+  }
+
+  async getCurrentLens(): Promise<{ lens: CameraLens }> {
+    const lenses = await this.getAvailableLenses();
+    const currentLens = lenses.lenses.find(lens => lens.isActive);
+
+    if (!currentLens) {
+      throw new Error("No current lens found");
+    }
+
+    return { lens: currentLens };
   }
 }

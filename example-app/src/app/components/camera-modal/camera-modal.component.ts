@@ -358,6 +358,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   async #initializeZoomLimits(): Promise<void> {
     try {
       const zoomRange = await this.#cameraViewService.getZoom();
+
       if (zoomRange) {
         this.minZoom.set(zoomRange.min);
         this.maxZoom.set(zoomRange.max);

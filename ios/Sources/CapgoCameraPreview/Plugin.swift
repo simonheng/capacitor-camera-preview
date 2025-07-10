@@ -54,7 +54,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setZoom", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getFlashMode", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setDeviceId", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getAvailableLenses", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getCurrentLens", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setZoomLogical", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getZoomLogical", returnType: CAPPluginReturnPromise)
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -284,25 +288,25 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             call.reject("Camera not initialized")
             return
         }
-        
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self else {
                 call.reject("Camera controller deallocated")
                 return
             }
-            
+
             // Disable user interaction during flip
             self.previewView.isUserInteractionEnabled = false
-            
+
             // Perform camera switch on background thread
             DispatchQueue.global(qos: .userInitiated).async {
                 var retryCount = 0
                 let maxRetries = 3
-                
+
                 func attemptFlip() {
                     do {
                         try self.cameraController.switchCameras()
-                        
+
                         DispatchQueue.main.async {
                             self.cameraController.previewLayer?.frame = self.previewView.bounds
                             self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
@@ -311,7 +315,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         }
                     } catch {
                         retryCount += 1
-                        
+
                         if retryCount < maxRetries {
                             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
                                 attemptFlip()
@@ -325,7 +329,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         }
                     }
                 }
-                
+
                 attemptFlip()
             }
         }
@@ -341,18 +345,18 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                 call.reject("camera not initialized")
                 return
             }
-            
+
             // Always attempt to stop and clean up, regardless of captureSession state
             if let previewView = self.previewView {
                 previewView.removeFromSuperview()
                 self.previewView = nil
             }
-            
+
             self.webView?.isOpaque = true
             self.isInitialized = false
             self.isInitializing = false
             self.cameraController.cleanup()
-            
+
             call.resolve()
         }
     }
@@ -590,7 +594,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             call.reject("Camera not initialized")
             return
         }
-        
+
         do {
             let zoomInfo = try self.cameraController.getZoom()
             call.resolve([
@@ -608,14 +612,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             call.reject("Camera not initialized")
             return
         }
-        
+
         guard let level = call.getFloat("level") else {
             call.reject("level parameter is required")
             return
         }
-        
+
         let ramp = call.getBool("ramp") ?? true
-        
+
         do {
             try self.cameraController.setZoom(level: CGFloat(level), ramp: ramp)
             call.resolve()
@@ -629,7 +633,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             call.reject("Camera not initialized")
             return
         }
-        
+
         do {
             let flashMode = try self.cameraController.getFlashMode()
             call.resolve(["flashMode": flashMode])
@@ -643,25 +647,25 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             call.reject("Camera not initialized")
             return
         }
-        
+
         guard let deviceId = call.getString("deviceId") else {
             call.reject("deviceId parameter is required")
             return
         }
-        
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self else {
                 call.reject("Camera controller deallocated")
                 return
             }
-            
+
             // Disable user interaction during device swap
             self.previewView.isUserInteractionEnabled = false
-            
+
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     try self.cameraController.swapToDevice(deviceId: deviceId)
-                    
+
                     DispatchQueue.main.async {
                         self.cameraController.previewLayer?.frame = self.previewView.bounds
                         self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
@@ -678,17 +682,82 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    @objc func getDeviceId(_ call: CAPPluginCall) {
+        @objc func getDeviceId(_ call: CAPPluginCall) {
         guard isInitialized else {
             call.reject("Camera not initialized")
             return
         }
-        
+
         do {
             let deviceId = try self.cameraController.getCurrentDeviceId()
             call.resolve(["deviceId": deviceId])
         } catch {
             call.reject("Failed to get device ID: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func getAvailableLenses(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+
+        do {
+            let lenses = try self.cameraController.getAvailableLenses()
+            call.resolve(["lenses": lenses])
+        } catch {
+            call.reject("Failed to get available lenses: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func getCurrentLens(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+
+        do {
+            let lens = try self.cameraController.getCurrentLens()
+            call.resolve(["lens": lens])
+        } catch {
+            call.reject("Failed to get current lens: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func setZoomLogical(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+
+        guard let level = call.getFloat("level") else {
+            call.reject("level parameter is required")
+            return
+        }
+
+        do {
+            try self.cameraController.setZoomLogical(level: CGFloat(level))
+            call.resolve()
+        } catch {
+            call.reject("Failed to set zoom logical: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func getZoomLogical(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+
+        do {
+            let zoomInfo = try self.cameraController.getZoomLogical()
+            call.resolve([
+                "min": zoomInfo.min,
+                "max": zoomInfo.max,
+                "current": zoomInfo.current
+            ])
+        } catch {
+            call.reject("Failed to get zoom logical: \(error.localizedDescription)")
         }
     }
 

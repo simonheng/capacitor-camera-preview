@@ -207,7 +207,6 @@ export class CapacitorCameraViewService {
   async removeAllListeners(): Promise<void> {
     return this.#cameraView.removeAllListeners();
   }
-
   // /**
   //  * Check camera permission status
   //  * @returns The current permission status

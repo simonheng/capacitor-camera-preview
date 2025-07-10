@@ -26,6 +26,7 @@ import com.getcapacitor.annotation.PermissionCallback;
 import com.ahm.capacitor.camera.preview.model.CameraDevice;
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
+import com.ahm.capacitor.camera.preview.model.CameraLens;
 import java.util.List;
 import java.util.Objects;
 
@@ -377,6 +378,119 @@ public class CameraPreview
     JSObject result = new JSObject();
     result.put("deviceId", deviceId != null ? deviceId : "");
     call.resolve(result);
+  }
+
+  @PluginMethod
+  public void getAvailableLenses(PluginCall call) {
+    if (camera2View == null) {
+      call.reject("Camera is not initialized");
+      return;
+    }
+
+    try {
+      List<CameraLens> lenses = camera2View.getAvailableLenses();
+      Logger.debug(getLogTag(), "Found " + lenses.size() + " camera lenses");
+
+      JSArray lensesArray = new JSArray();
+
+      for (CameraLens lens : lenses) {
+        JSObject lensJson = new JSObject();
+        lensJson.put("id", lens.getId());
+        lensJson.put("label", lens.getLabel());
+        lensJson.put("position", lens.getPosition());
+        lensJson.put("deviceType", lens.getDeviceType());
+        lensJson.put("focalLength", lens.getFocalLength());
+        lensJson.put("minZoom", lens.getMinZoom());
+        lensJson.put("maxZoom", lens.getMaxZoom());
+        lensJson.put("baseZoomRatio", lens.getBaseZoomRatio());
+        lensJson.put("isActive", lens.isActive());
+        lensesArray.put(lensJson);
+      }
+
+      JSObject result = new JSObject();
+      result.put("lenses", lensesArray);
+      call.resolve(result);
+    } catch (Exception e) {
+      Logger.error(getLogTag(), "Error getting available lenses", e);
+      call.reject("Error getting available lenses: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void getCurrentLens(PluginCall call) {
+    if (camera2View == null || !camera2View.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+
+    try {
+      com.ahm.capacitor.camera.preview.model.CameraLens lens = camera2View.getCurrentLens();
+
+      if (lens == null) {
+        call.reject("No current lens available");
+        return;
+      }
+
+      JSObject lensJson = new JSObject();
+      lensJson.put("id", lens.getId());
+      lensJson.put("label", lens.getLabel());
+      lensJson.put("position", lens.getPosition());
+      lensJson.put("deviceType", lens.getDeviceType());
+      lensJson.put("focalLength", lens.getFocalLength());
+      lensJson.put("minZoom", lens.getMinZoom());
+      lensJson.put("maxZoom", lens.getMaxZoom());
+      lensJson.put("baseZoomRatio", lens.getBaseZoomRatio());
+      lensJson.put("isActive", lens.isActive());
+
+      JSObject result = new JSObject();
+      result.put("lens", lensJson);
+      call.resolve(result);
+    } catch (Exception e) {
+      call.reject("Failed to get current lens: " + e.getMessage());
+    }
+  }
+
+
+
+  @PluginMethod
+  public void setZoomLogical(PluginCall call) {
+    if (camera2View == null || !camera2View.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+
+    Float level = call.getFloat("level");
+    if (level == null) {
+      call.reject("level parameter is required");
+      return;
+    }
+
+    try {
+      camera2View.setZoomLogical(level);
+      call.resolve();
+    } catch (Exception e) {
+      call.reject("Failed to set logical zoom: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void getZoomLogical(PluginCall call) {
+    try {
+      if (camera2View == null) {
+        camera2View = new Camera2View(getContext(), getBridge().getWebView());
+      }
+
+      ZoomFactors zoomFactors = camera2View.getZoomLogical();
+      Logger.debug(getLogTag(), "Logical zoom factors: " + zoomFactors.getMin() + ", " + zoomFactors.getMax() + ", " + zoomFactors.getCurrent());
+      JSObject result = new JSObject();
+      result.put("min", zoomFactors.getMin());
+      result.put("max", zoomFactors.getMax());
+      result.put("current", zoomFactors.getCurrent());
+      call.resolve(result);
+    } catch (Exception e) {
+      Logger.debug(getLogTag(), "Error getting logical zoom capabilities: " + e.getMessage());
+      call.reject("Error getting logical zoom capabilities: " + e.getMessage());
+    }
   }
 
   @PluginMethod

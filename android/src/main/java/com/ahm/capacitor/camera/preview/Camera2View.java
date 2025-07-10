@@ -37,6 +37,7 @@ import androidx.annotation.NonNull;
 
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
+import com.ahm.capacitor.camera.preview.model.CameraLens;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -471,9 +472,12 @@ public class Camera2View {
                 // Not a logical camera, just add itself as a single lens
                 float[] focalLengths = cameraCharacteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
                 Float maxZoom = cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+                String deviceType = detectDeviceType(cameraCharacteristics, currentLogicalCameraId);
+                String label = createLabel(currentLogicalCameraId, sessionConfig.getPosition(), deviceType);
+                String position = sessionConfig.getPosition();
+
                 if (focalLengths != null && focalLengths.length > 0 && maxZoom != null) {
-                    CameraLens lens = new CameraLens(currentLogicalCameraId, focalLengths[0], maxZoom);
-                    lens.baseZoomRatio = 1.0f;
+                    CameraLens lens = new CameraLens(currentLogicalCameraId, label, position, deviceType, focalLengths[0], 1.0f, maxZoom, 1.0f, true);
                     sortedLenses.add(lens);
                 }
                 return;
@@ -496,20 +500,22 @@ public class Camera2View {
                 Log.d(TAG, "setupLenses: Focal lengths: " + Arrays.toString(focalLengths));
                 Log.d(TAG, "setupLenses: facing: " + chars.get(CameraCharacteristics.LENS_FACING));
                 Float maxZoom = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+                String deviceType = detectDeviceType(cameraCharacteristics, currentLogicalCameraId);
+                String label = createLabel(currentLogicalCameraId, sessionConfig.getPosition(), deviceType);
+                String position = sessionConfig.getPosition();
                 Log.d(TAG, "setupLenses: Max zoom: " + maxZoom);
 
                 if (focalLengths != null && focalLengths.length > 0 && maxZoom != null) {
-                    CameraLens lens = new CameraLens(id, focalLengths[0], maxZoom);
-                    lens.baseZoomRatio = focalLengths[0] / minFocalLength;
+                    CameraLens lens = new CameraLens(id, label, position, deviceType, focalLengths[0], 1.0f, maxZoom, focalLengths[0] / minFocalLength, true);
                     sortedLenses.add(lens);
                 }
             }
 
-            Collections.sort(sortedLenses, Comparator.comparingDouble(l -> l.focalLength));
+            Collections.sort(sortedLenses, Comparator.comparingDouble(l -> l.getFocalLength()));
 
             Log.d(TAG, "setupLenses: Found " + sortedLenses.size() + " lenses.");
             for (CameraLens lens : sortedLenses) {
-                Log.d(TAG, "Lens: id=" + lens.id + ", focalLength=" + lens.focalLength + ", baseZoom=" + lens.baseZoomRatio + ", maxZoom=" + lens.maxZoom);
+                Log.d(TAG, "Lens: id=" + lens.getId() + ", focalLength=" + lens.getFocalLength() + ", baseZoom=" + lens.getBaseZoomRatio() + ", maxZoom=" + lens.getMaxZoom());
             }
 
         } catch (CameraAccessException e) {
@@ -1194,9 +1200,9 @@ public class Camera2View {
 
     public ZoomFactors getZoomFactors() {
         if (sortedLenses != null && !sortedLenses.isEmpty()) {
-            float minZoom = sortedLenses.get(0).baseZoomRatio;
+            float minZoom = sortedLenses.get(0).getBaseZoomRatio();
             CameraLens maxLens = sortedLenses.get(sortedLenses.size() - 1);
-            float maxZoom = maxLens.baseZoomRatio * maxLens.maxZoom;
+            float maxZoom = Math.round(maxLens.getBaseZoomRatio() * maxLens.getMaxZoom());
             return new ZoomFactors(minZoom, maxZoom, currentZoomRatio);
         }
 
@@ -1227,24 +1233,145 @@ public class Camera2View {
         return new ZoomFactors(1.0f, 1.0f, 1.0f);
     }
 
-    public void setZoom(float zoomRatio) throws Exception {
-        if (cameraCharacteristics == null || sortedLenses == null || sortedLenses.isEmpty()) {
-            throw new Exception("Camera not initialized or does not support zoom");
+    public List<CameraLens> getAvailableLenses() {
+        Log.d(TAG, "getAvailableLenses: Getting available lenses for current camera");
+        List<CameraLens> lenses = new ArrayList<>();
+
+        if (sortedLenses == null || sortedLenses.isEmpty()) {
+            Log.w(TAG, "getAvailableLenses: No lenses available - single lens camera or not initialized");
+            return lenses;
         }
 
-        // Find the best lens for the requested zoom ratio
+        String currentPosition = getCurrentPosition();
+        if (currentPosition == null) {
+            currentPosition = "rear";
+        }
+
+        for (CameraLens internalLens : sortedLenses) {
+            String deviceType = determineDeviceTypeFromLens(internalLens);
+            String label = createLensLabel(deviceType, internalLens.getBaseZoomRatio());
+            boolean isActive = internalLens.getId().equals(currentCameraId);
+
+            com.ahm.capacitor.camera.preview.model.CameraLens lens =
+                new com.ahm.capacitor.camera.preview.model.CameraLens(
+                    internalLens.getId(),
+                    label,
+                    currentPosition,
+                    deviceType,
+                    internalLens.getFocalLength(),
+                    internalLens.getMinZoom(),
+                    internalLens.getMaxZoom(),
+                    internalLens.getBaseZoomRatio(),
+                    isActive
+                );
+
+            lenses.add(lens);
+            Log.d(TAG, "getAvailableLenses: Lens - " + label + " (baseZoom: " + internalLens.getBaseZoomRatio() + ", active: " + isActive + ")");
+        }
+
+        return lenses;
+    }
+
+    public CameraLens getCurrentLens() {
+        Log.d(TAG, "getCurrentLens: Getting current lens based on zoom ratio: " + currentZoomRatio);
+
+        if (sortedLenses == null || sortedLenses.isEmpty()) {
+            Log.w(TAG, "getCurrentLens: No lenses available");
+            return null;
+        }
+
+        // Find the lens that would be used for the current zoom ratio (same logic as setZoom)
         CameraLens targetLens = sortedLenses.get(0);
         for (CameraLens lens : sortedLenses) {
-            if (zoomRatio >= lens.baseZoomRatio) {
+            if (currentZoomRatio >= lens.getBaseZoomRatio()) {
                 targetLens = lens;
             } else {
                 break;
             }
         }
 
-        float digitalZoom = zoomRatio / targetLens.baseZoomRatio;
-        if (digitalZoom > targetLens.maxZoom) {
-            digitalZoom = targetLens.maxZoom;
+        String currentPosition = getCurrentPosition();
+        if (currentPosition == null) {
+            currentPosition = "rear";
+        }
+
+        String deviceType = determineDeviceTypeFromLens(targetLens);
+        String label = targetLens.getLabel();
+
+        Log.d(TAG, "getCurrentLens: Current lens for zoom " + currentZoomRatio + " is " + label);
+
+        return new com.ahm.capacitor.camera.preview.model.CameraLens(
+            targetLens.getId(),
+            label,
+            currentPosition,
+            deviceType,
+            targetLens.getFocalLength(),
+            targetLens.getMinZoom(),
+            targetLens.getMaxZoom(),
+            targetLens.getBaseZoomRatio(),
+            true // This is the current/active lens
+        );
+    }
+
+    private String determineDeviceTypeFromLens(CameraLens lens) {
+        if (lens.getBaseZoomRatio() < 1.0f) {
+            return "ultraWide";
+        } else if (lens.getBaseZoomRatio() == 1.0f) {
+            return "wideAngle";
+        } else if (lens.getBaseZoomRatio() >= 2.0f) {
+            return "telephoto";
+        } else {
+            // Determine by focal length if base zoom ratio is inconclusive
+            if (lens.getFocalLength() < 3.0f) {
+                return "ultraWide";
+            } else if (lens.getFocalLength() > 7.0f) {
+                return "telephoto";
+            } else {
+                return "wideAngle";
+            }
+        }
+    }
+
+    private String createLensLabel(String deviceType, float baseZoomRatio) {
+        switch (deviceType) {
+            case "ultraWide":
+                return String.format("%.1fx Ultra Wide", baseZoomRatio);
+            case "wideAngle":
+                return String.format("%.1fx Wide", baseZoomRatio);
+            case "telephoto":
+                return String.format("%.1fx Telephoto", baseZoomRatio);
+            default:
+                return String.format("%.1fx", baseZoomRatio);
+        }
+    }
+
+    public void setZoom(float zoomRatio) throws Exception {
+        if (cameraCharacteristics == null || sortedLenses == null || sortedLenses.isEmpty()) {
+            throw new Exception("Camera not initialized or does not support zoom");
+        }
+
+        Log.d(TAG, "setZoom: Requested zoom ratio: " + zoomRatio);
+
+        // Apply zoom mapping for wide-angle lenses (0.5-1.0 range support)
+        // float mappedZoomRatio = mapUserZoomToLensZoom(zoomRatio);
+        float mappedZoomRatio = zoomRatio;
+        Log.d(TAG, "setZoom: Mapped zoom ratio: " + mappedZoomRatio);
+
+        // Find the best lens for the mapped zoom ratio
+        CameraLens targetLens = sortedLenses.get(0);
+        for (CameraLens lens : sortedLenses) {
+            if (mappedZoomRatio >= lens.getBaseZoomRatio()) {
+                targetLens = lens;
+            } else {
+                break;
+            }
+        }
+        targetLens.setIsActive(true);
+
+
+        float digitalZoom = mappedZoomRatio / targetLens.getBaseZoomRatio();
+        if (digitalZoom > targetLens.getMaxZoom()) {
+            digitalZoom = targetLens.getMaxZoom();
         }
         if (digitalZoom < 1.0f) {
             digitalZoom = 1.0f;
@@ -1254,9 +1381,9 @@ public class Camera2View {
         final CameraLens finalTargetLens = targetLens;
 
         // Switch to the target lens if it's not the active one
-        if (!finalTargetLens.id.equals(currentCameraId)) {
-            Log.d(TAG, "setZoom: Switching lens from " + currentCameraId + " to " + finalTargetLens.id + " for zoom " + zoomRatio);
-            currentCameraId = finalTargetLens.id;
+        if (!finalTargetLens.getId().equals(currentCameraId)) {
+            Log.d(TAG, "setZoom: Switching lens from " + currentCameraId + " to " + finalTargetLens.getId() + " for zoom " + zoomRatio);
+            currentCameraId = finalTargetLens.getId();
             // All lenses we target for zoom are physical lenses that are part of a logical camera group
             isCurrentCameraPhysical = true;
 
@@ -1267,7 +1394,7 @@ public class Camera2View {
         }
 
         // Apply digital zoom
-        Log.d(TAG, "setZoom: Applying digital zoom " + finalDigitalZoom + " on lens " + finalTargetLens.id);
+        Log.d(TAG, "setZoom: Applying digital zoom " + finalDigitalZoom + " on lens " + finalTargetLens.getId());
         setZoomInternal(finalDigitalZoom);
     }
 
@@ -1368,19 +1495,6 @@ public class Camera2View {
         if (isAeModeSupported(requestedAeMode)) {
             currentFlashMode = requestedAeMode;
         }
-        // } else {
-        //     // Fallback to FLASH_MODE_SINGLE if AE mode is not supported
-        //     currentControlFlashMode = CaptureRequest.FLASH_MODE;
-        //     switch (mode) {
-        //         case "on":
-        //         case "auto":
-        //             currentFlashMode = CameraMetadata.FLASH_MODE_SINGLE;
-        //             break;
-        //         default:
-        //             currentFlashMode = CameraMetadata.FLASH_MODE_OFF;
-        //             break;
-        //     }
-        // }
 
         int[] availableAeModes = cameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES);
         Log.d(TAG, "Available AE modes: " + Arrays.toString(availableAeModes));
@@ -1607,6 +1721,62 @@ public class Camera2View {
             Log.e(TAG, "correctImageRotation: Error correcting rotation", e);
             return imageBytes; // Return original if correction fails
         }
+    }
+
+
+
+    /**
+     * Alternative setZoom method using only logical camera's native zoom characteristics.
+     * Uses the logical camera's built-in zoom capabilities without lens switching.
+     *
+     * @param zoomLevel Desired zoom level
+     * @throws Exception if camera not initialized or zoom not supported
+     */
+    public void setZoomLogical(float zoomLevel) throws Exception {
+        if (cameraCharacteristics == null) {
+            throw new Exception("Camera not initialized");
+        }
+
+        Log.d(TAG, "setZoomLogical: Requested zoom level: " + zoomLevel);
+
+        // Get the logical camera's native zoom range
+        Float maxZoom = cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+        if (maxZoom == null) {
+            maxZoom = 1.0f;
+        }
+
+        // Clamp zoom level to logical camera's capabilities
+        float clampedZoom = Math.max(1.0f, Math.min(maxZoom, zoomLevel));
+
+        if (clampedZoom != zoomLevel) {
+            Log.w(TAG, "setZoomLogical: Requested zoom " + zoomLevel + " clamped to " + clampedZoom +
+                       " (max: " + maxZoom + ")");
+        }
+
+        Log.d(TAG, "setZoomLogical: Applying zoom " + clampedZoom + " using logical camera characteristics");
+
+        // Use the logical camera's native zoom without lens switching
+        setZoomInternal(clampedZoom);
+        currentZoomRatio = clampedZoom;
+    }
+
+    /**
+     * Get zoom range for logical camera only.
+     *
+     * @return ZoomFactors with logical camera's native zoom capabilities
+     */
+    public ZoomFactors getZoomLogical() {
+        if (cameraCharacteristics == null) {
+            return new ZoomFactors(1.0f, 1.0f, 1.0f);
+        }
+
+        Float maxZoom = cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+        if (maxZoom == null) {
+            maxZoom = 1.0f;
+        }
+
+        Log.d(TAG, "getZoomLogical: Logical camera zoom range: 1.0 - " + maxZoom + ", current: " + currentZoomRatio);
+        return new ZoomFactors(1.0f, maxZoom, currentZoomRatio);
     }
 }
 

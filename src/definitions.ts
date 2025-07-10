@@ -13,6 +13,27 @@ export interface CameraDevice {
   deviceType?: CameraDeviceType;
 }
 
+export interface CameraLens {
+  /** Lens identifier (usually the physical camera ID) */
+  id: string;
+  /** Human readable lens name */
+  label: string;
+  /** Camera position */
+  position: CameraPosition;
+  /** The type of the camera lens */
+  deviceType: CameraDeviceType;
+  /** Focal length in millimeters */
+  focalLength: number;
+  /** Minimum zoom factor for this lens */
+  minZoom: number;
+  /** Maximum zoom factor for this lens */
+  maxZoom: number;
+  /** Base zoom ratio (e.g., 0.5x, 1x, 2x, 3x) */
+  baseZoomRatio: number;
+  /** Whether this lens is currently active */
+  isActive: boolean;
+}
+
 /**
  * Available camera device types for iOS.
  * Maps to AVCaptureDevice DeviceTypes in iOS.
@@ -275,4 +296,26 @@ export interface CameraPreviewPlugin {
    * @since 7.4.0
    */
   getDeviceId(): Promise<{ deviceId: string }>;
+  /**
+   * Get available camera lenses for the current camera position.
+   * @returns {Promise<{ lenses: CameraLens[] }>} an Promise that resolves with available lenses
+   * @throws An error if something went wrong
+   * @since 7.5.0
+   */
+  getAvailableLenses(): Promise<{ lenses: CameraLens[] }>;
+  /**
+   * Get the currently active lens.
+   * @returns {Promise<{ lens: CameraLens }>} an Promise that resolves with the current lens
+   * @throws An error if something went wrong
+   * @since 7.5.0
+   */
+  getCurrentLens(): Promise<{ lens: CameraLens }>;
+  /**
+   * Alternative setZoom using only logical camera's native zoom characteristics.
+   * Uses the logical camera's built-in zoom capabilities without lens switching.
+   * @param options the zoom options
+   * @returns {Promise<void>} an Promise that resolves when zoom is set
+   * @throws An error if something went wrong
+   * @since 7.5.0
+   */
 }

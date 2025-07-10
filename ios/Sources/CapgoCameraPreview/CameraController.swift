@@ -67,9 +67,9 @@ extension CameraController {
             for camera in cameras {
                 print("Camera: \(camera.localizedName) - Position: \(camera.position.rawValue) - ID: \(camera.uniqueID)")
             }
-            guard !cameras.isEmpty else { 
+            guard !cameras.isEmpty else {
                 print("ERROR: No cameras found during device discovery")
-                throw CameraControllerError.noCamerasAvailable 
+                throw CameraControllerError.noCamerasAvailable
             }
 
             for camera in cameras {
@@ -107,15 +107,15 @@ extension CameraController {
                     mediaType: .video,
                     position: .unspecified
                 ).devices
-                
+
                 guard let selectedDevice = allDevices.first(where: { $0.uniqueID == deviceId }) else {
                     throw CameraControllerError.noCamerasAvailable
                 }
-                
+
                 let deviceInput = try AVCaptureDeviceInput(device: selectedDevice)
                 if captureSession.canAddInput(deviceInput) {
                     captureSession.addInput(deviceInput)
-                    
+
                     // Set the camera inputs based on device position
                     if selectedDevice.position == .front {
                         self.frontCameraInput = deviceInput
@@ -125,7 +125,7 @@ extension CameraController {
                         self.rearCameraInput = deviceInput
                         self.rearCamera = selectedDevice
                         self.currentCameraPosition = .rear
-                        
+
                         try selectedDevice.lockForConfiguration()
                         selectedDevice.focusMode = .continuousAutoFocus
                         selectedDevice.unlockForConfiguration()
@@ -140,8 +140,8 @@ extension CameraController {
                         print("Configuring rear camera: \(rearCamera.localizedName)")
                         self.rearCameraInput = try AVCaptureDeviceInput(device: rearCamera)
 
-                        if captureSession.canAddInput(self.rearCameraInput!) { 
-                            captureSession.addInput(self.rearCameraInput!) 
+                        if captureSession.canAddInput(self.rearCameraInput!) {
+                            captureSession.addInput(self.rearCameraInput!)
                             print("Successfully added rear camera input")
                         }
 
@@ -155,12 +155,12 @@ extension CameraController {
                         print("Configuring front camera: \(frontCamera.localizedName)")
                         self.frontCameraInput = try AVCaptureDeviceInput(device: frontCamera)
 
-                        if captureSession.canAddInput(self.frontCameraInput!) { 
-                            captureSession.addInput(self.frontCameraInput!) 
+                        if captureSession.canAddInput(self.frontCameraInput!) {
+                            captureSession.addInput(self.frontCameraInput!)
                             print("Successfully added front camera input")
-                        } else { 
+                        } else {
                             print("ERROR: Cannot add front camera input to session")
-                            throw CameraControllerError.inputsAreInvalid 
+                            throw CameraControllerError.inputsAreInvalid
                         }
 
                         self.currentCameraPosition = .front
@@ -168,9 +168,9 @@ extension CameraController {
                         print("ERROR: Front camera requested but not available")
                         throw CameraControllerError.noCamerasAvailable
                     }
-                } else { 
+                } else {
                     print("ERROR: Invalid camera position: \(cameraPosition)")
-                    throw CameraControllerError.noCamerasAvailable 
+                    throw CameraControllerError.noCamerasAvailable
                 }
             }
 
@@ -293,7 +293,7 @@ extension CameraController {
 
     private func updateVideoOrientationOnMainThread() {
         let videoOrientation: AVCaptureVideoOrientation
-        
+
         // Use window scene interface orientation
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
             switch windowScene.interfaceOrientation {
@@ -324,19 +324,19 @@ extension CameraController {
               let captureSession = self.captureSession else {
             throw CameraControllerError.captureSessionIsMissing
         }
-        
+
         // Ensure we have the necessary cameras
         guard (currentCameraPosition == .front && rearCamera != nil) ||
               (currentCameraPosition == .rear && frontCamera != nil) else {
             throw CameraControllerError.noCamerasAvailable
         }
-        
+
         // Store the current running state
         let wasRunning = captureSession.isRunning
         if wasRunning {
             captureSession.stopRunning()
         }
-        
+
         // Begin configuration
         captureSession.beginConfiguration()
         defer {
@@ -348,7 +348,7 @@ extension CameraController {
                 }
             }
         }
-        
+
         // Store audio input if it exists
         let audioInput = captureSession.inputs.first { ($0 as? AVCaptureDeviceInput)?.device.hasMediaType(.audio) ?? false }
 
@@ -358,21 +358,21 @@ extension CameraController {
             captureSession.removeInput(input)
             }
         }
-        
+
         // Configure new camera
         switch currentCameraPosition {
         case .front:
             guard let rearCamera = rearCamera else {
                 throw CameraControllerError.invalidOperation
             }
-            
+
             // Configure rear camera
             try rearCamera.lockForConfiguration()
             if rearCamera.isFocusModeSupported(.continuousAutoFocus) {
                 rearCamera.focusMode = .continuousAutoFocus
             }
             rearCamera.unlockForConfiguration()
-            
+
             if let newInput = try? AVCaptureDeviceInput(device: rearCamera),
                 captureSession.canAddInput(newInput) {
                 captureSession.addInput(newInput)
@@ -386,13 +386,13 @@ extension CameraController {
                 throw CameraControllerError.invalidOperation
             }
 
-            // Configure front camera 
+            // Configure front camera
             try frontCamera.lockForConfiguration()
             if frontCamera.isFocusModeSupported(.continuousAutoFocus) {
                 frontCamera.focusMode = .continuousAutoFocus
             }
             frontCamera.unlockForConfiguration()
-    
+
             if let newInput = try? AVCaptureDeviceInput(device: frontCamera),
                 captureSession.canAddInput(newInput) {
                 captureSession.addInput(newInput)
@@ -407,7 +407,7 @@ extension CameraController {
         if let audioInput = audioInput, captureSession.canAddInput(audioInput) {
             captureSession.addInput(audioInput)
         }
-        
+
         // Update video orientation
         DispatchQueue.main.async { [weak self] in
             self?.updateVideoOrientation()
@@ -608,15 +608,15 @@ extension CameraController {
 
         do {
             try device.lockForConfiguration()
-            
+
             if ramp {
                 device.ramp(toVideoZoomFactor: zoomLevel, withRate: 1.0)
             } else {
                 device.videoZoomFactor = zoomLevel
             }
-            
+
             device.unlockForConfiguration()
-            
+
             // Update our internal zoom factor tracking
             self.zoomFactor = zoomLevel
         } catch {
@@ -659,24 +659,24 @@ extension CameraController {
         guard let captureSession = self.captureSession else {
             throw CameraControllerError.captureSessionIsMissing
         }
-        
+
         // Find the device with the specified deviceId
         let allDevices = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera, .builtInDualCamera, .builtInDualWideCamera, .builtInTripleCamera, .builtInTrueDepthCamera],
             mediaType: .video,
             position: .unspecified
         ).devices
-        
+
         guard let targetDevice = allDevices.first(where: { $0.uniqueID == deviceId }) else {
             throw CameraControllerError.noCamerasAvailable
         }
-        
+
         // Store the current running state
         let wasRunning = captureSession.isRunning
         if wasRunning {
             captureSession.stopRunning()
         }
-        
+
         // Begin configuration
         captureSession.beginConfiguration()
         defer {
@@ -688,23 +688,23 @@ extension CameraController {
                 }
             }
         }
-        
+
         // Store audio input if it exists
         let audioInput = captureSession.inputs.first { ($0 as? AVCaptureDeviceInput)?.device.hasMediaType(.audio) ?? false }
-        
+
         // Remove only video inputs
         captureSession.inputs.forEach { input in
             if (input as? AVCaptureDeviceInput)?.device.hasMediaType(.video) ?? false {
                 captureSession.removeInput(input)
             }
         }
-        
+
         // Configure the new device
         let newInput = try AVCaptureDeviceInput(device: targetDevice)
-        
+
         if captureSession.canAddInput(newInput) {
             captureSession.addInput(newInput)
-            
+
             // Update camera references based on device position
             if targetDevice.position == .front {
                 self.frontCameraInput = newInput
@@ -714,7 +714,7 @@ extension CameraController {
                 self.rearCameraInput = newInput
                 self.rearCamera = targetDevice
                 self.currentCameraPosition = .rear
-                
+
                 // Configure rear camera
                 try targetDevice.lockForConfiguration()
                 if targetDevice.isFocusModeSupported(.continuousAutoFocus) {
@@ -725,16 +725,134 @@ extension CameraController {
         } else {
             throw CameraControllerError.invalidOperation
         }
-        
+
         // Re-add audio input if it existed
         if let audioInput = audioInput, captureSession.canAddInput(audioInput) {
             captureSession.addInput(audioInput)
         }
-        
+
         // Update video orientation
         DispatchQueue.main.async { [weak self] in
             self?.updateVideoOrientation()
         }
+    }
+
+    func getAvailableLenses() throws -> [[String: Any]] {
+        // Get available devices for current camera position
+        let deviceTypes: [AVCaptureDevice.DeviceType] = [
+            .builtInWideAngleCamera,
+            .builtInUltraWideCamera,
+            .builtInTelephotoCamera,
+            .builtInDualCamera,
+            .builtInDualWideCamera,
+            .builtInTripleCamera,
+            .builtInTrueDepthCamera
+        ]
+
+        let session = AVCaptureDevice.DiscoverySession(
+            deviceTypes: deviceTypes,
+            mediaType: .video,
+            position: .unspecified
+        )
+
+        let currentCameraId = try getCurrentDeviceId()
+        let currentPosition = currentCameraPosition ?? .rear
+
+        // Filter devices to match current camera position
+        let devicesForPosition = session.devices.filter { device in
+            switch currentPosition {
+            case .front:
+                return device.position == .front
+            case .rear:
+                return device.position == .back
+            default:
+                return false
+            }
+        }
+
+        return devicesForPosition.map { device in
+            var position = "rear"
+            switch device.position {
+            case .front:
+                position = "front"
+            case .back:
+                position = "rear"
+            case .unspecified:
+                position = "unspecified"
+            @unknown default:
+                position = "unknown"
+            }
+
+            var deviceType = "wideAngle"
+            var baseZoomRatio: Float = 1.0
+
+            switch device.deviceType {
+            case .builtInWideAngleCamera:
+                deviceType = "wideAngle"
+                baseZoomRatio = 1.0
+            case .builtInUltraWideCamera:
+                deviceType = "ultraWide"
+                baseZoomRatio = 0.5
+            case .builtInTelephotoCamera:
+                deviceType = "telephoto"
+                baseZoomRatio = 2.0
+            case .builtInDualCamera:
+                deviceType = "dual"
+                baseZoomRatio = 1.0
+            case .builtInDualWideCamera:
+                deviceType = "dualWide"
+                baseZoomRatio = 1.0
+            case .builtInTripleCamera:
+                deviceType = "triple"
+                baseZoomRatio = 1.0
+            case .builtInTrueDepthCamera:
+                deviceType = "trueDepth"
+                baseZoomRatio = 1.0
+            default:
+                deviceType = "wideAngle"
+                baseZoomRatio = 1.0
+            }
+
+            let label: String
+            switch deviceType {
+            case "ultraWide":
+                label = String(format: "%.1fx Ultra Wide", baseZoomRatio)
+            case "telephoto":
+                label = String(format: "%.1fx Telephoto", baseZoomRatio)
+            default:
+                label = String(format: "%.1fx Wide", baseZoomRatio)
+            }
+
+            let isActive = device.uniqueID == currentCameraId
+
+            return [
+                "id": device.uniqueID,
+                "label": label,
+                "position": position,
+                "deviceType": deviceType,
+                "focalLength": 4.25, // Approximate focal length
+                "minZoom": 1.0,
+                "maxZoom": Float(device.activeFormat.videoMaxZoomFactor),
+                "baseZoomRatio": baseZoomRatio,
+                "isActive": isActive
+            ]
+        }
+    }
+
+    func getCurrentLens() throws -> [String: Any] {
+        let lenses = try getAvailableLenses()
+        let currentCameraId = try getCurrentDeviceId()
+
+        guard let currentLens = lenses.first(where: { ($0["id"] as? String) == currentCameraId }) else {
+            throw CameraControllerError.noCamerasAvailable
+        }
+
+        return currentLens
+    }
+
+    func setLens(lensId: String) throws {
+        // Use existing swapToDevice functionality
+        try swapToDevice(deviceId: lensId)
     }
 
     func cleanup() {
