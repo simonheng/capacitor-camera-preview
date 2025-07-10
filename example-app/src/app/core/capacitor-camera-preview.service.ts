@@ -6,7 +6,6 @@ import {
   CameraPreviewPlugin,
   CameraPreviewPictureOptions,
   FlashMode,
-  PictureFormat,
 } from '@capgo/camera-preview';
 import type { CameraLens } from '../../../../src/definitions';
 import { BehaviorSubject } from 'rxjs';
