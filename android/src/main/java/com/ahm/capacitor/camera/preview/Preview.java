@@ -18,7 +18,7 @@ class Preview
   extends RelativeLayout
   implements SurfaceHolder.Callback, TextureView.SurfaceTextureListener {
 
-  private final String TAG = "Preview";
+  private final String TAG = "CameraPreview Preview";
 
   CustomSurfaceView mSurfaceView;
   CustomTextureView mTextureView;

@@ -654,6 +654,57 @@ extension CameraController {
 
         return device.uniqueID
     }
+    
+    func getCurrentLensInfo() throws -> (focalLength: Float, deviceType: String, baseZoomRatio: Float) {
+        var currentCamera: AVCaptureDevice?
+        switch currentCameraPosition {
+        case .front:
+            currentCamera = self.frontCamera
+        case .rear:
+            currentCamera = self.rearCamera
+        default:
+            break
+        }
+
+        guard let device = currentCamera else {
+            throw CameraControllerError.noCamerasAvailable
+        }
+
+        var deviceType = "wideAngle"
+        var baseZoomRatio: Float = 1.0
+
+        switch device.deviceType {
+        case .builtInWideAngleCamera:
+            deviceType = "wideAngle"
+            baseZoomRatio = 1.0
+        case .builtInUltraWideCamera:
+            deviceType = "ultraWide"
+            baseZoomRatio = 0.5
+        case .builtInTelephotoCamera:
+            deviceType = "telephoto"
+            baseZoomRatio = 2.0
+        case .builtInDualCamera:
+            deviceType = "dual"
+            baseZoomRatio = 1.0
+        case .builtInDualWideCamera:
+            deviceType = "dualWide"
+            baseZoomRatio = 1.0
+        case .builtInTripleCamera:
+            deviceType = "triple"
+            baseZoomRatio = 1.0
+        case .builtInTrueDepthCamera:
+            deviceType = "trueDepth"
+            baseZoomRatio = 1.0
+        default:
+            deviceType = "wideAngle"
+            baseZoomRatio = 1.0
+        }
+
+        // Approximate focal length for mobile devices
+        let focalLength: Float = 4.25
+
+        return (focalLength: focalLength, deviceType: deviceType, baseZoomRatio: baseZoomRatio)
+    }
 
     func swapToDevice(deviceId: String) throws {
         guard let captureSession = self.captureSession else {
@@ -737,123 +788,7 @@ extension CameraController {
         }
     }
 
-    func getAvailableLenses() throws -> [[String: Any]] {
-        // Get available devices for current camera position
-        let deviceTypes: [AVCaptureDevice.DeviceType] = [
-            .builtInWideAngleCamera,
-            .builtInUltraWideCamera,
-            .builtInTelephotoCamera,
-            .builtInDualCamera,
-            .builtInDualWideCamera,
-            .builtInTripleCamera,
-            .builtInTrueDepthCamera
-        ]
 
-        let session = AVCaptureDevice.DiscoverySession(
-            deviceTypes: deviceTypes,
-            mediaType: .video,
-            position: .unspecified
-        )
-
-        let currentCameraId = try getCurrentDeviceId()
-        let currentPosition = currentCameraPosition ?? .rear
-
-        // Filter devices to match current camera position
-        let devicesForPosition = session.devices.filter { device in
-            switch currentPosition {
-            case .front:
-                return device.position == .front
-            case .rear:
-                return device.position == .back
-            default:
-                return false
-            }
-        }
-
-        return devicesForPosition.map { device in
-            var position = "rear"
-            switch device.position {
-            case .front:
-                position = "front"
-            case .back:
-                position = "rear"
-            case .unspecified:
-                position = "unspecified"
-            @unknown default:
-                position = "unknown"
-            }
-
-            var deviceType = "wideAngle"
-            var baseZoomRatio: Float = 1.0
-
-            switch device.deviceType {
-            case .builtInWideAngleCamera:
-                deviceType = "wideAngle"
-                baseZoomRatio = 1.0
-            case .builtInUltraWideCamera:
-                deviceType = "ultraWide"
-                baseZoomRatio = 0.5
-            case .builtInTelephotoCamera:
-                deviceType = "telephoto"
-                baseZoomRatio = 2.0
-            case .builtInDualCamera:
-                deviceType = "dual"
-                baseZoomRatio = 1.0
-            case .builtInDualWideCamera:
-                deviceType = "dualWide"
-                baseZoomRatio = 1.0
-            case .builtInTripleCamera:
-                deviceType = "triple"
-                baseZoomRatio = 1.0
-            case .builtInTrueDepthCamera:
-                deviceType = "trueDepth"
-                baseZoomRatio = 1.0
-            default:
-                deviceType = "wideAngle"
-                baseZoomRatio = 1.0
-            }
-
-            let label: String
-            switch deviceType {
-            case "ultraWide":
-                label = String(format: "%.1fx Ultra Wide", baseZoomRatio)
-            case "telephoto":
-                label = String(format: "%.1fx Telephoto", baseZoomRatio)
-            default:
-                label = String(format: "%.1fx Wide", baseZoomRatio)
-            }
-
-            let isActive = device.uniqueID == currentCameraId
-
-            return [
-                "id": device.uniqueID,
-                "label": label,
-                "position": position,
-                "deviceType": deviceType,
-                "focalLength": 4.25, // Approximate focal length
-                "minZoom": 1.0,
-                "maxZoom": Float(device.activeFormat.videoMaxZoomFactor),
-                "baseZoomRatio": baseZoomRatio,
-                "isActive": isActive
-            ]
-        }
-    }
-
-    func getCurrentLens() throws -> [String: Any] {
-        let lenses = try getAvailableLenses()
-        let currentCameraId = try getCurrentDeviceId()
-
-        guard let currentLens = lenses.first(where: { ($0["id"] as? String) == currentCameraId }) else {
-            throw CameraControllerError.noCamerasAvailable
-        }
-
-        return currentLens
-    }
-
-    func setLens(lensId: String) throws {
-        // Use existing swapToDevice functionality
-        try swapToDevice(deviceId: lensId)
-    }
 
     func cleanup() {
         if let captureSession = self.captureSession {

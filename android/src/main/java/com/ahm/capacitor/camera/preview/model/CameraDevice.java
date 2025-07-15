@@ -1,5 +1,7 @@
 package com.ahm.capacitor.camera.preview.model;
 
+import java.util.List;
+
 /**
  * Represents a camera device available on the Android device.
  */
@@ -7,13 +9,17 @@ public class CameraDevice {
     private final String deviceId;
     private final String label;
     private final String position;
-    private final String deviceType;
+    private final List<LensInfo> lenses;
+    private final float minZoom;
+    private final float maxZoom;
 
-    public CameraDevice(String deviceId, String label, String position, String deviceType) {
+    public CameraDevice(String deviceId, String label, String position, List<LensInfo> lenses, float minZoom, float maxZoom) {
         this.deviceId = deviceId;
         this.label = label;
         this.position = position;
-        this.deviceType = deviceType;
+        this.lenses = lenses;
+        this.minZoom = minZoom;
+        this.maxZoom = maxZoom;
     }
 
     public String getDeviceId() {
@@ -28,7 +34,15 @@ public class CameraDevice {
         return position;
     }
 
-    public String getDeviceType() {
-        return deviceType;
+    public List<LensInfo> getLenses() {
+        return lenses;
+    }
+
+    public float getMinZoom() {
+        return minZoom;
+    }
+
+    public float getMaxZoom() {
+        return maxZoom;
     }
 } 

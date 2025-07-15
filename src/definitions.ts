@@ -2,6 +2,23 @@ export type CameraPosition = "rear" | "front";
 
 export type FlashMode = CameraPreviewFlashMode;
 
+export interface CameraLens {
+  /** Device identifier for this lens */
+  deviceId: string;
+  /** Human readable lens name */
+  label: string;
+  /** Camera device type (e.g., ultraWide, wideAngle, telephoto) */
+  deviceType: string;
+  /** Focal length in millimeters */
+  focalLength: number;
+  /** Base zoom ratio for this lens (e.g., 0.5x, 1x, 2x) */
+  baseZoomRatio: number;
+  /** Minimum zoom level */
+  minZoom: number;
+  /** Maximum zoom level */
+  maxZoom: number;
+}
+
 export interface CameraDevice {
   /** Device identifier */
   deviceId: string;
@@ -9,56 +26,26 @@ export interface CameraDevice {
   label: string;
   /** Camera position */
   position: CameraPosition;
-  /** The type of the camera device (e.g., wide, ultra-wide, telephoto) - iOS only */
-  deviceType?: CameraDeviceType;
+  /** List of available lenses for this camera position */
+  lenses: CameraLens[];
+  /** Overall minimum zoom level across all lenses */
+  minZoom: number;
+  /** Overall maximum zoom level across all lenses */
+  maxZoom: number;
 }
 
-export interface CameraLens {
-  /** Lens identifier (usually the physical camera ID) */
-  id: string;
-  /** Human readable lens name */
-  label: string;
-  /** Camera position */
-  position: CameraPosition;
-  /** The type of the camera lens */
-  deviceType: CameraDeviceType;
+export interface LensInfo {
   /** Focal length in millimeters */
   focalLength: number;
-  /** Minimum zoom factor for this lens */
-  minZoom: number;
-  /** Maximum zoom factor for this lens */
-  maxZoom: number;
-  /** Base zoom ratio (e.g., 0.5x, 1x, 2x, 3x) */
+  /** Camera device type (e.g., ultraWide, wideAngle, telephoto) */
+  deviceType: string;
+  /** Base zoom ratio for this lens (e.g., 0.5x, 1x, 2x) */
   baseZoomRatio: number;
-  /** Whether this lens is currently active */
-  isActive: boolean;
+  /** Digital zoom factor applied on top of base zoom */
+  digitalZoom: number;
 }
 
-/**
- * Available camera device types for iOS.
- * Maps to AVCaptureDevice DeviceTypes in iOS.
- *
- * @see https://developer.apple.com/documentation/avfoundation/avcapturedevice/devicetype-swift.struct
- *
- * @since 7.4.0
- */
-export type CameraDeviceType =
-  /** builtInWideAngleCamera - standard camera */
-  | 'wideAngle'
-  /** builtInUltraWideCamera - 0.5x zoom level */
-  | 'ultraWide'
-  /** builtInTelephotoCamera - 2x/3x zoom level */
-  | 'telephoto'
-  /** builtInDualCamera - wide + telephoto combination */
-  | 'dual'
-  /** builtInDualWideCamera - wide + ultraWide combination */
-  | 'dualWide'
-  /** builtInTripleCamera - wide + ultraWide + telephoto */
-  | 'triple'
-  /** builtInTrueDepthCamera - front-facing camera with depth sensing */
-  | 'trueDepth'
-  /** Multi-camera logical device - Android only */
-  | 'multi';
+
 
 export type CameraSessionConfiguration = CameraPreviewOptions;
 
@@ -247,19 +234,24 @@ export interface CameraPreviewPlugin {
    */
   isRunning(): Promise<{ isRunning: boolean }>;
   /**
-   * Get available camera devices.
-   * @returns {Promise<{devices: CameraDevice[]}>} an Promise that resolves with available devices
+   * Get available camera devices with their lenses and zoom capabilities.
+   * @returns {Promise<{devices: CameraDevice[]}>} an Promise that resolves with available devices including their lenses list and zoom ranges
    * @throws An error if something went wrong
    * @since 7.4.0
    */
   getAvailableDevices(): Promise<{ devices: CameraDevice[] }>;
   /**
-   * Get zoom capabilities and current level.
-   * @returns {Promise<{min: number; max: number; current: number}>} an Promise that resolves with zoom info
+   * Get zoom capabilities and current level with lens information.
+   * @returns {Promise<{min: number; max: number; current: number; lens: LensInfo}>} an Promise that resolves with zoom and lens info
    * @throws An error if something went wrong
    * @since 7.4.0
    */
-  getZoom(): Promise<{ min: number; max: number; current: number }>;
+  getZoom(): Promise<{ 
+    min: number; 
+    max: number; 
+    current: number; 
+    lens: LensInfo;
+  }>;
   /**
    * Set zoom level.
    * @param options the options to set zoom with
@@ -296,18 +288,5 @@ export interface CameraPreviewPlugin {
    * @since 7.4.0
    */
   getDeviceId(): Promise<{ deviceId: string }>;
-  /**
-   * Get available camera lenses for the current camera position.
-   * @returns {Promise<{ lenses: CameraLens[] }>} an Promise that resolves with available lenses
-   * @throws An error if something went wrong
-   * @since 7.5.0
-   */
-  getAvailableLenses(): Promise<{ lenses: CameraLens[] }>;
-  /**
-   * Get the currently active lens.
-   * @returns {Promise<{ lens: CameraLens }>} an Promise that resolves with the current lens
-   * @throws An error if something went wrong
-   * @since 7.5.0
-   */
-  getCurrentLens(): Promise<{ lens: CameraLens }>;
+
 }

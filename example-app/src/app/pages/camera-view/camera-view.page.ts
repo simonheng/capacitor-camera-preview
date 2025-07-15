@@ -215,14 +215,24 @@ export class CameraSettingsPage implements OnInit {
       // Test available devices
       const devices = await this.#cameraViewService.getAvailableDevices();
       results += `\n✓ Available devices: ${devices.length}`;
+      devices.forEach((device, index) => {
+        results += `\n  ${index + 1}. ${device.label} (${device.position})`;
+        results += `\n     Lenses: ${device.lenses.length}`;
+        results += `\n     Overall zoom range: ${device.minZoom}x - ${device.maxZoom}x`;
+        device.lenses.forEach(lens => {
+          results += `\n       - ${lens.deviceType}: ${lens.baseZoomRatio}x base (${lens.minZoom}x-${lens.maxZoom}x)`;
+        });
+      });
 
       // Test supported flash modes
       const flashModes = await this.#cameraViewService.getSupportedFlashModes();
       results += `\n✓ Flash modes: ${flashModes.join(', ')}`;
 
-      // Test zoom capabilities
-      const zoom = await this.#cameraViewService.getZoom();
-      results += `\n✓ Zoom range: ${zoom.min} - ${zoom.max}`;
+      // Test zoom capabilities and lens info
+      const zoomData = await this.#cameraViewService.getZoom();
+      results += `\n✓ Zoom range: ${zoomData.min} - ${zoomData.max} (current: ${zoomData.current})`;
+      results += `\n✓ Current lens: ${zoomData.lens.deviceType} (${zoomData.lens.baseZoomRatio}x base, ${zoomData.lens.digitalZoom}x digital)`;
+      results += `\n  - Focal length: ${zoomData.lens.focalLength}mm`;
 
       // Test horizontal FOV
       const fov = await this.#cameraViewService.getHorizontalFov();

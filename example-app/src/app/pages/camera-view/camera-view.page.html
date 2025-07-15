@@ -21,7 +21,7 @@
 
         @for (device of cameraDevices(); track device.deviceId) {
           <ion-select-option value="{{ device.deviceId }}">
-            ({{ device.position }}) - {{ device.label }}
+            ({{ device.position }}) - {{ device.label }} ({{ device.lenses.length }} lenses)
           </ion-select-option>
         }
       </ion-select>

@@ -1,4 +1,7 @@
-<div class="container">
+<div class="container" 
+     (touchstart)="handleTouchStart($event)" 
+     (touchmove)="handleTouchMove($event)" 
+     (touchend)="handleTouchEnd()">
   <div id="cameraView">
     @if (!cameraStarted()) {
       <div class="loading-screen">
@@ -25,16 +28,16 @@
         </div>
         @if (currentLens()) {
           <div class="info-row">
-            <span class="label">Lens:</span>
-            <span class="value">{{ currentLens()!.label }}</span>
-          </div>
-          <div class="info-row">
-            <span class="label">Type:</span>
+            <span class="label">Lens Type:</span>
             <span class="value">{{ currentLens()!.deviceType }}</span>
           </div>
           <div class="info-row">
             <span class="label">Base Zoom:</span>
             <span class="value">{{ currentLens()!.baseZoomRatio }}x</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Digital Zoom:</span>
+            <span class="value">{{ currentLens()!.digitalZoom }}x</span>
           </div>
           <div class="info-row">
             <span class="label">Focal Length:</span>
@@ -53,41 +56,6 @@
           <span class="label">Opacity:</span>
           <span class="value">{{ currentOpacity() }}%</span>
         </div>
-
-        <!-- Available Lenses Info -->
-        @if (availableLenses().length > 1) {
-          <div class="info-section">
-            <h4>Available Lenses ({{ availableLenses().length }})</h4>
-            @for (lens of availableLenses(); track lens.id) {
-              <div class="lens-item" [class.active]="lens.isActive">
-                <ion-icon 
-                  [name]="lens.isActive ? 'radio-button-on' : 'radio-button-off'" 
-                  [color]="lens.isActive ? 'primary' : 'medium'"
-                  size="small">
-                </ion-icon>
-                <span class="lens-label">{{ lens.deviceType }} ({{ lens.baseZoomRatio }}x)</span>
-              </div>
-            }
-          </div>
-        }
-
-        <!-- @if (availableDevices().length > 0) {
-          <div class="device-selector">
-            <ion-select
-              [value]="currentDeviceId()"
-              (ionChange)="switchToDevice($event.detail.value)"
-              placeholder="Select Camera Device"
-              fill="outline"
-              size="small"
-            >
-              @for (device of availableDevices(); track device.deviceId) {
-                <ion-select-option [value]="device.deviceId">
-                  {{ device.label }} ({{ device.position }})
-                </ion-select-option>
-              }
-            </ion-select>
-          </div>
-        } -->
       </ion-card-content>
     </ion-card>
   </div>
@@ -150,21 +118,6 @@
   </ion-fab>
 
   @if (cameraStarted()) {
-
-    <!-- Camera Switching Buttons -->
-    @if (availableCameras().length > 1) {
-      <div class="camera-switch-container">
-        @for (camera of availableCameras(); track camera.deviceId; let i = $index) {
-          <ion-fab-button
-            [class.selected]="selectedCameraIndex() === i"
-            size="small"
-            (click)="switchToDevice(camera.deviceId)"
-          >
-            {{ getCameraSwitchLabel(i) }}
-          </ion-fab-button>
-        }
-      </div>
-    }
 
     <!-- Video Recording Controls -->
     <!-- <ion-fab

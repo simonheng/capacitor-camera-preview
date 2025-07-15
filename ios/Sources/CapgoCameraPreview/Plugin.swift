@@ -54,9 +54,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setZoom", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getFlashMode", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setDeviceId", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getAvailableLenses", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getCurrentLens", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise)
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -608,45 +606,85 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             position: .unspecified
         )
 
-        let devices = session.devices.map { device in
-            var position = "rear"
-            switch device.position {
-            case .front:
-                position = "front"
-            case .back:
-                position = "rear"
-            case .unspecified:
-                position = "unspecified"
-            @unknown default:
-                position = "unknown"
-            }
+        var frontDevices: [[String: Any]] = []
+        var backDevices: [[String: Any]] = []
 
+        // Collect all devices by position
+        for device in session.devices {
             var deviceType = "wideAngle"
+            var baseZoomRatio: Float = 1.0
+
             switch device.deviceType {
             case .builtInWideAngleCamera:
                 deviceType = "wideAngle"
+                baseZoomRatio = 1.0
             case .builtInUltraWideCamera:
                 deviceType = "ultraWide"
+                baseZoomRatio = 0.5
             case .builtInTelephotoCamera:
                 deviceType = "telephoto"
+                baseZoomRatio = 2.0
             case .builtInDualCamera:
                 deviceType = "dual"
+                baseZoomRatio = 1.0
             case .builtInDualWideCamera:
                 deviceType = "dualWide"
+                baseZoomRatio = 1.0
             case .builtInTripleCamera:
                 deviceType = "triple"
+                baseZoomRatio = 1.0
             case .builtInTrueDepthCamera:
                 deviceType = "trueDepth"
+                baseZoomRatio = 1.0
             default:
                 deviceType = "wideAngle"
+                baseZoomRatio = 1.0
             }
 
-            return [
+            let lensInfo = [
                 "deviceId": device.uniqueID,
                 "label": device.localizedName,
-                "position": position,
-                "deviceType": deviceType
-            ]
+                "deviceType": deviceType,
+                "focalLength": 4.25,
+                "baseZoomRatio": baseZoomRatio,
+                "minZoom": 1.0,
+                "maxZoom": Float(device.activeFormat.videoMaxZoomFactor)
+            ] as [String : Any]
+
+            switch device.position {
+            case .front:
+                frontDevices.append(lensInfo)
+            case .back:
+                backDevices.append(lensInfo)
+            default:
+                break
+            }
+        }
+
+        var devices: [[String: Any]] = []
+        
+        if !frontDevices.isEmpty {
+            let frontDevice = [
+                "deviceId": frontDevices.first?["deviceId"] as? String ?? "",
+                "label": "Front Camera",
+                "position": "front",
+                "lenses": frontDevices,
+                "minZoom": frontDevices.compactMap { $0["minZoom"] as? Float }.min() ?? 1.0,
+                "maxZoom": frontDevices.compactMap { $0["maxZoom"] as? Float }.max() ?? 1.0
+            ] as [String: Any]
+            devices.append(frontDevice)
+        }
+        
+        if !backDevices.isEmpty {
+            let backDevice = [
+                "deviceId": backDevices.first?["deviceId"] as? String ?? "",
+                "label": "Back Camera",
+                "position": "rear",
+                "lenses": backDevices,
+                "minZoom": backDevices.compactMap { $0["minZoom"] as? Float }.min() ?? 1.0,
+                "maxZoom": backDevices.compactMap { $0["maxZoom"] as? Float }.max() ?? 1.0
+            ] as [String: Any]
+            devices.append(backDevice)
         }
 
         call.resolve(["devices": devices])
@@ -660,10 +698,18 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
 
         do {
             let zoomInfo = try self.cameraController.getZoom()
+            let lensInfo = try self.cameraController.getCurrentLensInfo()
+            
             call.resolve([
                 "min": zoomInfo.min,
                 "max": zoomInfo.max,
-                "current": zoomInfo.current
+                "current": zoomInfo.current,
+                "lens": [
+                    "focalLength": lensInfo.focalLength,
+                    "deviceType": lensInfo.deviceType,
+                    "baseZoomRatio": lensInfo.baseZoomRatio,
+                    "digitalZoom": Float(zoomInfo.current) / lensInfo.baseZoomRatio
+                ]
             ])
         } catch {
             call.reject("Failed to get zoom: \(error.localizedDescription)")
@@ -763,32 +809,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    @objc func getAvailableLenses(_ call: CAPPluginCall) {
-        guard isInitialized else {
-            call.reject("Camera not initialized")
-            return
-        }
 
-        do {
-            let lenses = try self.cameraController.getAvailableLenses()
-            call.resolve(["lenses": lenses])
-        } catch {
-            call.reject("Failed to get available lenses: \(error.localizedDescription)")
-        }
-    }
-
-    @objc func getCurrentLens(_ call: CAPPluginCall) {
-        guard isInitialized else {
-            call.reject("Camera not initialized")
-            return
-        }
-
-        do {
-            let lens = try self.cameraController.getCurrentLens()
-            call.resolve(["lens": lens])
-        } catch {
-            call.reject("Failed to get current lens: \(error.localizedDescription)")
-        }
-    }
 
 }

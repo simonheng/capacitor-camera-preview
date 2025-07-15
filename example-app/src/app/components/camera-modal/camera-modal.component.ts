@@ -27,9 +27,9 @@ import {
 } from '@ionic/angular/standalone';
 import {
   type CameraDevice,
-  type CameraLens,
   type CameraPosition,
   type FlashMode,
+  type LensInfo,
   type PictureFormat
 } from '@capgo/camera-preview';
 import { CapacitorCameraViewService } from '../../core/capacitor-camera-preview.service';
@@ -82,9 +82,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Camera behavior inputs
   public readonly opacity = input<number>(100);
   public readonly enableZoom = input<boolean>(false);
-  public readonly disableAudio = input<boolean>(false);
-  public readonly enableHighResolution = input<boolean>(false);
-  public readonly lockAndroidOrientation = input<boolean>(false);
+  public readonly disableAudio = input<boolean>(true);
+  public readonly enableHighResolution = input<boolean>(true);
+  public readonly lockAndroidOrientation = input<boolean>(true);
 
   protected readonly cameraStarted = toSignal(
     this.#cameraViewService.cameraStarted,
@@ -104,8 +104,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly maxZoomReel = signal(8.0);
   protected readonly availableDevices = signal<CameraDevice[]>([]);
   protected readonly currentDeviceId = signal<string>('');
-  protected readonly availableLenses = signal<CameraLens[]>([]);
-  protected readonly currentLens = signal<CameraLens | null>(null);
+  protected readonly currentLens = signal<LensInfo | null>(null);
   protected readonly isRunning = signal(false);
 
   // Video recording and testing state
@@ -131,6 +130,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   #supportedFlashModes = signal<Array<FlashMode>>(['off']);
   #touchStartDistance = 0;
   #initialZoomFactorOnPinch = 1.0;
+  #lastZoomCall = 0;
+  #zoomThrottleMs = 100; // Throttle zoom calls to max 20fps
 
   constructor() {
     effect(() => {
@@ -142,17 +143,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     });
   }
 
-  public ngOnInit() {
-    this.startCamera().catch((error) => {
-      console.error('Failed to start camera', error);
-      this.#modalController.dismiss();
-    });
-
-    this.#initializeEventListeners();
+  async ngOnInit(): Promise<void> {
+    await this.startCamera();
   }
 
-  public ngOnDestroy(): void {
-    this.#destroyEventListeners();
+  ngOnDestroy(): void {
+    this.stop();
   }
 
   protected async startCamera(): Promise<void> {
@@ -172,7 +168,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.#initializeZoomLimits(),
       this.#initializeFlashModes(),
       this.#initializeDevices(),
-      this.#initializeLenses(),
       this.#updateRunningStatus(),
       this.#updateCurrentDeviceId(),
     ]);
@@ -183,101 +178,129 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     this.#setupCameraSwitchButtons();
   }
 
-  protected async stopCamera(): Promise<void> {
+  protected async stop(): Promise<void> {
     try {
       await this.#cameraViewService.stop();
     } catch (error) {
-      console.error('Failed to stop camera', error);
+      console.warn('Failed to stop camera', error);
     }
   }
 
   protected async close(): Promise<void> {
-    this.stopCamera().catch((error) =>
-      console.error('Failed to stop camera', error),
-    );
+    await this.stop();
     await this.#modalController.dismiss();
   }
 
   protected async capturePhoto(): Promise<void> {
-    this.isCapturingPhoto.set(true);
-    try {
-      const captureOptions = {
-        quality: this.pictureQuality(),
-        format: this.pictureFormat(),
-        ...(this.useCustomSize() && {
-          width: this.pictureWidth(),
-          height: this.pictureHeight(),
-        }),
-      };
+    if (this.isCapturingPhoto()) return;
 
-      const photo = await this.#cameraViewService.capture(this.quality(), captureOptions);
-      this.#modalController.dismiss({
+    this.isCapturingPhoto.set(true);
+
+    try {
+      const quality = this.pictureQuality();
+      const format = this.pictureFormat();
+
+      let captureOptions = { quality };
+      if (format === 'png') {
+        captureOptions = { ...captureOptions, ...{ format } };
+      }
+
+      if (this.useCustomSize()) {
+        captureOptions = {
+          ...captureOptions,
+          ...{ 
+            width: this.pictureWidth(),
+            height: this.pictureHeight()
+          }
+        };
+      }
+
+      const photo = await this.#cameraViewService.capture(quality, captureOptions);
+
+      await this.#modalController.dismiss({
         photo,
         options: captureOptions,
-        type: 'standard'
+        type: 'capture',
       });
     } catch (error) {
       console.error('Failed to capture photo', error);
-      this.#modalController.dismiss();
+    } finally {
+      this.isCapturingPhoto.set(false);
     }
-
-    this.stopCamera().catch((error) => {
-      console.error('Failed to stop camera', error);
-    });
-
-    this.isCapturingPhoto.set(false);
   }
 
   protected async captureSample(): Promise<void> {
+    if (this.isCapturingPhoto()) return;
+
     this.isCapturingPhoto.set(true);
+
     try {
-      const photo = await this.#cameraViewService.captureSample(this.pictureQuality());
-      this.#modalController.dismiss({
+      const quality = this.pictureQuality();
+      const photo = await this.#cameraViewService.captureSample(quality);
+
+      await this.#modalController.dismiss({
         photo,
-        type: 'sample'
+        options: { quality },
+        type: 'sample',
       });
     } catch (error) {
       console.error('Failed to capture sample', error);
-      this.#modalController.dismiss();
+    } finally {
+      this.isCapturingPhoto.set(false);
     }
-
-    this.stopCamera().catch((error) => {
-      console.error('Failed to stop camera', error);
-    });
-
-    this.isCapturingPhoto.set(false);
   }
 
   protected async flipCamera(): Promise<void> {
-    await this.#cameraViewService.flipCamera();
-    await this.#setZoom(1.0);
-    await this.#initializeZoomLimits();
-  }
-
-  protected async nextFlashMode(): Promise<void> {
-    const supportedModes = this.#supportedFlashModes();
-    if (supportedModes.length <= 1) return;
-
-    const currentMode = this.flashMode();
-    const currentIndex = supportedModes.indexOf(currentMode);
-    const nextIndex = (currentIndex + 1) % supportedModes.length;
-    const nextFlashMode = supportedModes[nextIndex] as FlashMode;
-
-    this.flashMode.set(nextFlashMode);
-    await this.#cameraViewService.setFlashMode(nextFlashMode);
-  }
-
-  protected async zoomIn(): Promise<void> {
-    if (this.canZoomIn()) {
-      this.currentZoomFactor.update((curr) => curr + 0.1);
-      await this.#setZoom(this.currentZoomFactor());
+    try {
+      await this.#cameraViewService.flipCamera();
+      await this.#updateCurrentDeviceId();
+      await this.#initializeZoomLimits();
+      await this.#initializeFlashModes();
+    } catch (error) {
+      console.error('Failed to flip camera', error);
     }
   }
 
+  protected async zoomIn(): Promise<void> {
+    const newZoom = Math.min(this.currentZoomFactor() + 0.1, this.maxZoom());
+    await this.setZoom(newZoom, true); // Force immediate zoom for button clicks
+  }
+
   protected async zoomOut(): Promise<void> {
-    if (this.canZoomOut()) {
-      this.currentZoomFactor.update((curr) => curr - 0.1);
-      await this.#setZoom(this.currentZoomFactor());
+    const newZoom = Math.max(this.currentZoomFactor() - 0.1, this.minZoom());
+    await this.setZoom(newZoom, true); // Force immediate zoom for button clicks
+  }
+
+  protected async setZoom(level: number, force: boolean = false): Promise<void> {
+    const now = Date.now();
+    
+    // Throttle zoom calls unless forced
+    if (!force && (now - this.#lastZoomCall) < this.#zoomThrottleMs) {
+      // Update UI immediately for smooth feedback
+      this.currentZoomFactor.set(level);
+      return;
+    }
+
+    try {
+      this.#lastZoomCall = now;
+      await this.#cameraViewService.setZoom(level);
+      this.currentZoomFactor.set(level);
+    } catch (error) {
+      console.error('Failed to set zoom', error);
+    }
+  }
+
+  protected async nextFlashMode(): Promise<void> {
+    try {
+      const supportedModes = this.#supportedFlashModes();
+      const currentIndex = supportedModes.indexOf(this.flashMode());
+      const nextIndex = (currentIndex + 1) % supportedModes.length;
+      const nextMode = supportedModes[nextIndex] as FlashMode;
+
+      await this.#cameraViewService.setFlashMode(nextMode);
+      this.flashMode.set(nextMode);
+    } catch (error) {
+      console.error('Failed to set flash mode', error);
     }
   }
 
@@ -326,22 +349,29 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       const currentId = await this.#cameraViewService.getDeviceId();
       results += `\n✓ Current device: ${currentId}`;
 
-      // Test zoom capabilities
-      const zoom = await this.#cameraViewService.getZoom();
-      results += `\n✓ Zoom: ${zoom.min} - ${zoom.max} (current: ${zoom.current})`;
+      // Test zoom capabilities and lens info
+      const zoomData = await this.#cameraViewService.getZoom();
+      results += `\n✓ Zoom: ${zoomData.min} - ${zoomData.max} (current: ${zoomData.current})`;
+      results += `\n✓ Lens: ${zoomData.lens.deviceType} (${zoomData.lens.baseZoomRatio}x base)`;
+      results += `\n  - Focal length: ${zoomData.lens.focalLength}mm`;
+      results += `\n  - Digital zoom: ${zoomData.lens.digitalZoom}x`;
 
       // Test flash mode
       const flashMode = await this.#cameraViewService.getFlashMode();
       results += `\n✓ Flash mode: ${flashMode}`;
 
-      // Test lens information
-      const lenses = await this.#cameraViewService.getAvailableLenses();
-      results += `\n✓ Available lenses: ${lenses.length}`;
+      // Test device information
+      const devices = await this.#cameraViewService.getAvailableDevices();
+      results += `\n✓ Available devices: ${devices.length}`;
       
-      const currentLens = await this.#cameraViewService.getCurrentLens();
-      results += `\n✓ Current lens: ${currentLens.label} (${currentLens.deviceType})`;
-      results += `\n  - Base zoom: ${currentLens.baseZoomRatio}x`;
-      results += `\n  - Focal length: ${currentLens.focalLength}mm`;
+      devices.forEach((device, index) => {
+        results += `\n  ${index + 1}. ${device.label} (${device.position})`;
+        results += `\n     Lenses: ${device.lenses.length}`;
+        results += `\n     Zoom range: ${device.minZoom}x - ${device.maxZoom}x`;
+        device.lenses.forEach(lens => {
+          results += `\n       - ${lens.deviceType} (${lens.baseZoomRatio}x)`;
+        });
+      });
 
       this.testResults.set(results);
       this.showTestResults.set(true);
@@ -363,22 +393,29 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     try {
       let results = `\n=== Lens Information Test ===`;
       
-      // Get available lenses
-      const lenses = await this.#cameraViewService.getAvailableLenses();
-      results += `\n✓ Available lenses: ${lenses.length}`;
+      // Get current lens info from zoom data
+      const zoomData = await this.#cameraViewService.getZoom();
+      results += `\n✓ Current lens info:`;
+      results += `\n  Type: ${zoomData.lens.deviceType}`;
+      results += `\n  Base Zoom: ${zoomData.lens.baseZoomRatio}x`;
+      results += `\n  Digital Zoom: ${zoomData.lens.digitalZoom}x`;
+      results += `\n  Focal Length: ${zoomData.lens.focalLength}mm`;
       
-      lenses.forEach((lens, index) => {
-        results += `\n  ${index + 1}. ${lens.label}`;
-        results += `\n     Type: ${lens.deviceType}`;
-        results += `\n     Base Zoom: ${lens.baseZoomRatio}x`;
-        results += `\n     Zoom Range: ${lens.minZoom}x - ${lens.maxZoom}x`;
-        results += `\n     Focal Length: ${lens.focalLength}mm`;
-        results += `\n     Active: ${lens.isActive ? 'Yes' : 'No'}`;
-      });
+      // Get available lenses from device data
+      const devices = await this.#cameraViewService.getAvailableDevices();
+      const currentDeviceId = await this.#cameraViewService.getDeviceId();
+      const currentDevice = devices.find(d => d.deviceId === currentDeviceId);
       
-      // Get current lens
-      const currentLens = await this.#cameraViewService.getCurrentLens();
-      results += `\n✓ Current lens: ${currentLens.label} (${currentLens.deviceType})`;
+      if (currentDevice) {
+        results += `\n✓ Available lenses for ${currentDevice.label}: ${currentDevice.lenses.length}`;
+        currentDevice.lenses.forEach((lens, index) => {
+          results += `\n  ${index + 1}. ${lens.label}`;
+          results += `\n     Type: ${lens.deviceType}`;
+          results += `\n     Base Zoom: ${lens.baseZoomRatio}x`;
+          results += `\n     Zoom Range: ${lens.minZoom}x - ${lens.maxZoom}x`;
+          results += `\n     Focal Length: ${lens.focalLength}mm`;
+        });
+      }
       
       this.testResults.set(results);
       this.showTestResults.set(true);
@@ -427,89 +464,56 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
- * Mappe un zoom utilisateur (0.5x - 10x) vers un zoom réel (zoomMin - zoomMax)
- */
-  private mapUserZoomToCameraZoom(userZoom: number): number {
-    const currentLens = this.currentLens();
-    // if (currentLens?.deviceType === 'wideAngle') {
-    //   userZoom = userZoom + 0.2;
-    // }
-
-    const clampedZoom = Math.max(this.minZoom(), Math.min(this.maxZoom(), userZoom));
-    const t = (clampedZoom - this.minZoom()) / (this.maxZoom() - this.minZoom());
-
-    return this.minZoomReel() + t * (this.maxZoomReel() - this.minZoomReel());
-  }
-
-  /**
- * Mappe un zoom réel (zoomMin - zoomMax) vers un zoom utilisateur (0.5x - 10x)
- */
-  // private mapCameraZoomToUserZoom(cameraZoom: number): number {
-  //   const clampedZoom = Math.max(this.minZoomReel(), Math.min(this.maxZoomReel(), cameraZoom));
-  //   const t = (clampedZoom - this.minZoomReel()) / (this.maxZoomReel() - this.minZoomReel());
-
-  //   return this.minZoom() + t * (this.maxZoom() - this.minZoom());
-  // }
-
-  async #setZoom(zoomFactor: number): Promise<void> {
-    const previousLens = this.currentLens();
-    this.currentZoomFactor.set(zoomFactor);
-    
-    await this.#cameraViewService.setZoom(this.mapUserZoomToCameraZoom(zoomFactor), false);
-    await this.#updateCurrentDeviceId();
-    await this.#updateAvailableLenses();
-    
-    // Check if lens changed and update test results
-    const newLens = this.currentLens();
-    if (previousLens && newLens && previousLens.id !== newLens.id && this.showTestResults()) {
-      const results = this.testResults() + `\n✓ Lens switched: ${newLens.label} (${newLens.deviceType}, ${newLens.baseZoomRatio}x) at ${zoomFactor.toFixed(1)}x zoom`;
-      this.testResults.set(results);
+  protected getCameraSwitchLabel(index: number): string {
+    const cameras = this.availableCameras();
+    if (index < cameras.length) {
+      const camera = cameras[index];
+      // Use the primary lens base zoom ratio for the label
+      const primaryLens = camera.lenses.find(l => l.deviceType === 'wideAngle') || camera.lenses[0];
+      return `${primaryLens?.baseZoomRatio || 1}x`;
     }
+    return `${index + 1}`;
   }
-
 
   async #initializeZoomLimits(): Promise<void> {
     try {
-      const zoomRange = await this.#cameraViewService.getZoom();
-
-      if (zoomRange) {
-        this.minZoomReel.set(zoomRange.min);
-        this.maxZoomReel.set(zoomRange.max);
-      }
+      const zoomData = await this.#cameraViewService.getZoom();
+      this.minZoom.set(zoomData.min); // This overwrites the 0.5 with whatever Android returns
+      this.maxZoom.set(zoomData.max);
+      this.currentZoomFactor.set(zoomData.current);
+      this.currentLens.set(zoomData.lens);
     } catch (error) {
-      console.warn('Failed to get zoom range, using default values.', error);
-    }
-  }
-  async #initializeLenses(): Promise<void> {
-    try {
-      const lenses = await this.#cameraViewService.getAvailableLenses();
-      const currentLens = await this.#cameraViewService.getCurrentLens();
-      this.availableLenses.set(lenses);
-      this.currentLens.set(currentLens);
-    } catch (error) {
-      console.warn('Failed to get available lenses', error);
-    }
-  }
-
-  async #updateAvailableLenses(): Promise<void> {
-    try {
-      const lenses = await this.#cameraViewService.getAvailableLenses();
-      const currentLens = await this.#cameraViewService.getCurrentLens();
-      this.availableLenses.set(lenses);
-      this.currentLens.set(currentLens);
-    } catch (error) {
-      console.warn('Failed to update available lenses', error);
+      console.warn('Failed to get zoom limits', error);
     }
   }
 
   async #initializeFlashModes(): Promise<void> {
     try {
-      this.#supportedFlashModes.set(
-        await this.#cameraViewService.getSupportedFlashModes(),
-      );
+      const flashModes = await this.#cameraViewService.getSupportedFlashModes();
+      this.#supportedFlashModes.set(flashModes);
+
+      const currentFlashMode = await this.#cameraViewService.getFlashMode();
+      this.flashMode.set(currentFlashMode);
     } catch (error) {
-      console.warn('Failed to get supported flash modes', error);
+      console.warn('Failed to get flash modes', error);
+    }
+  }
+
+  async #updateCurrentDeviceId(): Promise<void> {
+    try {
+      const deviceId = await this.#cameraViewService.getDeviceId();
+      this.currentDeviceId.set(deviceId);
+    } catch (error) {
+      console.warn('Failed to get current device ID', error);
+    }
+  }
+
+  async #updateRunningStatus(): Promise<void> {
+    try {
+      const running = await this.#cameraViewService.isRunning();
+      this.isRunning.set(running);
+    } catch (error) {
+      console.warn('Failed to get running status', error);
     }
   }
 
@@ -531,27 +535,32 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
     // Filter cameras by current position preference
     const currentPosition = this.position();
-    const camerasForPosition = devices.filter(device =>
+    const currentPositionDevice = devices.find(device =>
       device.position === currentPosition
     );
 
-    console.log('camerasForPosition:', JSON.stringify(camerasForPosition, null, 2));
+    if (!currentPositionDevice) return;
 
-    // Sort cameras by device type to create a logical progression
-    const sortedCameras = camerasForPosition.sort((a, b) => {
-      const typeOrder: { [key: string]: number } = { 'ultraWide': 0, 'wideAngle': 1, 'telephoto': 2, 'multi': 3 };
-      const aOrder = typeOrder[a.deviceType || 'unknown'] ?? 4;
-      const bOrder = typeOrder[b.deviceType || 'unknown'] ?? 4;
-      return aOrder - bOrder;
-    });
+    // Use the lenses from the current position device for camera switching
+    const availableLenses = currentPositionDevice.lenses;
 
-    this.availableCameras.set(sortedCameras);
+    // Convert lenses to a camera-like structure for the switch buttons
+    const cameraOptions = availableLenses.map(lens => ({
+      deviceId: lens.deviceId,
+      label: lens.label,
+      position: currentPosition,
+      lenses: [lens],
+      minZoom: lens.minZoom,
+      maxZoom: lens.maxZoom
+    }));
+
+    this.availableCameras.set(cameraOptions);
 
     // Set initial camera selection to match current device if possible
     const currentDeviceId = this.currentDeviceId();
     let initialIndex = 0;
     if (currentDeviceId !== null && currentDeviceId !== undefined) {
-      const foundIndex = sortedCameras.findIndex(camera => camera.deviceId === currentDeviceId);
+      const foundIndex = cameraOptions.findIndex(camera => camera.deviceId === currentDeviceId);
       if (foundIndex >= 0) {
         initialIndex = foundIndex;
       }
@@ -562,104 +571,58 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     console.log('selectedCameraIndex:', this.selectedCameraIndex());
   }
 
-  /**
-   * Switch to a specific camera by index
-   */
-  protected switchToCameraByIndex(index: number): Promise<void> {
-    const cameras = this.availableCameras();
-    if (index >= 0 && index < cameras.length) {
-      this.selectedCameraIndex.set(index);
-      const camera = cameras[index];
-
-      // Update test results
-      // const results = this.testResults() + `\n✓ Switched to camera: ${camera.label} (${camera.deviceType})`;
-      // this.testResults.set(results);
-
-      return this.switchToDevice(camera.deviceId);
+  // Touch event handlers for pinch-to-zoom
+  protected handleTouchStart(event: TouchEvent): void {
+    if (event.touches.length === 2) {
+      this.#touchStartDistance = getDistance(event.touches[0], event.touches[1]);
+      this.#initialZoomFactorOnPinch = this.currentZoomFactor();
+      event.preventDefault();
     }
-    return Promise.resolve();
   }
 
-  /**
-   * Get the label for a camera switch button
-   */
-  protected getCameraSwitchLabel(index: number): string {
-    const cameras = this.availableCameras();
-    if (index >= cameras.length) return '';
-
-    const camera = cameras[index];
-
-    // Map device types to user-friendly zoom descriptions
-    const typeLabels: { [key: string]: string } = {
-      'ultraWide': '0.5x',
-      'wideAngle': '1x',
-      'telephoto': index === 2 ? '2x' : '3x',
-      'multi': `${index + 1}x`
-    };
-
-    return typeLabels[camera.deviceType || 'unknown'] || `${index + 1}x`;
+  protected handleTouchMove(event: TouchEvent): void {
+    if (event.touches.length === 2 && this.#touchStartDistance > 0) {
+      const currentDistance = getDistance(event.touches[0], event.touches[1]);
+      const scale = currentDistance / this.#touchStartDistance;
+      
+      const newZoom = Math.max(
+        this.minZoom(),
+        Math.min(this.maxZoom(), this.#initialZoomFactorOnPinch * scale)
+      );
+      
+      this.setZoom(newZoom);
+      event.preventDefault(); // Prevent scrolling during pinch
+    }
   }
 
-  async #updateRunningStatus(): Promise<void> {
+  protected handleTouchEnd(): void {
+    if (this.#touchStartDistance > 0) {
+      // Ensure final zoom level is set on native side
+      this.setZoom(this.currentZoomFactor(), true);
+    }
+    this.#touchStartDistance = 0;
+  }
+
+  protected async testUltraWideZoom(): Promise<void> {
+    console.log('Testing ultra-wide zoom at 0.5x...');
     try {
-      const running = await this.#cameraViewService.isRunning();
-      this.isRunning.set(running);
+      // Get current zoom data first
+      const zoomData = await this.#cameraViewService.getZoom();
+      console.log('Current zoom range:', zoomData.min, '-', zoomData.max);
+      console.log('Current zoom:', zoomData.current);
+      console.log('Current lens:', zoomData.lens);
+      
+      // Force set zoom to 0.5
+      await this.#cameraViewService.setZoom(0.5);
+      console.log('Successfully set zoom to 0.5x');
+      
+      // Check what actually happened
+      const newZoomData = await this.#cameraViewService.getZoom();
+      console.log('After setting 0.5x - actual zoom:', newZoomData.current);
+      console.log('After setting 0.5x - lens:', newZoomData.lens);
+      
     } catch (error) {
-      console.warn('Failed to get running status', error);
+      console.error('Ultra-wide zoom test failed:', error);
     }
-  }
-
-  async #updateCurrentDeviceId(): Promise<void> {
-    try {
-      const deviceId = await this.#cameraViewService.getDeviceId();
-      this.currentDeviceId.set(deviceId);
-    } catch (error) {
-      console.warn('Failed to get current device ID', error);
-    }
-  }
-
-  #initializeEventListeners(): void {
-    this.#elementRef.nativeElement.addEventListener(
-      'touchstart',
-      this.#handleTouchStart.bind(this),
-    );
-    this.#elementRef.nativeElement.addEventListener(
-      'touchmove',
-      this.#handleTouchMove.bind(this),
-    );
-  }
-
-  #destroyEventListeners(): void {
-    this.#elementRef.nativeElement.removeEventListener(
-      'touchstart',
-      this.#handleTouchStart.bind(this),
-    );
-    this.#elementRef.nativeElement.removeEventListener(
-      'touchmove',
-      this.#handleTouchMove.bind(this),
-    );
-  }
-
-  #handleTouchStart(event: TouchEvent): void {
-    if (event.touches.length < 2) return;
-
-    this.#touchStartDistance = getDistance(event.touches[0], event.touches[1]);
-    this.#initialZoomFactorOnPinch = this.currentZoomFactor();
-  }
-
-  #handleTouchMove(event: TouchEvent): void {
-    if (event.touches.length < 2 || this.#touchStartDistance <= 0) return;
-
-    const currentDistance = getDistance(event.touches[0], event.touches[1]);
-
-    // Calculate new zoom factor
-    const scale = currentDistance / this.#touchStartDistance;
-    const newZoomFactor = Math.max(
-      this.minZoom(),
-      Math.min(this.maxZoom(), this.#initialZoomFactorOnPinch * scale),
-    );
-
-    this.#setZoom(newZoomFactor);
-    event.preventDefault(); // Prevent scrolling
   }
 }

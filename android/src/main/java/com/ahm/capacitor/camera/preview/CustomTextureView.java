@@ -9,7 +9,7 @@ class CustomTextureView
   extends TextureView
   implements TextureView.SurfaceTextureListener {
 
-  private final String TAG = "CustomTextureView";
+  private final String TAG = "CameraPreview CustomTextureView";
 
   CustomTextureView(Context context) {
     super(context);

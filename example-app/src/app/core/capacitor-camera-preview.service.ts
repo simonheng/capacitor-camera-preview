@@ -1,13 +1,14 @@
 import { Injectable, NgZone } from '@angular/core';
 import {
   CameraDevice,
+  CameraLens,
   CameraSessionConfiguration,
   CameraPreview,
   CameraPreviewPlugin,
   CameraPreviewPictureOptions,
   FlashMode,
+  LensInfo,
 } from '@capgo/camera-preview';
-import type { CameraLens } from '../../../../src/definitions';
 import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
@@ -97,10 +98,10 @@ export class CapacitorCameraViewService {
   }
 
   /**
-   * Get current zoom capabilities and level
-   * @returns Object with min, max and current zoom levels
+   * Get current zoom capabilities and level with lens information
+   * @returns Object with min, max, current zoom levels and lens info
    */
-  async getZoom(): Promise<{ min: number; max: number; current: number }> {
+  async getZoom(): Promise<{ min: number; max: number; current: number; lens: LensInfo }> {
     return this.#cameraView.getZoom();
   }
 
@@ -193,21 +194,7 @@ export class CapacitorCameraViewService {
     return this.#cameraView.stopRecordVideo();
   }
 
-  /**
-   * Get available camera lenses for the current camera position
-   * @returns Array of available camera lenses
-   */
-  async getAvailableLenses(): Promise<Array<CameraLens>> {
-    return (await this.#cameraView.getAvailableLenses()).lenses;
-  }
 
-  /**
-   * Get the currently active lens based on zoom level
-   * @returns The currently active camera lens
-   */
-  async getCurrentLens(): Promise<CameraLens> {
-    return (await this.#cameraView.getCurrentLens()).lens;
-  }
 
   /**
    * Remove all event listeners

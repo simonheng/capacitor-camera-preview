@@ -189,8 +189,6 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`removeAllListeners()`](#removealllisteners)
 * [`setDeviceId(...)`](#setdeviceid)
 * [`getDeviceId()`](#getdeviceid)
-* [`getAvailableLenses()`](#getavailablelenses)
-* [`getCurrentLens()`](#getcurrentlens)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 
@@ -410,7 +408,7 @@ Check if camera preview is running.
 getAvailableDevices() => Promise<{ devices: CameraDevice[]; }>
 ```
 
-Get available camera devices.
+Get available camera devices with their lenses and zoom capabilities.
 
 **Returns:** <code>Promise&lt;{ devices: CameraDevice[]; }&gt;</code>
 
@@ -422,12 +420,12 @@ Get available camera devices.
 ### getZoom()
 
 ```typescript
-getZoom() => Promise<{ min: number; max: number; current: number; }>
+getZoom() => Promise<{ min: number; max: number; current: number; lens: LensInfo; }>
 ```
 
-Get zoom capabilities and current level.
+Get zoom capabilities and current level with lens information.
 
-**Returns:** <code>Promise&lt;{ min: number; max: number; current: number; }&gt;</code>
+**Returns:** <code>Promise&lt;{ min: number; max: number; current: number; lens: <a href="#lensinfo">LensInfo</a>; }&gt;</code>
 
 **Since:** 7.4.0
 
@@ -511,36 +509,6 @@ Get the current deviceId.
 --------------------
 
 
-### getAvailableLenses()
-
-```typescript
-getAvailableLenses() => Promise<{ lenses: CameraLens[]; }>
-```
-
-Get available camera lenses for the current camera position.
-
-**Returns:** <code>Promise&lt;{ lenses: CameraLens[]; }&gt;</code>
-
-**Since:** 7.5.0
-
---------------------
-
-
-### getCurrentLens()
-
-```typescript
-getCurrentLens() => Promise<{ lens: CameraLens; }>
-```
-
-Get the currently active lens.
-
-**Returns:** <code>Promise&lt;{ lens: <a href="#cameralens">CameraLens</a>; }&gt;</code>
-
-**Since:** 7.5.0
-
---------------------
-
-
 ### Interfaces
 
 
@@ -596,27 +564,37 @@ Get the currently active lens.
 
 #### CameraDevice
 
-| Prop             | Type                                                          | Description                                                                  |
-| ---------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| **`deviceId`**   | <code>string</code>                                           | Device identifier                                                            |
-| **`label`**      | <code>string</code>                                           | Human readable device name                                                   |
-| **`position`**   | <code><a href="#cameraposition">CameraPosition</a></code>     | Camera position                                                              |
-| **`deviceType`** | <code><a href="#cameradevicetype">CameraDeviceType</a></code> | The type of the camera device (e.g., wide, ultra-wide, telephoto) - iOS only |
+| Prop           | Type                                                      | Description                                       |
+| -------------- | --------------------------------------------------------- | ------------------------------------------------- |
+| **`deviceId`** | <code>string</code>                                       | Device identifier                                 |
+| **`label`**    | <code>string</code>                                       | Human readable device name                        |
+| **`position`** | <code><a href="#cameraposition">CameraPosition</a></code> | Camera position                                   |
+| **`lenses`**   | <code>CameraLens[]</code>                                 | List of available lenses for this camera position |
+| **`minZoom`**  | <code>number</code>                                       | Overall minimum zoom level across all lenses      |
+| **`maxZoom`**  | <code>number</code>                                       | Overall maximum zoom level across all lenses      |
 
 
 #### CameraLens
 
-| Prop                | Type                                                          | Description                                      |
-| ------------------- | ------------------------------------------------------------- | ------------------------------------------------ |
-| **`id`**            | <code>string</code>                                           | Lens identifier (usually the physical camera ID) |
-| **`label`**         | <code>string</code>                                           | Human readable lens name                         |
-| **`position`**      | <code><a href="#cameraposition">CameraPosition</a></code>     | Camera position                                  |
-| **`deviceType`**    | <code><a href="#cameradevicetype">CameraDeviceType</a></code> | The type of the camera lens                      |
-| **`focalLength`**   | <code>number</code>                                           | Focal length in millimeters                      |
-| **`minZoom`**       | <code>number</code>                                           | Minimum zoom factor for this lens                |
-| **`maxZoom`**       | <code>number</code>                                           | Maximum zoom factor for this lens                |
-| **`baseZoomRatio`** | <code>number</code>                                           | Base zoom ratio (e.g., 0.5x, 1x, 2x, 3x)         |
-| **`isActive`**      | <code>boolean</code>                                          | Whether this lens is currently active            |
+| Prop                | Type                | Description                                                |
+| ------------------- | ------------------- | ---------------------------------------------------------- |
+| **`deviceId`**      | <code>string</code> | Device identifier for this lens                            |
+| **`label`**         | <code>string</code> | Human readable lens name                                   |
+| **`deviceType`**    | <code>string</code> | Camera device type (e.g., ultraWide, wideAngle, telephoto) |
+| **`focalLength`**   | <code>number</code> | Focal length in millimeters                                |
+| **`baseZoomRatio`** | <code>number</code> | Base zoom ratio for this lens (e.g., 0.5x, 1x, 2x)         |
+| **`minZoom`**       | <code>number</code> | Minimum zoom level                                         |
+| **`maxZoom`**       | <code>number</code> | Maximum zoom level                                         |
+
+
+#### LensInfo
+
+| Prop                | Type                | Description                                                |
+| ------------------- | ------------------- | ---------------------------------------------------------- |
+| **`focalLength`**   | <code>number</code> | Focal length in millimeters                                |
+| **`deviceType`**    | <code>string</code> | Camera device type (e.g., ultraWide, wideAngle, telephoto) |
+| **`baseZoomRatio`** | <code>number</code> | Base zoom ratio for this lens (e.g., 0.5x, 1x, 2x)         |
+| **`digitalZoom`**   | <code>number</code> | Digital zoom factor applied on top of base zoom            |
 
 
 ### Type Aliases
@@ -635,14 +613,6 @@ Get the currently active lens.
 #### CameraPreviewFlashMode
 
 <code>"off" | "on" | "auto" | "red-eye" | "torch"</code>
-
-
-#### CameraDeviceType
-
-Available camera device types for iOS.
-Maps to AVCaptureDevice DeviceTypes in iOS.
-
-<code>'wideAngle' | 'ultraWide' | 'telephoto' | 'dual' | 'dualWide' | 'triple' | 'trueDepth' | 'multi'</code>
 
 
 #### FlashMode

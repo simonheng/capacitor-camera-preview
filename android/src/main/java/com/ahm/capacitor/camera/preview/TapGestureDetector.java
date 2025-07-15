@@ -5,7 +5,7 @@ import android.view.MotionEvent;
 
 class TapGestureDetector extends GestureDetector.SimpleOnGestureListener {
 
-  private final String TAG = "TapGestureDetector";
+  private final String TAG = "CameraPreview TapGestureDetector";
 
   @Override
   public boolean onDown(MotionEvent e) {

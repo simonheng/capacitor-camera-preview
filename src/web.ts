@@ -2,15 +2,14 @@ import { WebPlugin } from "@capacitor/core";
 
 import type {
   CameraDevice,
-  CameraLens,
   CameraOpacityOptions,
-  CameraPosition,
   CameraPreviewFlashMode,
   CameraPreviewOptions,
   CameraPreviewPictureOptions,
   CameraPreviewPlugin,
   CameraSampleOptions,
   FlashMode,
+  LensInfo,
 } from "./definitions";
 
 export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
@@ -280,39 +279,77 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
 
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices
-      .filter(device => device.kind === 'videoinput')
-      .map((device, index) => {
-        const label = device.label || `Camera ${index + 1}`;
-        const labelLower = label.toLowerCase();
+    const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
-        // Determine position
-        const position = (labelLower.includes('back') || labelLower.includes('rear')) ? 'rear' as CameraPosition : 'front' as CameraPosition;
+    // Group devices by position (front/back)
+    const frontDevices: any[] = [];
+    const backDevices: any[] = [];
 
-        // Determine device type based on label
-        let deviceType: 'wideAngle' | 'ultraWide' | 'telephoto' | 'trueDepth' = 'wideAngle';
-        if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
-          deviceType = 'ultraWide';
-        } else if (labelLower.includes('telephoto') || labelLower.includes('tele') || labelLower.includes('2x') || labelLower.includes('3x')) {
-          deviceType = 'telephoto';
-        } else if (labelLower.includes('depth') || labelLower.includes('truedepth')) {
-          deviceType = 'trueDepth';
-        } else if (labelLower.includes('wide')) {
-          deviceType = 'wideAngle';
-        }
+    videoDevices.forEach((device, index) => {
+      const label = device.label || `Camera ${index + 1}`;
+      const labelLower = label.toLowerCase();
 
-        return {
-          deviceId: device.deviceId,
-          label,
-          position,
-          deviceType
-        };
+      // Determine device type based on label
+      let deviceType: 'wideAngle' | 'ultraWide' | 'telephoto' | 'trueDepth' = 'wideAngle';
+      let baseZoomRatio = 1.0;
+      
+      if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
+        deviceType = 'ultraWide';
+        baseZoomRatio = 0.5;
+      } else if (labelLower.includes('telephoto') || labelLower.includes('tele') || labelLower.includes('2x') || labelLower.includes('3x')) {
+        deviceType = 'telephoto';
+        baseZoomRatio = 2.0;
+      } else if (labelLower.includes('depth') || labelLower.includes('truedepth')) {
+        deviceType = 'trueDepth';
+        baseZoomRatio = 1.0;
+      }
+
+      const lensInfo = {
+        deviceId: device.deviceId,
+        label,
+        deviceType,
+        focalLength: 4.25,
+        baseZoomRatio,
+        minZoom: 1.0,
+        maxZoom: 1.0
+      };
+
+      // Determine position and add to appropriate array
+      if (labelLower.includes('back') || labelLower.includes('rear')) {
+        backDevices.push(lensInfo);
+      } else {
+        frontDevices.push(lensInfo);
+      }
+    });
+
+    const result: CameraDevice[] = [];
+
+    if (frontDevices.length > 0) {
+      result.push({
+        deviceId: frontDevices[0].deviceId,
+        label: "Front Camera",
+        position: "front",
+        lenses: frontDevices,
+        minZoom: Math.min(...frontDevices.map(d => d.minZoom)),
+        maxZoom: Math.max(...frontDevices.map(d => d.maxZoom))
       });
+    }
 
-    return { devices: videoDevices };
+    if (backDevices.length > 0) {
+      result.push({
+        deviceId: backDevices[0].deviceId,
+        label: "Back Camera", 
+        position: "rear",
+        lenses: backDevices,
+        minZoom: Math.min(...backDevices.map(d => d.minZoom)),
+        maxZoom: Math.max(...backDevices.map(d => d.maxZoom))
+      });
+    }
+
+    return { devices: result };
   }
 
-  async getZoom(): Promise<{ min: number; max: number; current: number }> {
+  async getZoom(): Promise<{ min: number; max: number; current: number; lens: LensInfo }> {
     const video = document.getElementById("video") as HTMLVideoElement;
     if (!video?.srcObject) {
       throw new Error("camera is not running");
@@ -332,10 +369,41 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       throw new Error("zoom not supported by this device");
     }
 
+    // Get current device info to determine lens type
+    let deviceType = 'wideAngle';
+    let baseZoomRatio = 1.0;
+    
+    if (this.currentDeviceId) {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const device = devices.find(d => d.deviceId === this.currentDeviceId);
+      if (device) {
+        const labelLower = device.label.toLowerCase();
+        if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
+          deviceType = 'ultraWide';
+          baseZoomRatio = 0.5;
+        } else if (labelLower.includes('telephoto') || labelLower.includes('tele') || labelLower.includes('2x') || labelLower.includes('3x')) {
+          deviceType = 'telephoto';
+          baseZoomRatio = 2.0;
+        } else if (labelLower.includes('depth') || labelLower.includes('truedepth')) {
+          deviceType = 'trueDepth';
+          baseZoomRatio = 1.0;
+        }
+      }
+    }
+
+    const currentZoom = settings.zoom || 1;
+    const lensInfo: LensInfo = {
+      focalLength: 4.25,
+      deviceType,
+      baseZoomRatio,
+      digitalZoom: currentZoom / baseZoomRatio
+    };
+
     return {
       min: capabilities.zoom.min || 1,
       max: capabilities.zoom.max || 1,
-      current: settings.zoom || 1,
+      current: currentZoom,
+      lens: lensInfo,
     };
   }
 
@@ -425,34 +493,5 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
   }
 
-  async getAvailableLenses(): Promise<{ lenses: CameraLens[] }> {
-    const devices = await this.getAvailableDevices();
 
-    // For web, convert devices to lenses
-    const lenses: CameraLens[] = devices.devices.map((device) => ({
-      id: device.deviceId,
-      label: device.label,
-      position: device.position,
-      deviceType: device.deviceType || 'wideAngle',
-      focalLength: 4.25, // Approximate web camera focal length
-      minZoom: 1.0,
-      maxZoom: 1.0, // Web cameras typically don't support hardware zoom
-      baseZoomRatio: device.deviceType === 'ultraWide' ? 0.5 :
-                     device.deviceType === 'telephoto' ? 2.0 : 1.0,
-      isActive: device.deviceId === this.currentDeviceId
-    }));
-
-    return { lenses };
-  }
-
-  async getCurrentLens(): Promise<{ lens: CameraLens }> {
-    const lenses = await this.getAvailableLenses();
-    const currentLens = lenses.lenses.find(lens => lens.isActive);
-
-    if (!currentLens) {
-      throw new Error("No current lens found");
-    }
-
-    return { lens: currentLens };
-  }
 }

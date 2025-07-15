@@ -7,7 +7,7 @@ import androidx.annotation.NonNull;
 
 class CustomSurfaceView extends SurfaceView implements SurfaceHolder.Callback {
 
-  private final String TAG = "CustomSurfaceView";
+  private final String TAG = "CameraPreview CustomSurfaceView";
 
   CustomSurfaceView(Context context) {
     super(context);

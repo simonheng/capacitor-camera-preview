@@ -61,7 +61,7 @@ public class CameraActivity extends Fragment {
   }
 
   private CameraPreviewListener eventListener;
-  private static final String TAG = "CameraActivity";
+  private static final String TAG = "CameraPreview CameraActivity";
   public FrameLayout mainLayout;
   public FrameLayout frameContainerLayout;
 
