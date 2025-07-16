@@ -5,6 +5,7 @@ import android.os.Build;
 import android.os.HandlerThread;
 import android.util.Base64;
 import android.util.Log;
+import android.util.Size;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 
@@ -15,6 +16,8 @@ import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
+import androidx.camera.core.resolutionselector.ResolutionSelector;
+import androidx.camera.core.resolutionselector.ResolutionStrategy;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
@@ -233,15 +236,24 @@ public class CameraXView implements LifecycleOwner {
             // Build camera selector
             currentCameraSelector = buildCameraSelector();
 
-                        // Build use cases - only bind Preview and one ImageCapture to avoid surface combination issues
+            // Define the resolution strategy
+            ResolutionStrategy resolutionStrategy = new ResolutionStrategy(
+                new Size(1920, 1080), 
+                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER
+            );
+            ResolutionSelector resolutionSelector = new ResolutionSelector.Builder()
+                .setResolutionStrategy(resolutionStrategy)
+                .build();
+
+            // Build use cases with the new ResolutionSelector
             Preview preview = new Preview.Builder()
-                    .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_16_9)
+                    .setResolutionSelector(resolutionSelector)
                     .build();
 
             imageCapture = new ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .setFlashMode(currentFlashMode)
-                .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_16_9)
+                .setResolutionSelector(resolutionSelector)
                 .build();
 
             // For sample capture, we'll reuse the same imageCapture instance
@@ -683,7 +695,7 @@ public class CameraXView implements LifecycleOwner {
                         // For multi-camera, we need to consider the effective zoom ranges
                         // If a camera has minZoom < 1.0, it likely supports ultra-wide (0.5x)
                         if (cameraMinZoom < 1.0f) {
-                            minZoom = Math.min(minZoom, 0.5f); // Ultra-wide capability
+                            minZoom = 0.5f; // Ultra-wide capability
                         }
                         
                         // Samsung devices often hide ultra-wide in logical cameras
@@ -776,111 +788,6 @@ public class CameraXView implements LifecycleOwner {
         }
     }
 
-    private boolean handleSamsungUltraWideZoom(float zoomRatio) {
-        try {
-            Log.d(TAG, "handleSamsungUltraWideZoom: Attempting ultra-wide zoom " + zoomRatio);
-            
-            // Samsung devices often have logical cameras that can zoom below 1.0x internally
-            // Even though they report minZoom = 1.0, they can actually handle 0.5x-0.9x by switching to ultra-wide lens
-            
-            // Try to force the zoom by setting it as a ratio between 0.5x request and 1.0x camera
-            // For example: 0.5x request = set camera to 1.0x but tell it to use ultra-wide mode
-            float normalizedZoom = Math.max(0.5f, Math.min(zoomRatio, 0.99f));
-            
-            // Use a camera control extension to try ultra-wide mode
-            if (camera != null) {
-                try {
-                    // Method 1: Try to set zoom below 1.0 anyway - some devices accept this
-                    Log.d(TAG, "handleSamsungUltraWideZoom: Method 1 - Direct ultra-wide zoom attempt");
-                    camera.getCameraControl().setZoomRatio(normalizedZoom);
-                    
-                    // Wait a bit and check if zoom actually changed
-                    mainExecutor.execute(() -> {
-                        try {
-                            Thread.sleep(100);
-                            float actualZoom = Objects.requireNonNull(camera.getCameraInfo().getZoomState().getValue()).getZoomRatio();
-                            Log.d(TAG, "handleSamsungUltraWideZoom: Actual zoom after direct attempt: " + actualZoom);
-                            
-                            if (Math.abs(actualZoom - normalizedZoom) < 0.1f) {
-                                Log.d(TAG, "handleSamsungUltraWideZoom: Direct method succeeded!");
-                            } else {
-                                Log.d(TAG, "handleSamsungUltraWideZoom: Direct method failed, trying alternative");
-                                // Method 2: Try setting zoom to 1.0 but with ultra-wide "intention"
-                                tryAlternativeUltraWideMethod(zoomRatio);
-                            }
-                        } catch (Exception e) {
-                            Log.e(TAG, "handleSamsungUltraWideZoom: Error in async check", e);
-                        }
-                    });
-                    
-                    return true;
-                    
-                } catch (Exception e) {
-                    Log.w(TAG, "handleSamsungUltraWideZoom: Direct method failed", e);
-                }
-            }
-            
-            // Method 2: Try alternative approach
-            return tryAlternativeUltraWideMethod(zoomRatio);
-            
-        } catch (Exception e) {
-            Log.e(TAG, "handleSamsungUltraWideZoom: Error in Samsung ultra-wide handling", e);
-            return false;
-        }
-    }
-    
-    private boolean tryAlternativeUltraWideMethod(float zoomRatio) {
-        try {
-            Log.d(TAG, "tryAlternativeUltraWideMethod: Attempting alternative ultra-wide method for zoom " + zoomRatio);
-            
-            // For Samsung devices, sometimes setting zoom to exactly 1.0f triggers lens switching
-            // This is a workaround for logical cameras that don't expose individual lenses
-            
-            if (camera != null) {
-                // Set zoom to 1.0 but with additional camera control parameters that might trigger ultra-wide
-                camera.getCameraControl().setZoomRatio(1.0f);
-                
-                Log.d(TAG, "tryAlternativeUltraWideMethod: Set camera zoom to 1.0f as ultra-wide fallback");
-                return true;
-            }
-            
-            return false;
-            
-        } catch (Exception e) {
-            Log.e(TAG, "tryAlternativeUltraWideMethod: Error in alternative method", e);
-            return false;
-        }
-    }
-
-    private void handleLensSwitchingForZoom(float requestedZoom) {
-        try {
-            // Get available cameras for current position (front/back)
-            List<androidx.camera.core.CameraInfo> availableCameras = getAvailableCamerasForCurrentPosition();
-            
-            if (availableCameras.size() <= 1) {
-                // Single camera - just apply digital zoom
-                setZoomInternal(requestedZoom);
-                return;
-            }
-            
-            // Multi-camera setup - determine best camera for this zoom level
-            CameraLensChoice bestChoice = selectBestCameraForZoom(availableCameras, requestedZoom);
-            
-            if (bestChoice != null && !isSameCameraInfo(camera.getCameraInfo(), bestChoice.cameraInfo)) {
-                // Need to switch cameras
-                Log.d(TAG, "handleLensSwitchingForZoom: Switching cameras for zoom " + requestedZoom);
-                switchToCameraInfo(bestChoice.cameraInfo, bestChoice.adjustedZoom);
-            } else {
-                // Same camera, just adjust zoom
-                setZoomInternal(requestedZoom);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "handleLensSwitchingForZoom: Error handling lens switching", e);
-            // Fallback to simple zoom
-            setZoomInternal(requestedZoom);
-        }
-    }
-
     private List<androidx.camera.core.CameraInfo> getAvailableCamerasForCurrentPosition() {
         if (cameraProvider == null) {
             Log.w(TAG, "getAvailableCamerasForCurrentPosition: cameraProvider is null");
@@ -892,9 +799,8 @@ public class CameraXView implements LifecycleOwner {
         
         Log.d(TAG, "getAvailableCamerasForCurrentPosition: Total cameras available: " + allCameras.size());
         
-        // Determine current facing direction
-        Integer lensFacing = currentCameraSelector.getLensFacing();
-        boolean isCurrentBack = lensFacing != null && lensFacing == CameraSelector.LENS_FACING_BACK;
+        // Determine current facing direction from the session config to avoid restricted API call
+        boolean isCurrentBack = "back".equals(sessionConfig.getPosition());
         Log.d(TAG, "getAvailableCamerasForCurrentPosition: Looking for " + (isCurrentBack ? "back" : "front") + " cameras");
         
         for (int i = 0; i < allCameras.size(); i++) {
@@ -920,189 +826,6 @@ public class CameraXView implements LifecycleOwner {
         
         Log.d(TAG, "getAvailableCamerasForCurrentPosition: Found " + sameFacingCameras.size() + " cameras for " + (isCurrentBack ? "back" : "front"));
         return sameFacingCameras;
-    }
-
-    private static class CameraLensChoice {
-        androidx.camera.core.CameraInfo cameraInfo;
-        float adjustedZoom;
-        
-        CameraLensChoice(androidx.camera.core.CameraInfo cameraInfo, float adjustedZoom) {
-            this.cameraInfo = cameraInfo;
-            this.adjustedZoom = adjustedZoom;
-        }
-    }
-
-    private CameraLensChoice selectBestCameraForZoom(List<androidx.camera.core.CameraInfo> cameras, float requestedZoom) {
-        Log.d(TAG, "selectBestCameraForZoom: Searching for best camera for zoom " + requestedZoom + " among " + cameras.size() + " cameras");
-        
-        // Sort cameras by their zoom capabilities
-        List<CameraZoomInfo> cameraZoomInfos = new ArrayList<>();
-        
-        for (androidx.camera.core.CameraInfo cameraInfo : cameras) {
-            try {
-                float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
-                float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
-                
-                // Determine lens type based on zoom capabilities
-                String lensType = "wide";
-                float baseZoomRatio = 1.0f;
-                
-                if (minZoom < 1.0f) {
-                    lensType = "ultraWide";
-                    baseZoomRatio = 0.5f;
-                } else if (maxZoom > 5.0f && minZoom >= 2.0f) {
-                    lensType = "telephoto";
-                    baseZoomRatio = 2.0f;
-                }
-                
-                cameraZoomInfos.add(new CameraZoomInfo(cameraInfo, minZoom, maxZoom, baseZoomRatio, lensType));
-                Log.d(TAG, "selectBestCameraForZoom: Camera " + getCameraId(cameraInfo) + " - type: " + lensType + ", baseZoom: " + baseZoomRatio + ", range: " + minZoom + "-" + maxZoom);
-            } catch (Exception e) {
-                Log.w(TAG, "selectBestCameraForZoom: Error getting zoom info for camera", e);
-            }
-        }
-        
-        // Sort by base zoom ratio (ultra-wide first, then wide, then telephoto)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            cameraZoomInfos.sort((a, b) -> Float.compare(a.baseZoomRatio, b.baseZoomRatio));
-        }
-        Log.d(TAG, "selectBestCameraForZoom: Sorted " + cameraZoomInfos.size() + " cameras by base zoom ratio");
-        
-        // Find best camera for requested zoom
-        for (CameraZoomInfo zoomInfo : cameraZoomInfos) {
-            Log.d(TAG, "selectBestCameraForZoom: Checking if " + zoomInfo.lensType + " camera (baseZoom: " + zoomInfo.baseZoomRatio + ") can handle zoom " + requestedZoom);
-            
-            // For ultra-wide: accept zoom requests from 0.5x to 1.0x
-            // For wide: accept zoom requests from 1.0x to telephoto range
-            // For telephoto: accept zoom requests from 2.0x and up
-            boolean canHandle = false;
-            if (requestedZoom <= 1.0f && zoomInfo.lensType.equals("ultraWide")) {
-                canHandle = true;
-                Log.d(TAG, "selectBestCameraForZoom: Ultra-wide camera can handle zoom " + requestedZoom);
-            } else if (requestedZoom >= 1.0f && requestedZoom < 2.0f && zoomInfo.lensType.equals("wide")) {
-                canHandle = true;
-                Log.d(TAG, "selectBestCameraForZoom: Wide camera can handle zoom " + requestedZoom);
-            } else if (requestedZoom >= 2.0f && zoomInfo.lensType.equals("telephoto")) {
-                canHandle = true;
-                Log.d(TAG, "selectBestCameraForZoom: Telephoto camera can handle zoom " + requestedZoom);
-            }
-            
-            if (canHandle) {
-                float adjustedZoom = requestedZoom / zoomInfo.baseZoomRatio;
-                adjustedZoom = Math.max(zoomInfo.minZoom, Math.min(adjustedZoom, zoomInfo.maxZoom));
-                
-                Log.d(TAG, "selectBestCameraForZoom: Selected " + zoomInfo.lensType + " camera for zoom " + requestedZoom + " (adjusted: " + adjustedZoom + ")");
-                return new CameraLensChoice(zoomInfo.cameraInfo, adjustedZoom);
-            }
-        }
-        
-        // Fallback: use the camera that can get closest to the requested zoom
-        Log.d(TAG, "selectBestCameraForZoom: No perfect match found, using fallback logic");
-        CameraZoomInfo bestCamera = null;
-        float bestScore = Float.MAX_VALUE;
-        
-        for (CameraZoomInfo zoomInfo : cameraZoomInfos) {
-            float effectiveZoom = Math.min(requestedZoom, zoomInfo.maxZoom);
-            float score = Math.abs(requestedZoom - (zoomInfo.baseZoomRatio * effectiveZoom));
-            
-            Log.d(TAG, "selectBestCameraForZoom: " + zoomInfo.lensType + " camera score: " + score + " for requested zoom " + requestedZoom);
-            
-            if (score < bestScore) {
-                bestScore = score;
-                bestCamera = zoomInfo;
-            }
-        }
-        
-        if (bestCamera != null) {
-            float adjustedZoom = Math.max(bestCamera.minZoom, Math.min(requestedZoom / bestCamera.baseZoomRatio, bestCamera.maxZoom));
-            Log.d(TAG, "selectBestCameraForZoom: Fallback selected " + bestCamera.lensType + " camera for zoom " + requestedZoom + " (adjusted: " + adjustedZoom + ")");
-            return new CameraLensChoice(bestCamera.cameraInfo, adjustedZoom);
-        }
-        
-        Log.w(TAG, "selectBestCameraForZoom: No suitable camera found for zoom " + requestedZoom);
-        return null;
-    }
-
-    private static class CameraZoomInfo {
-        androidx.camera.core.CameraInfo cameraInfo;
-        float minZoom;
-        float maxZoom;
-        float baseZoomRatio;
-        String lensType;
-        
-        CameraZoomInfo(androidx.camera.core.CameraInfo cameraInfo, float minZoom, float maxZoom, float baseZoomRatio, String lensType) {
-            this.cameraInfo = cameraInfo;
-            this.minZoom = minZoom;
-            this.maxZoom = maxZoom;
-            this.baseZoomRatio = baseZoomRatio;
-            this.lensType = lensType;
-        }
-    }
-
-    private boolean isSameCameraInfo(androidx.camera.core.CameraInfo current, androidx.camera.core.CameraInfo target) {
-        return getCameraId(current).equals(getCameraId(target));
-    }
-
-    private void switchToCameraInfo(androidx.camera.core.CameraInfo targetCameraInfo, float targetZoom) {
-        try {
-            // Create a new camera selector for the target camera
-            boolean isTargetBack = isBackCamera(targetCameraInfo);
-            CameraSelector newSelector = new CameraSelector.Builder()
-                .requireLensFacing(isTargetBack ? CameraSelector.LENS_FACING_BACK : CameraSelector.LENS_FACING_FRONT)
-                .build();
-            
-            // Filter to get the specific camera we want
-            List<androidx.camera.core.CameraInfo> filtered = newSelector.filter(Collections.singletonList(targetCameraInfo));
-            if (filtered.isEmpty()) {
-                Log.e(TAG, "switchToCameraInfo: Target camera not found in filtered list");
-                setZoomInternal(targetZoom);
-                return;
-            }
-            
-            // Update current selector and device ID
-            currentCameraSelector = newSelector;
-            currentDeviceId = getCameraId(targetCameraInfo);
-            
-            // Execute camera switch on main thread
-            mainExecutor.execute(() -> {
-                try {
-                    // Rebind camera with new selector
-                    if (cameraProvider != null) {
-                        cameraProvider.unbindAll();
-                        
-                        // Rebuild use cases
-                        Preview preview = new Preview.Builder()
-                            .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_16_9)
-                            .build();
-
-                        imageCapture = new ImageCapture.Builder()
-                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                            .setFlashMode(currentFlashMode)
-                            .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_16_9)
-                            .build();
-
-                        sampleImageCapture = imageCapture;
-                        preview.setSurfaceProvider(previewView.getSurfaceProvider());
-                        
-                        // Bind to the new camera
-                        camera = cameraProvider.bindToLifecycle(this, currentCameraSelector, preview, imageCapture);
-                        
-                        // Apply the target zoom
-                        setZoomInternal(targetZoom);
-                        
-                        Log.d(TAG, "switchToCameraInfo: Successfully switched to camera " + currentDeviceId + " with zoom " + targetZoom);
-                    }
-                } catch (Exception e) {
-                    Log.e(TAG, "switchToCameraInfo: Error switching camera", e);
-                    // Try to restore zoom on current camera
-                    setZoomInternal(targetZoom);
-                }
-            });
-            
-        } catch (Exception e) {
-            Log.e(TAG, "switchToCameraInfo: Error in camera switch", e);
-            setZoomInternal(targetZoom);
-        }
     }
 
     private void setZoomInternal(float zoomRatio) {
@@ -1174,17 +897,6 @@ public class CameraXView implements LifecycleOwner {
         }
     }
 
-    public String getFlashMode() {
-        switch (currentFlashMode) {
-            case ImageCapture.FLASH_MODE_ON:
-                return "on";
-            case ImageCapture.FLASH_MODE_AUTO:
-                return "auto";
-            default:
-                return "off";
-        }
-    }
-
     public void setFlashMode(String mode) {
         int flashMode;
         switch (mode) {
@@ -1207,10 +919,6 @@ public class CameraXView implements LifecycleOwner {
         if (sampleImageCapture != null) {
             sampleImageCapture.setFlashMode(flashMode);
         }
-    }
-
-    public String getCurrentDeviceId() {
-        return currentDeviceId != null ? currentDeviceId : "unknown";
     }
 
     public void switchToDevice(String deviceId) {
