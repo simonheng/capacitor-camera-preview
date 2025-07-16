@@ -2,6 +2,16 @@ export type CameraPosition = "rear" | "front";
 
 export type FlashMode = CameraPreviewFlashMode;
 
+export enum DeviceType {
+  ULTRA_WIDE = "ultraWide",
+  WIDE_ANGLE = "wideAngle",
+  TELEPHOTO = "telephoto",
+  TRUE_DEPTH = "trueDepth",
+  DUAL = "dual",
+  DUAL_WIDE = "dualWide",
+  TRIPLE = "triple",
+}
+
 /**
  * Represents a single camera lens on a device. A {@link CameraDevice} can have multiple lenses.
  */
@@ -9,7 +19,7 @@ export interface CameraLens {
   /** A human-readable name for the lens, e.g., "Ultra-Wide". */
   label: string;
   /** The type of the camera lens. */
-  deviceType: 'ultraWide' | 'wideAngle' | 'telephoto';
+  deviceType: DeviceType;
   /** The focal length of the lens in millimeters. */
   focalLength: number;
   /** The base zoom factor for this lens (e.g., 0.5 for ultra-wide, 1.0 for wide). */
@@ -45,7 +55,7 @@ export interface LensInfo {
   /** The focal length of the active lens in millimeters. */
   focalLength: number;
   /** The device type of the active lens. */
-  deviceType: 'ultraWide' | 'wideAngle' | 'telephoto';
+  deviceType: DeviceType;
   /** The base zoom ratio of the active lens (e.g., 0.5x, 1.0x). */
   baseZoomRatio: number;
   /** The current digital zoom factor applied on top of the base zoom. */

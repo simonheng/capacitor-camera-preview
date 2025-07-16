@@ -11,6 +11,7 @@ import type {
   FlashMode,
   LensInfo,
 } from "./definitions";
+import { DeviceType } from "./definitions";
 
 export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   /**
@@ -290,17 +291,17 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       const labelLower = label.toLowerCase();
 
       // Determine device type based on label
-      let deviceType: 'wideAngle' | 'ultraWide' | 'telephoto' | 'trueDepth' = 'wideAngle';
+      let deviceType: DeviceType = DeviceType.WIDE_ANGLE;
       let baseZoomRatio = 1.0;
       
       if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
-        deviceType = 'ultraWide';
+        deviceType = DeviceType.ULTRA_WIDE;
         baseZoomRatio = 0.5;
       } else if (labelLower.includes('telephoto') || labelLower.includes('tele') || labelLower.includes('2x') || labelLower.includes('3x')) {
-        deviceType = 'telephoto';
+        deviceType = DeviceType.TELEPHOTO;
         baseZoomRatio = 2.0;
       } else if (labelLower.includes('depth') || labelLower.includes('truedepth')) {
-        deviceType = 'trueDepth';
+        deviceType = DeviceType.TRUE_DEPTH;
         baseZoomRatio = 1.0;
       }
 
@@ -370,7 +371,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
 
     // Get current device info to determine lens type
-    let deviceType = 'wideAngle';
+    let deviceType: DeviceType = DeviceType.WIDE_ANGLE;
     let baseZoomRatio = 1.0;
     
     if (this.currentDeviceId) {
@@ -379,13 +380,13 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       if (device) {
         const labelLower = device.label.toLowerCase();
         if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
-          deviceType = 'ultraWide';
+          deviceType = DeviceType.ULTRA_WIDE;
           baseZoomRatio = 0.5;
         } else if (labelLower.includes('telephoto') || labelLower.includes('tele') || labelLower.includes('2x') || labelLower.includes('3x')) {
-          deviceType = 'telephoto';
+          deviceType = DeviceType.TELEPHOTO;
           baseZoomRatio = 2.0;
         } else if (labelLower.includes('depth') || labelLower.includes('truedepth')) {
-          deviceType = 'trueDepth';
+          deviceType = DeviceType.TRUE_DEPTH;
           baseZoomRatio = 1.0;
         }
       }

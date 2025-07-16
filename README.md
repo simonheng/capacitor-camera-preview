@@ -191,6 +191,7 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`getDeviceId()`](#getdeviceid)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
+* [Enums](#enums)
 
 </docgen-index>
 
@@ -613,26 +614,26 @@ Represents a physical camera on the device (e.g., the front-facing camera).
 
 Represents a single camera lens on a device. A {@link <a href="#cameradevice">CameraDevice</a>} can have multiple lenses.
 
-| Prop                | Type                                                   | Description                                                                  |
-| ------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| **`label`**         | <code>string</code>                                    | A human-readable name for the lens, e.g., "Ultra-Wide".                      |
-| **`deviceType`**    | <code>'ultraWide' \| 'wideAngle' \| 'telephoto'</code> | The type of the camera lens.                                                 |
-| **`focalLength`**   | <code>number</code>                                    | The focal length of the lens in millimeters.                                 |
-| **`baseZoomRatio`** | <code>number</code>                                    | The base zoom factor for this lens (e.g., 0.5 for ultra-wide, 1.0 for wide). |
-| **`minZoom`**       | <code>number</code>                                    | The minimum zoom factor supported by this specific lens.                     |
-| **`maxZoom`**       | <code>number</code>                                    | The maximum zoom factor supported by this specific lens.                     |
+| Prop                | Type                                              | Description                                                                  |
+| ------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **`label`**         | <code>string</code>                               | A human-readable name for the lens, e.g., "Ultra-Wide".                      |
+| **`deviceType`**    | <code><a href="#devicetype">DeviceType</a></code> | The type of the camera lens.                                                 |
+| **`focalLength`**   | <code>number</code>                               | The focal length of the lens in millimeters.                                 |
+| **`baseZoomRatio`** | <code>number</code>                               | The base zoom factor for this lens (e.g., 0.5 for ultra-wide, 1.0 for wide). |
+| **`minZoom`**       | <code>number</code>                               | The minimum zoom factor supported by this specific lens.                     |
+| **`maxZoom`**       | <code>number</code>                               | The maximum zoom factor supported by this specific lens.                     |
 
 
 #### LensInfo
 
 Represents the detailed information of the currently active lens.
 
-| Prop                | Type                                                   | Description                                                      |
-| ------------------- | ------------------------------------------------------ | ---------------------------------------------------------------- |
-| **`focalLength`**   | <code>number</code>                                    | The focal length of the active lens in millimeters.              |
-| **`deviceType`**    | <code>'ultraWide' \| 'wideAngle' \| 'telephoto'</code> | The device type of the active lens.                              |
-| **`baseZoomRatio`** | <code>number</code>                                    | The base zoom ratio of the active lens (e.g., 0.5x, 1.0x).       |
-| **`digitalZoom`**   | <code>number</code>                                    | The current digital zoom factor applied on top of the base zoom. |
+| Prop                | Type                                              | Description                                                      |
+| ------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
+| **`focalLength`**   | <code>number</code>                               | The focal length of the active lens in millimeters.              |
+| **`deviceType`**    | <code><a href="#devicetype">DeviceType</a></code> | The device type of the active lens.                              |
+| **`baseZoomRatio`** | <code>number</code>                               | The base zoom ratio of the active lens (e.g., 0.5x, 1.0x).       |
+| **`digitalZoom`**   | <code>number</code>                               | The current digital zoom factor applied on top of the base zoom. |
 
 
 ### Type Aliases
@@ -659,5 +660,21 @@ The available flash modes for the camera.
 #### FlashMode
 
 <code><a href="#camerapreviewflashmode">CameraPreviewFlashMode</a></code>
+
+
+### Enums
+
+
+#### DeviceType
+
+| Members          | Value                    |
+| ---------------- | ------------------------ |
+| **`ULTRA_WIDE`** | <code>"ultraWide"</code> |
+| **`WIDE_ANGLE`** | <code>"wideAngle"</code> |
+| **`TELEPHOTO`**  | <code>"telephoto"</code> |
+| **`TRUE_DEPTH`** | <code>"trueDepth"</code> |
+| **`DUAL`**       | <code>"dual"</code>      |
+| **`DUAL_WIDE`**  | <code>"dualWide"</code>  |
+| **`TRIPLE`**     | <code>"triple"</code>    |
 
 </docgen-api>
