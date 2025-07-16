@@ -1,6 +1,8 @@
 package com.ahm.capacitor.camera.preview;
 
 import android.content.Context;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraManager;
 import android.os.Build;
 import android.os.HandlerThread;
 import android.util.Base64;
@@ -291,68 +293,79 @@ public class CameraXView implements LifecycleOwner {
         }
     }
 
+    @OptIn(markerClass = ExperimentalCamera2Interop.class)
     private CameraSelector buildCameraSelector() {
         CameraSelector.Builder builder = new CameraSelector.Builder();
+        final String deviceId = sessionConfig.getDeviceId();
 
-        if (sessionConfig.getDeviceId() != null && !sessionConfig.getDeviceId().isEmpty()) {
-            // Try to find camera by device ID
-            try {
-                List<androidx.camera.core.CameraInfo> cameras = cameraProvider.getAvailableCameraInfos();
-                for (androidx.camera.core.CameraInfo cameraInfo : cameras) {
-                    if (sessionConfig.getDeviceId().equals(getCameraId(cameraInfo))) {
-                        currentDeviceId = sessionConfig.getDeviceId();
-                        // Build selector based on camera characteristics
-                        if (isBackCamera(cameraInfo)) {
-                            builder.requireLensFacing(CameraSelector.LENS_FACING_BACK);
-                        } else {
-                            builder.requireLensFacing(CameraSelector.LENS_FACING_FRONT);
+        if (deviceId != null && !deviceId.isEmpty()) {
+            Log.d(TAG, "buildCameraSelector: Attempting to select camera with specific deviceId: " + deviceId);
+            builder.addCameraFilter(cameraInfos -> {
+                List<androidx.camera.core.CameraInfo> filtered = new ArrayList<>();
+                for (androidx.camera.core.CameraInfo cameraInfo : cameraInfos) {
+                    try {
+                        String id = Camera2CameraInfo.from(cameraInfo).getCameraId();
+                        if (deviceId.equals(id)) {
+                            filtered.add(cameraInfo);
+                            return filtered; // Found the exact device, return immediately
                         }
-                        break;
+                    } catch (Exception e) {
+                        // Ignore cameras that can't be queried
                     }
                 }
-            } catch (Exception e) {
-                Log.w(TAG, "buildCameraSelector: Error finding camera by ID, using position fallback", e);
-            }
-        }
-
-        // Fallback to position-based selection
-        if (currentDeviceId == null) {
+                // If we get here, the specific deviceId was not found, return empty to signal an issue
+                Log.w(TAG, "buildCameraSelector: Could not find camera with deviceId: " + deviceId);
+                return Collections.emptyList();
+            });
+        } else {
+             // Fallback to position-based selection
             String position = sessionConfig.getPosition();
-            int requiredFacing;
-            if ("front".equals(position)) {
-                requiredFacing = CameraSelector.LENS_FACING_FRONT;
-            } else {
-                requiredFacing = CameraSelector.LENS_FACING_BACK;
-            }
+            int requiredFacing = "front".equals(position) ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
             
-            // CRITICAL: Don't use requireLensFacing() - use addCameraFilter() instead
-            // This allows CameraX to switch between multiple cameras of the same direction
             Log.d(TAG, "buildCameraSelector: Enabling automatic lens switching for " + position);
             
             builder.addCameraFilter(cameraInfos -> {
-                // Return ALL cameras of the required facing direction
-                // This is key for automatic lens switching
                 List<androidx.camera.core.CameraInfo> filteredCameras = new ArrayList<>();
-                
+                android.hardware.camera2.CameraManager cameraManager = (android.hardware.camera2.CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+
                 for (androidx.camera.core.CameraInfo cameraInfo : cameraInfos) {
-                    if (cameraInfo.getLensFacing() == requiredFacing) {
-                        filteredCameras.add(cameraInfo);
+                    try {
+                        // Use CameraManager to get characteristics
+                        String cameraId = Camera2CameraInfo.from(cameraInfo).getCameraId();
+                        final boolean isLogical = isIsLogical(cameraManager, cameraId);
+
+                        if (cameraInfo.getLensFacing() == requiredFacing && isLogical) {
+                            // Default to the logical camera for this position
+                            filteredCameras.add(cameraInfo);
+                            return filteredCameras;
+                        }
+                    } catch(Exception e) {
+                        // ignore camera that cannot be queried
                     }
                 }
                 
-                Log.d(TAG, "buildCameraSelector: Found " + filteredCameras.size() + " cameras for automatic lens switching");
-                return filteredCameras;
+                Log.d(TAG, "buildCameraSelector: Could not find a default logical camera, providing all " + cameraInfos.size() + " cameras for selection.");
+                return cameraInfos; // Fallback to all available cameras if no logical one is found
             });
-        } else {
-            // For specific device ID, still use requireLensFacing
-            if ("front".equals(sessionConfig.getPosition())) {
-                builder.requireLensFacing(CameraSelector.LENS_FACING_FRONT);
-            } else {
-                builder.requireLensFacing(CameraSelector.LENS_FACING_BACK);
-            }
         }
 
         return builder.build();
+    }
+
+    private static boolean isIsLogical(CameraManager cameraManager, String cameraId) throws CameraAccessException {
+        CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+        int[] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+
+        boolean isLogical = false;
+        if (capabilities != null) {
+           for (int capability : capabilities) {
+               if (capability == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) {
+                   isLogical = true;
+                   break;
+               }
+           }
+        }
+        return isLogical;
     }
 
     private static String getCameraId(androidx.camera.core.CameraInfo cameraInfo) {
@@ -739,7 +752,7 @@ public class CameraXView implements LifecycleOwner {
         return sameFacingCameras;
     }
 
-    public static List<Size> getSupportedPictureSizes(Context context, String facing) {
+    public static List<Size> getSupportedPictureSizes(String facing) {
         List<Size> sizes = new ArrayList<>();
         try {
             CameraSelector.Builder builder = new CameraSelector.Builder();

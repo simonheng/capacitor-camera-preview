@@ -222,7 +222,7 @@ public class CameraPreview
   @PluginMethod
   public void getSupportedPictureSizes(final PluginCall call) {
     JSArray supportedPictureSizesResult = new JSArray();
-    List<Size> rearSizes = CameraXView.getSupportedPictureSizes(getContext(), "rear");
+    List<Size> rearSizes = CameraXView.getSupportedPictureSizes("rear");
     JSObject rear = new JSObject();
     rear.put("facing", "rear");
     JSArray rearSizesJs = new JSArray();
@@ -235,7 +235,7 @@ public class CameraPreview
     rear.put("supportedPictureSizes", rearSizesJs);
     supportedPictureSizesResult.put(rear);
     
-    List<Size> frontSizes = CameraXView.getSupportedPictureSizes(getContext(), "front");
+    List<Size> frontSizes = CameraXView.getSupportedPictureSizes("front");
     JSObject front = new JSObject();
     front.put("facing", "front");
     JSArray frontSizesJs = new JSArray();
