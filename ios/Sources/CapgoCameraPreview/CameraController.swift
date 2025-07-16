@@ -495,8 +495,15 @@ extension CameraController {
             throw CameraControllerError.noCamerasAvailable
         }
 
-        return device.activeFormat.videoFieldOfView
+        // Get the active format and field of view
+        let activeFormat = device.activeFormat
+        let fov = activeFormat.videoFieldOfView
 
+        // Adjust for current zoom level
+        let zoomFactor = device.videoZoomFactor
+        let adjustedFov = fov / Float(zoomFactor)
+
+        return adjustedFov
     }
     func setFlashMode(flashMode: AVCaptureDevice.FlashMode) throws {
         var currentCamera: AVCaptureDevice?
@@ -584,8 +591,8 @@ extension CameraController {
         }
 
         return (
-            min: 1.0,
-            max: Float(device.activeFormat.videoMaxZoomFactor),
+            min: Float(device.minAvailableVideoZoomFactor),
+            max: Float(device.maxAvailableVideoZoomFactor),
             current: Float(device.videoZoomFactor)
         )
     }
@@ -604,7 +611,7 @@ extension CameraController {
             throw CameraControllerError.noCamerasAvailable
         }
 
-        let zoomLevel = max(1.0, min(level, device.activeFormat.videoMaxZoomFactor))
+        let zoomLevel = max(device.minAvailableVideoZoomFactor, min(level, device.maxAvailableVideoZoomFactor))
 
         do {
             try device.lockForConfiguration()

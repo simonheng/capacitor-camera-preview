@@ -479,9 +479,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   async #initializeZoomLimits(): Promise<void> {
     try {
       const zoomData = await this.#cameraViewService.getZoom();
-      this.minZoom.set(zoomData.min); // This overwrites the 0.5 with whatever Android returns
+      this.minZoom.set(zoomData.min);
       this.maxZoom.set(zoomData.max);
-      this.currentZoomFactor.set(zoomData.current);
+      // Do not set currentZoomFactor from here, as it's managed locally
       this.currentLens.set(zoomData.lens);
     } catch (error) {
       console.warn('Failed to get zoom limits', error);

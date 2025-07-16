@@ -18,6 +18,7 @@ public class CameraSessionConfiguration {
     private final boolean disableExifHeaderStripping;
     private final boolean disableAudio;
     private final float zoomFactor;
+    private float targetZoom = 1.0f;
 
     public CameraSessionConfiguration(String deviceId, String position, int x, int y, int width, int height, 
                                     int paddingBottom, boolean toBack, boolean storeToFile, boolean enableOpacity, 
@@ -37,6 +38,14 @@ public class CameraSessionConfiguration {
         this.disableExifHeaderStripping = disableExifHeaderStripping;
         this.disableAudio = disableAudio;
         this.zoomFactor = zoomFactor;
+    }
+
+    public void setTargetZoom(float zoom) {
+        this.targetZoom = zoom;
+    }
+
+    public float getTargetZoom() {
+        return this.targetZoom;
     }
 
     public String getDeviceId() { return deviceId; }

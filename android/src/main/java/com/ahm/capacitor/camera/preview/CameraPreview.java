@@ -25,6 +25,8 @@ import com.ahm.capacitor.camera.preview.model.ZoomFactors;
 import java.util.List;
 import java.util.Objects;
 import android.util.Size;
+import android.util.Log;
+import com.ahm.capacitor.camera.preview.model.LensInfo;
 
 @CapacitorPlugin(
   name = "CameraPreview",
@@ -315,7 +317,9 @@ public class CameraPreview
 
   private void startCamera(final PluginCall call) {
     String positionParam = call.getString("position");
-    final String deviceId = call.getString("deviceId");
+    String originalDeviceId = call.getString("deviceId");
+    String deviceId = originalDeviceId; // Use a mutable variable
+
     final String position = (positionParam == null || positionParam.isEmpty() || "rear".equals(positionParam) || "back".equals(positionParam)) ? "back" : "front";
     final int x = call.getInt("x", 0);
     final int y = call.getInt("y", 0);
@@ -329,11 +333,33 @@ public class CameraPreview
     final boolean disableExifHeaderStripping = call.getBoolean("disableExifHeaderStripping", false);
     final boolean lockOrientation = call.getBoolean("lockAndroidOrientation", false);
     final boolean disableAudio = call.getBoolean("disableAudio", true);
+    
+    float targetZoom = 1.0f;
+    // Check if the selected device is a physical ultra-wide
+    if (originalDeviceId != null) {
+        List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(getContext());
+        for (CameraDevice device : devices) {
+            if (originalDeviceId.equals(device.getDeviceId()) && !device.isLogical()) {
+                for (LensInfo lens : device.getLenses()) {
+                    if ("ultraWide".equals(lens.getDeviceType())) {
+                        Log.d("CameraPreview", "Ultra-wide lens selected. Targeting 0.5x zoom on logical camera.");
+                        targetZoom = 0.5f;
+                        // Force the use of the logical camera by clearing the specific deviceId
+                        deviceId = null; 
+                        break;
+                    }
+                }
+            }
+            if (deviceId == null) break; // Exit outer loop once we've made our decision
+        }
+    }
 
     previousOrientationRequest = getBridge().getActivity().getRequestedOrientation();
     cameraXView = new CameraXView(getContext(), getBridge().getWebView());
     cameraXView.setListener(this);
 
+    String finalDeviceId = deviceId;
+    float finalTargetZoom = targetZoom;
     getBridge().getActivity().runOnUiThread(() -> {
         DisplayMetrics metrics = getBridge().getActivity().getResources().getDisplayMetrics();
         if (lockOrientation) {
@@ -345,7 +371,9 @@ public class CameraPreview
         int computedHeight = height != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, height, metrics) : (int) getBridge().getWebView().getHeight();
         computedHeight -= (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, paddingBottom, metrics);
 
-        CameraSessionConfiguration config = new CameraSessionConfiguration(deviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f);
+        CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f);
+        config.setTargetZoom(finalTargetZoom);
+        
         bridge.saveCall(call);
         cameraStartCallbackId = call.getCallbackId();
         cameraXView.startSession(config);

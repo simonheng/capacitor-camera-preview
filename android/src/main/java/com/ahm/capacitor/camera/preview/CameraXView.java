@@ -21,6 +21,7 @@ import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
 import androidx.camera.core.resolutionselector.ResolutionSelector;
 import androidx.camera.core.resolutionselector.ResolutionStrategy;
+import androidx.camera.extensions.ExtensionsManager;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
@@ -45,6 +46,7 @@ import java.util.concurrent.Executors;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import android.hardware.camera2.CameraCharacteristics;
+import androidx.camera.extensions.ExtensionMode;
 
 public class CameraXView implements LifecycleOwner {
     private static final String TAG = "CameraPreview CameraXView";
@@ -173,10 +175,19 @@ public class CameraXView implements LifecycleOwner {
                 imageCapture = new ImageCapture.Builder().setResolutionSelector(resolutionSelector).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setFlashMode(currentFlashMode).build();
                 sampleImageCapture = imageCapture;
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
+                // Unbind any existing use cases and bind new ones
                 cameraProvider.unbindAll();
                 camera = cameraProvider.bindToLifecycle(this, currentCameraSelector, preview, imageCapture);
-                setZoomInternal(sessionConfig.getZoomFactor());
+
+                // Set initial zoom if specified, prioritizing targetZoom over default zoomFactor
+                float initialZoom = sessionConfig.getTargetZoom() != 1.0f ? sessionConfig.getTargetZoom() : sessionConfig.getZoomFactor();
+                if (initialZoom != 1.0f) {
+                    Log.d(TAG, "Applying initial zoom of " + initialZoom);
+                    setZoomInternal(initialZoom);
+                }
+
                 isRunning = true;
+                Log.d(TAG, "bindCameraUseCases: Camera bound successfully");
                 if (listener != null) listener.onCameraStarted();
             } catch (Exception e) {
                 if (listener != null) listener.onCameraStartError("Error binding camera: " + e.getMessage());
@@ -374,37 +385,31 @@ public class CameraXView implements LifecycleOwner {
         try {
             ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
             ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-            android.hardware.camera2.CameraManager cameraManager = (android.hardware.camera2.CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+            CameraManager cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
 
             for (CameraInfo cameraInfo : cameraProvider.getAvailableCameraInfos()) {
                 String logicalCameraId = Camera2CameraInfo.from(cameraInfo).getCameraId();
                 String position = isBackCamera(cameraInfo) ? "rear" : "front";
                 float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
                 float maxZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMaxZoomRatio();
-
-                // Add the logical camera first
                 List<LensInfo> logicalLenses = new ArrayList<>();
-                logicalLenses.add(new LensInfo(4.25f, "wideAngle", 1.0f, maxZoom)); // Represent as a single wide lens
+                logicalLenses.add(new LensInfo(4.25f, "wideAngle", 1.0f, maxZoom));
                 devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
                     logicalCameraId, "Logical Camera (" + position + ")", position, logicalLenses, minZoom, maxZoom, true
                 ));
 
-                // Then add the physical cameras
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     for (String physicalId : cameraManager.getCameraCharacteristics(logicalCameraId).getPhysicalCameraIds()) {
-                        if (physicalId.equals(logicalCameraId)) continue; // Skip the logical device itself
-
+                        if (physicalId.equals(logicalCameraId)) continue;
                         CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(physicalId);
-                        String deviceType = "wideAngle"; // default
+                        String deviceType = "wideAngle";
                         float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
                         if (focalLengths != null && focalLengths.length > 0) {
                             if (focalLengths[0] < 3.0) deviceType = "ultraWide";
                             else if (focalLengths[0] > 5.0) deviceType = "telephoto";
                         }
-                        
                         List<LensInfo> physicalLenses = new ArrayList<>();
                         physicalLenses.add(new LensInfo(focalLengths != null ? focalLengths[0] : 4.25f, deviceType, 1.0f, 1.0f));
-                        
                         devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
                             physicalId, "Physical " + deviceType + " (" + position + ")", position, physicalLenses, 1.0f, 1.0f, false
                         ));
@@ -744,6 +749,7 @@ public class CameraXView implements LifecycleOwner {
         
         mainExecutor.execute(() -> {
             try {
+                // Standard physical device selection logic...
                 List<CameraInfo> cameraInfos = cameraProvider.getAvailableCameraInfos();
                 CameraInfo targetCameraInfo = null;
                 for (CameraInfo cameraInfo : cameraInfos) {
@@ -760,13 +766,7 @@ public class CameraXView implements LifecycleOwner {
                     CameraSelector newSelector = new CameraSelector.Builder()
                         .addCameraFilter(cameras -> {
                             // This filter will receive a list of all cameras and must return the one we want.
-                            for (CameraInfo camera : cameras) {
-                                if (Camera2CameraInfo.from(camera).getCameraId().equals(deviceId)) {
-                                    return Collections.singletonList(camera);
-                                }
-                            }
-                            // Should not happen if our initial check passed, but as a fallback...
-                            return Collections.emptyList();
+                            return Collections.singletonList(finalTarget);
                         }).build();
 
                     currentCameraSelector = newSelector;

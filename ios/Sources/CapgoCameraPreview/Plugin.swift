@@ -606,85 +606,56 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             position: .unspecified
         )
 
-        var frontDevices: [[String: Any]] = []
-        var backDevices: [[String: Any]] = []
+        var devices: [[String: Any]] = []
 
         // Collect all devices by position
         for device in session.devices {
-            var deviceType = "wideAngle"
-            var baseZoomRatio: Float = 1.0
+            var lenses: [[String: Any]] = []
+            
+            let constituentDevices = device.isVirtualDevice ? device.constituentDevices : [device]
+            
+            for lensDevice in constituentDevices {
+                var deviceType: String
+                switch lensDevice.deviceType {
+                    case .builtInWideAngleCamera: deviceType = "wideAngle"
+                    case .builtInUltraWideCamera: deviceType = "ultraWide"
+                    case .builtInTelephotoCamera: deviceType = "telephoto"
+                    case .builtInDualCamera: deviceType = "dual"
+                    case .builtInDualWideCamera: deviceType = "dualWide"
+                    case .builtInTripleCamera: deviceType = "triple"
+                    case .builtInTrueDepthCamera: deviceType = "trueDepth"
+                    default: deviceType = "unknown"
+                }
 
-            switch device.deviceType {
-            case .builtInWideAngleCamera:
-                deviceType = "wideAngle"
-                baseZoomRatio = 1.0
-            case .builtInUltraWideCamera:
-                deviceType = "ultraWide"
-                baseZoomRatio = 0.5
-            case .builtInTelephotoCamera:
-                deviceType = "telephoto"
-                baseZoomRatio = 2.0
-            case .builtInDualCamera:
-                deviceType = "dual"
-                baseZoomRatio = 1.0
-            case .builtInDualWideCamera:
-                deviceType = "dualWide"
-                baseZoomRatio = 1.0
-            case .builtInTripleCamera:
-                deviceType = "triple"
-                baseZoomRatio = 1.0
-            case .builtInTrueDepthCamera:
-                deviceType = "trueDepth"
-                baseZoomRatio = 1.0
-            default:
-                deviceType = "wideAngle"
-                baseZoomRatio = 1.0
+                var baseZoomRatio: Float = 1.0
+                if lensDevice.deviceType == .builtInUltraWideCamera {
+                    baseZoomRatio = 0.5
+                } else if lensDevice.deviceType == .builtInTelephotoCamera {
+                    baseZoomRatio = 2.0 // A common value for telephoto lenses
+                }
+                
+                let lensInfo: [String: Any] = [
+                    "label": lensDevice.localizedName,
+                    "deviceType": deviceType,
+                    "focalLength": 4.25, // Placeholder
+                    "baseZoomRatio": baseZoomRatio,
+                    "minZoom": Float(lensDevice.minAvailableVideoZoomFactor),
+                    "maxZoom": Float(lensDevice.maxAvailableVideoZoomFactor)
+                ]
+                lenses.append(lensInfo)
             }
-
-            let lensInfo = [
+            
+            let deviceData: [String: Any] = [
                 "deviceId": device.uniqueID,
                 "label": device.localizedName,
-                "deviceType": deviceType,
-                "focalLength": 4.25,
-                "baseZoomRatio": baseZoomRatio,
-                "minZoom": 1.0,
-                "maxZoom": Float(device.activeFormat.videoMaxZoomFactor)
-            ] as [String : Any]
-
-            switch device.position {
-            case .front:
-                frontDevices.append(lensInfo)
-            case .back:
-                backDevices.append(lensInfo)
-            default:
-                break
-            }
-        }
-
-        var devices: [[String: Any]] = []
-        
-        if !frontDevices.isEmpty {
-            let frontDevice = [
-                "deviceId": frontDevices.first?["deviceId"] as? String ?? "",
-                "label": "Front Camera",
-                "position": "front",
-                "lenses": frontDevices,
-                "minZoom": frontDevices.compactMap { $0["minZoom"] as? Float }.min() ?? 1.0,
-                "maxZoom": frontDevices.compactMap { $0["maxZoom"] as? Float }.max() ?? 1.0
-            ] as [String: Any]
-            devices.append(frontDevice)
-        }
-        
-        if !backDevices.isEmpty {
-            let backDevice = [
-                "deviceId": backDevices.first?["deviceId"] as? String ?? "",
-                "label": "Back Camera",
-                "position": "rear",
-                "lenses": backDevices,
-                "minZoom": backDevices.compactMap { $0["minZoom"] as? Float }.min() ?? 1.0,
-                "maxZoom": backDevices.compactMap { $0["maxZoom"] as? Float }.max() ?? 1.0
-            ] as [String: Any]
-            devices.append(backDevice)
+                "position": device.position == .front ? "front" : "rear",
+                "lenses": lenses,
+                "minZoom": Float(device.minAvailableVideoZoomFactor),
+                "maxZoom": Float(device.maxAvailableVideoZoomFactor),
+                "isLogical": device.isVirtualDevice
+            ]
+            
+            devices.append(deviceData)
         }
 
         call.resolve(["devices": devices])
