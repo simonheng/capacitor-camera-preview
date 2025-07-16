@@ -218,6 +218,36 @@ public class CameraPreview
     call.resolve();
   }
 
+  @PluginMethod
+  public void getDeviceId(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    JSObject ret = new JSObject();
+    ret.put("deviceId", cameraXView.getCurrentDeviceId());
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void getFlashMode(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    JSObject ret = new JSObject();
+    ret.put("flashMode", cameraXView.getFlashMode());
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void isRunning(PluginCall call) {
+    boolean running = cameraXView != null && cameraXView.isRunning();
+    JSObject jsObject = new JSObject();
+    jsObject.put("isRunning", running);
+    call.resolve(jsObject);
+  }
+
   @PermissionCallback
   private void handleCameraPermissionResult(PluginCall call) {
     if (PermissionState.GRANTED.equals(getPermissionState(CAMERA_ONLY_PERMISSION_ALIAS)) ||

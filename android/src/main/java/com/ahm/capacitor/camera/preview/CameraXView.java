@@ -897,6 +897,17 @@ public class CameraXView implements LifecycleOwner {
         }
     }
 
+    public String getFlashMode() {
+        switch (currentFlashMode) {
+            case ImageCapture.FLASH_MODE_ON:
+                return "on";
+            case ImageCapture.FLASH_MODE_AUTO:
+                return "auto";
+            default:
+                return "off";
+        }
+    }
+
     public void setFlashMode(String mode) {
         int flashMode;
         switch (mode) {
@@ -919,6 +930,10 @@ public class CameraXView implements LifecycleOwner {
         if (sampleImageCapture != null) {
             sampleImageCapture.setFlashMode(flashMode);
         }
+    }
+
+    public String getCurrentDeviceId() {
+        return currentDeviceId != null ? currentDeviceId : "unknown";
     }
 
     public void switchToDevice(String deviceId) {
