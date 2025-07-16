@@ -97,12 +97,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly flashMode = signal<FlashMode>('auto');
   protected readonly isCapturingPhoto = signal(false);
   protected readonly currentZoomFactor = signal(1.0);
-  protected readonly MIN_ZOOM = 0.5;
-  protected readonly MAX_ZOOM = 8.0;
-  protected readonly minZoom = signal(this.MIN_ZOOM);
-  protected readonly maxZoom = signal(this.MAX_ZOOM);
-  protected readonly minZoomReel = signal(1.0);
-  protected readonly maxZoomReel = signal(8.0);
+  protected readonly minZoom = signal(0.5);
+  protected readonly maxZoom = signal(8.0);
   protected readonly availableDevices = signal<CameraDevice[]>([]);
   protected readonly currentDeviceId = signal<string>('');
   protected readonly currentLens = signal<LensInfo | null>(null);
@@ -123,7 +119,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   });
 
   protected readonly canZoomOut = computed(() => {
-    return this.currentZoomFactor() - 0.1 >= this.minZoom();
+    return this.currentZoomFactor() - 0.1 > this.minZoom();
   });
 
   protected readonly isWeb = Capacitor.getPlatform() === 'web';
@@ -209,7 +205,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       if (this.useCustomSize()) {
         captureOptions = {
           ...captureOptions,
-          ...{ 
+          ...{
             width: this.pictureWidth(),
             height: this.pictureHeight()
           }
@@ -274,7 +270,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async setZoom(level: number, force: boolean = false): Promise<void> {
     const now = Date.now();
-    
+
     // Throttle zoom calls unless forced
     if (!force && (now - this.#lastZoomCall) < this.#zoomThrottleMs) {
       // Update UI immediately for smooth feedback
@@ -364,7 +360,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       // Test device information
       const devices = await this.#cameraViewService.getAvailableDevices();
       results += `\n✓ Available devices: ${devices.length}`;
-      
+
       devices.forEach((device, index) => {
         results += `\n  ${index + 1}. ${device.label} (${device.position})`;
         results += `\n     Lenses: ${device.lenses.length}`;
@@ -393,7 +389,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
     try {
       let results = `\n=== Lens Information Test ===`;
-      
+
       // Get current lens info from zoom data
       const zoomData = await this.#cameraViewService.getZoom();
       results += `\n✓ Current lens info:`;
@@ -401,12 +397,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       results += `\n  Base Zoom: ${zoomData.lens.baseZoomRatio}x`;
       results += `\n  Digital Zoom: ${zoomData.lens.digitalZoom}x`;
       results += `\n  Focal Length: ${zoomData.lens.focalLength}mm`;
-      
+
       // Get available lenses from device data
       const devices = await this.#cameraViewService.getAvailableDevices();
       const currentDeviceId = await this.#cameraViewService.getDeviceId();
       const currentDevice = devices.find(d => d.deviceId === currentDeviceId);
-      
+
       if (currentDevice) {
         results += `\n✓ Available lenses for ${currentDevice.label}: ${currentDevice.lenses.length}`;
         currentDevice.lenses.forEach((lens, index) => {
@@ -417,7 +413,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
           results += `\n     Focal Length: ${lens.focalLength}mm`;
         });
       }
-      
+
       this.testResults.set(results);
       this.showTestResults.set(true);
     } catch (error) {
@@ -570,12 +566,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     if (event.touches.length === 2 && this.#touchStartDistance > 0) {
       const currentDistance = getDistance(event.touches[0], event.touches[1]);
       const scale = currentDistance / this.#touchStartDistance;
-      
+
       const newZoom = Math.max(
         this.minZoom(),
         Math.min(this.maxZoom(), this.#initialZoomFactorOnPinch * scale)
       );
-      
+
       this.setZoom(newZoom);
       event.preventDefault(); // Prevent scrolling during pinch
     }

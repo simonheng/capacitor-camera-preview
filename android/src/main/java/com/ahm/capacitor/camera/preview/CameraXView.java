@@ -84,7 +84,7 @@ public class CameraXView implements LifecycleOwner {
         this.webView = webView;
         this.lifecycleRegistry = new LifecycleRegistry(this);
         this.mainExecutor = ContextCompat.getMainExecutor(context);
-        
+
         mainExecutor.execute(() -> lifecycleRegistry.setCurrentState(Lifecycle.State.CREATED));
     }
 
@@ -166,7 +166,7 @@ public class CameraXView implements LifecycleOwner {
         }
         webView.setBackgroundColor(android.graphics.Color.WHITE);
     }
-    
+
     private void bindCameraUseCases() {
         if (cameraProvider == null) return;
         mainExecutor.execute(() -> {
@@ -278,7 +278,7 @@ public class CameraXView implements LifecycleOwner {
             boolean isBack = isBackCamera(cameraInfo);
             float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
             float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
-            
+
             // Create a unique ID based on camera properties
             String position = isBack ? "back" : "front";
             return position + "_" +  minZoom + "_" + maxZoom;
@@ -293,7 +293,7 @@ public class CameraXView implements LifecycleOwner {
             CameraSelector backSelector = new CameraSelector.Builder()
                 .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                 .build();
-            
+
             // Try to filter cameras with back selector - if this camera is included, it's a back camera
             List<androidx.camera.core.CameraInfo> backCameras = backSelector.filter(Collections.singletonList(cameraInfo));
             return !backCameras.isEmpty();
@@ -305,7 +305,7 @@ public class CameraXView implements LifecycleOwner {
 
     public void capturePhoto(int quality) {
         Log.d(TAG, "capturePhoto: Starting photo capture with quality: " + quality);
-        
+
         if (imageCapture == null) {
             if (listener != null) {
                 listener.onPictureTakenError("Camera not ready");
@@ -335,7 +335,7 @@ public class CameraXView implements LifecycleOwner {
                     try {
                         java.io.File tempFile = new java.io.File(context.getCacheDir(), "temp_image.jpg");
                         byte[] bytes;
-                        
+
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             bytes = Files.readAllBytes(tempFile.toPath());
                         } else {
@@ -347,7 +347,7 @@ public class CameraXView implements LifecycleOwner {
                         }
 
                         String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
-                        
+
                         // Clean up temp file
                         tempFile.delete();
 
@@ -367,7 +367,7 @@ public class CameraXView implements LifecycleOwner {
 
     public void captureSample(int quality) {
         Log.d(TAG, "captureSample: Starting sample capture with quality: " + quality);
-        
+
         if (sampleImageCapture == null) {
             if (listener != null) {
                 listener.onSampleTakenError("Camera not ready");
@@ -392,7 +392,7 @@ public class CameraXView implements LifecycleOwner {
                         // Convert ImageProxy to byte array
                         byte[] bytes = imageProxyToByteArray(image);
                         String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
-                        
+
                         if (listener != null) {
                             listener.onSampleTaken(base64);
                         }
@@ -503,10 +503,10 @@ public class CameraXView implements LifecycleOwner {
             // For static method, return default zoom factors
             // We can try to detect if ultra-wide is available by checking device list
             List<com.ahm.capacitor.camera.preview.model.CameraDevice> devices = getAvailableDevicesStatic(context);
-            
+
             float minZoom = 1.0f;
             float maxZoom = 10.0f;
-            
+
             // Check if any device has ultra-wide support (0.5x)
             for (com.ahm.capacitor.camera.preview.model.CameraDevice device : devices) {
                 Log.d(TAG, "getZoomFactorsStatic: Device " + device.getDeviceId() + " - minZoom: " + device.getMinZoom() + ", maxZoom: " + device.getMaxZoom());
@@ -517,7 +517,7 @@ public class CameraXView implements LifecycleOwner {
                     maxZoom = device.getMaxZoom();
                 }
             }
-            
+
             Log.d(TAG, "getZoomFactorsStatic: Final range - minZoom: " + minZoom + ", maxZoom: " + maxZoom);
             LensInfo defaultLens = new LensInfo(4.25f, "wideAngle", 1.0f, 1.0f);
             return new ZoomFactors(minZoom, maxZoom, 1.0f, defaultLens);
@@ -536,35 +536,35 @@ public class CameraXView implements LifecycleOwner {
         try {
             // Get the current zoom from active camera
             float currentZoom = Objects.requireNonNull(camera.getCameraInfo().getZoomState().getValue()).getZoomRatio();
-            
+
             // Get the full zoom range across all cameras for current position (front/back)
             List<androidx.camera.core.CameraInfo> availableCameras = getAvailableCamerasForCurrentPosition();
-            
+
             float minZoom = 1.0f;
             float maxZoom = 1.0f;
-            
+
             if (!availableCameras.isEmpty()) {
                 // Find the absolute min and max zoom across all cameras
                 for (androidx.camera.core.CameraInfo cameraInfo : availableCameras) {
                     try {
                         float cameraMinZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
                         float cameraMaxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
-                        
+
                         // For multi-camera, we need to consider the effective zoom ranges
                         // If a camera has minZoom < 1.0, it likely supports ultra-wide (0.5x)
                         if (cameraMinZoom < 1.0f) {
                             minZoom = 0.5f; // Ultra-wide capability
                         }
-                        
+
                         // Samsung devices often hide ultra-wide in logical cameras
                         // If maxZoom >= 4.0, assume ultra-wide is available even if not exposed
                         if (cameraMaxZoom >= 4.0f && minZoom >= 1.0f) {
                             Log.d(TAG, "getZoomFactors: Detected Samsung-style multi-camera (maxZoom: " + cameraMaxZoom + "), forcing ultra-wide support");
                             minZoom = 0.5f; // Force ultra-wide support
                         }
-                        
+
                         maxZoom = Math.max(maxZoom, cameraMaxZoom);
-                        
+
                         Log.d(TAG, "getZoomFactors: Camera " + getCameraId(cameraInfo) + " - range: " + cameraMinZoom + "-" + cameraMaxZoom);
                     } catch (Exception e) {
                         Log.w(TAG, "getZoomFactors: Error getting zoom info for camera", e);
@@ -573,7 +573,7 @@ public class CameraXView implements LifecycleOwner {
             }
 
             Log.d(TAG, "getZoomFactors: Combined range - minZoom: " + minZoom + ", maxZoom: " + maxZoom + ", currentZoom: " + currentZoom);
-            
+
             return new ZoomFactors(minZoom, maxZoom, currentZoom, getCurrentLensInfo());
         } catch (Exception e) {
             Log.e(TAG, "getZoomFactors: Error getting zoom factors", e);
@@ -620,11 +620,11 @@ public class CameraXView implements LifecycleOwner {
         }
 
         Log.d(TAG, "setZoom: Requested zoom ratio: " + zoomRatio);
-        
+
         // Just let CameraX handle everything - it should automatically switch lenses
         try {
             ListenableFuture<Void> zoomFuture = camera.getCameraControl().setZoomRatio(zoomRatio);
-            
+
             // Add callback to see what actually happened
             zoomFuture.addListener(() -> {
                 try {
@@ -639,7 +639,7 @@ public class CameraXView implements LifecycleOwner {
                     Log.e(TAG, "setZoom: Error checking final zoom", e);
                 }
             }, mainExecutor);
-            
+
         } catch (Exception e) {
             Log.e(TAG, "setZoom: Failed to set zoom to " + zoomRatio, e);
             throw e;
@@ -651,23 +651,23 @@ public class CameraXView implements LifecycleOwner {
             Log.w(TAG, "getAvailableCamerasForCurrentPosition: cameraProvider is null");
             return Collections.emptyList();
         }
-        
+
         List<androidx.camera.core.CameraInfo> allCameras = cameraProvider.getAvailableCameraInfos();
         List<androidx.camera.core.CameraInfo> sameFacingCameras = new ArrayList<>();
-        
+
         Log.d(TAG, "getAvailableCamerasForCurrentPosition: Total cameras available: " + allCameras.size());
-        
+
         // Determine current facing direction from the session config to avoid restricted API call
         boolean isCurrentBack = "back".equals(sessionConfig.getPosition());
         Log.d(TAG, "getAvailableCamerasForCurrentPosition: Looking for " + (isCurrentBack ? "back" : "front") + " cameras");
-        
+
         for (int i = 0; i < allCameras.size(); i++) {
             androidx.camera.core.CameraInfo cameraInfo = allCameras.get(i);
             boolean isCameraBack = isBackCamera(cameraInfo);
             String cameraId = getCameraId(cameraInfo);
-            
+
             Log.d(TAG, "getAvailableCamerasForCurrentPosition: Camera " + i + " - ID: " + cameraId + ", isBack: " + isCameraBack);
-            
+
             try {
                 float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
                 float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
@@ -675,13 +675,13 @@ public class CameraXView implements LifecycleOwner {
             } catch (Exception e) {
                 Log.w(TAG, "getAvailableCamerasForCurrentPosition: Cannot get zoom info for camera " + i + ": " + e.getMessage());
             }
-            
+
             if (isCameraBack == isCurrentBack) {
                 sameFacingCameras.add(cameraInfo);
                 Log.d(TAG, "getAvailableCamerasForCurrentPosition: Added camera " + i + " (" + cameraId + ") to same-facing list");
             }
         }
-        
+
         Log.d(TAG, "getAvailableCamerasForCurrentPosition: Found " + sameFacingCameras.size() + " cameras for " + (isCurrentBack ? "back" : "front"));
         return sameFacingCameras;
     }
@@ -703,7 +703,7 @@ public class CameraXView implements LifecycleOwner {
             sizes.add(new Size(1920, 1080));
             sizes.add(new Size(1280, 720));
             sizes.add(new Size(640, 480));
-            
+
         } catch (Exception e) {
             Log.e(TAG, "Error getting supported picture sizes", e);
         }
@@ -716,19 +716,19 @@ public class CameraXView implements LifecycleOwner {
                 float minZoom = Objects.requireNonNull(camera.getCameraInfo().getZoomState().getValue()).getMinZoomRatio();
                 float maxZoom = camera.getCameraInfo().getZoomState().getValue().getMaxZoomRatio();
                 float currentZoom = camera.getCameraInfo().getZoomState().getValue().getZoomRatio();
-                
+
                 Log.d(TAG, "setZoomInternal: Current camera range: " + minZoom + "-" + maxZoom + ", current: " + currentZoom);
                 Log.d(TAG, "setZoomInternal: Requesting zoom: " + zoomRatio);
-                
+
                 // Try to set zoom directly - let CameraX handle lens switching
                 ListenableFuture<Void> zoomFuture = camera.getCameraControl().setZoomRatio(zoomRatio);
-                
+
                 zoomFuture.addListener(() -> {
                     try {
                         zoomFuture.get(); // Check if zoom was successful
                         float newZoom = Objects.requireNonNull(camera.getCameraInfo().getZoomState().getValue()).getZoomRatio();
                         Log.d(TAG, "setZoomInternal: Zoom set successfully to " + newZoom + " (requested: " + zoomRatio + ")");
-                        
+
                         // Check if CameraX switched cameras
                         String newCameraId = getCameraId(camera.getCameraInfo());
                         if (!newCameraId.equals(currentDeviceId)) {
@@ -805,7 +805,7 @@ public class CameraXView implements LifecycleOwner {
         }
 
         currentFlashMode = flashMode;
-        
+
         if (imageCapture != null) {
             imageCapture.setFlashMode(flashMode);
         }
@@ -821,7 +821,7 @@ public class CameraXView implements LifecycleOwner {
     @OptIn(markerClass = ExperimentalCamera2Interop.class)
     public void switchToDevice(String deviceId) {
         Log.d(TAG, "switchToDevice: Attempting to switch to device " + deviceId);
-        
+
         mainExecutor.execute(() -> {
             try {
                 // Standard physical device selection logic...
@@ -858,13 +858,13 @@ public class CameraXView implements LifecycleOwner {
 
     public void flipCamera() {
         Log.d(TAG, "flipCamera: Flipping camera");
-        
+
         // Determine current position based on session config and flip it
         String currentPosition = sessionConfig.getPosition();
         String newPosition = "front".equals(currentPosition) ? "rear" : "front";
-        
+
         Log.d(TAG, "flipCamera: Switching from " + currentPosition + " to " + newPosition);
-        
+
         sessionConfig = new CameraSessionConfiguration(
             null, // deviceId - clear device ID to force position-based selection
             newPosition, // position
@@ -881,10 +881,10 @@ public class CameraXView implements LifecycleOwner {
             sessionConfig.isDisableAudio(), // disableAudio
             sessionConfig.getZoomFactor() // zoomFactor
         );
-        
+
         // Clear current device ID to force position-based selection
         currentDeviceId = null;
-        
+
         // Camera operations must run on main thread
         cameraExecutor.execute(() -> {
             currentCameraSelector = buildCameraSelector();
@@ -897,4 +897,4 @@ public class CameraXView implements LifecycleOwner {
             previewView.setAlpha(opacity);
         }
     }
-} 
+}
