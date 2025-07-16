@@ -21,7 +21,6 @@ import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
 import androidx.camera.core.resolutionselector.ResolutionSelector;
 import androidx.camera.core.resolutionselector.ResolutionStrategy;
-import androidx.camera.extensions.ExtensionsManager;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
@@ -47,6 +46,9 @@ import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import android.hardware.camera2.CameraCharacteristics;
 import androidx.camera.extensions.ExtensionMode;
+import java.util.Set;
+import androidx.camera.core.ZoomState;
+import androidx.camera.core.ResolutionInfo;
 
 public class CameraXView implements LifecycleOwner {
     private static final String TAG = "CameraPreview CameraXView";
@@ -169,8 +171,11 @@ public class CameraXView implements LifecycleOwner {
         if (cameraProvider == null) return;
         mainExecutor.execute(() -> {
             try {
+                Log.d(TAG, "Building camera selector with deviceId: " + sessionConfig.getDeviceId() + " and position: " + sessionConfig.getPosition());
                 currentCameraSelector = buildCameraSelector();
-                ResolutionSelector resolutionSelector = new ResolutionSelector.Builder().setResolutionStrategy(new ResolutionStrategy(new Size(1920, 1080), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER)).build();
+                ResolutionSelector resolutionSelector = new ResolutionSelector.Builder()
+                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                        .build();
                 Preview preview = new Preview.Builder().setResolutionSelector(resolutionSelector).build();
                 imageCapture = new ImageCapture.Builder().setResolutionSelector(resolutionSelector).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setFlashMode(currentFlashMode).build();
                 sampleImageCapture = imageCapture;
@@ -178,6 +183,40 @@ public class CameraXView implements LifecycleOwner {
                 // Unbind any existing use cases and bind new ones
                 cameraProvider.unbindAll();
                 camera = cameraProvider.bindToLifecycle(this, currentCameraSelector, preview, imageCapture);
+
+                // Log details about the active camera
+                Log.d(TAG, "Use cases bound. Inspecting active camera and use cases.");
+                CameraInfo cameraInfo = camera.getCameraInfo();
+                Log.d(TAG, "Bound Camera ID: " + Camera2CameraInfo.from(cameraInfo).getCameraId());
+                Log.d(TAG, "Implementation Type: " + cameraInfo.getImplementationType());
+
+                // Log zoom state
+                ZoomState zoomState = cameraInfo.getZoomState().getValue();
+                if (zoomState != null) {
+                    Log.d(TAG, "Active Zoom State: " +
+                        "min=" + zoomState.getMinZoomRatio() + ", " +
+                        "max=" + zoomState.getMaxZoomRatio() + ", " +
+                        "current=" + zoomState.getZoomRatio());
+                }
+
+                // Log physical cameras of the active camera
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    Set<CameraInfo> physicalCameras = cameraInfo.getPhysicalCameraInfos();
+                    Log.d(TAG, "Active camera has " + physicalCameras.size() + " physical cameras.");
+                    for (CameraInfo physical : physicalCameras) {
+                        Log.d(TAG, "  - Physical camera ID: " + Camera2CameraInfo.from(physical).getCameraId());
+                    }
+                }
+
+                // Log resolution info
+                ResolutionInfo previewResolution = preview.getResolutionInfo();
+                if (previewResolution != null) {
+                    Log.d(TAG, "Preview resolution: " + previewResolution.getResolution());
+                }
+                ResolutionInfo imageCaptureResolution = imageCapture.getResolutionInfo();
+                if (imageCaptureResolution != null) {
+                    Log.d(TAG, "Image capture resolution: " + imageCaptureResolution.getResolution());
+                }
 
                 // Set initial zoom if specified, prioritizing targetZoom over default zoomFactor
                 float initialZoom = sessionConfig.getTargetZoom() != 1.0f ? sessionConfig.getTargetZoom() : sessionConfig.getZoomFactor();
@@ -378,9 +417,10 @@ public class CameraXView implements LifecycleOwner {
         return bytes;
     }
 
+// not workin for xiaomi https://xiaomi.eu/community/threads/mi-11-ultra-unable-to-access-camera-lenses-in-apps-camera2-api.61456/
     @OptIn(markerClass = ExperimentalCamera2Interop.class)
     public static List<com.ahm.capacitor.camera.preview.model.CameraDevice> getAvailableDevicesStatic(Context context) {
-        Log.d(TAG, "getAvailableDevicesStatic: Starting CameraX device enumeration");
+        Log.d(TAG, "getAvailableDevicesStatic: Starting CameraX device enumeration with getPhysicalCameraInfos.");
         List<com.ahm.capacitor.camera.preview.model.CameraDevice> devices = new ArrayList<>();
         try {
             ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
@@ -390,29 +430,64 @@ public class CameraXView implements LifecycleOwner {
             for (CameraInfo cameraInfo : cameraProvider.getAvailableCameraInfos()) {
                 String logicalCameraId = Camera2CameraInfo.from(cameraInfo).getCameraId();
                 String position = isBackCamera(cameraInfo) ? "rear" : "front";
+                
+                // Add logical camera
                 float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
-                float maxZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMaxZoomRatio();
+                float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
                 List<LensInfo> logicalLenses = new ArrayList<>();
                 logicalLenses.add(new LensInfo(4.25f, "wideAngle", 1.0f, maxZoom));
                 devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
                     logicalCameraId, "Logical Camera (" + position + ")", position, logicalLenses, minZoom, maxZoom, true
                 ));
+                Log.d(TAG, "Found logical camera: " + logicalCameraId + " (" + position + ") with zoom " + minZoom + "-" + maxZoom);
 
+                // Get and add physical cameras
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    for (String physicalId : cameraManager.getCameraCharacteristics(logicalCameraId).getPhysicalCameraIds()) {
-                        if (physicalId.equals(logicalCameraId)) continue;
-                        CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(physicalId);
-                        String deviceType = "wideAngle";
-                        float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
-                        if (focalLengths != null && focalLengths.length > 0) {
-                            if (focalLengths[0] < 3.0) deviceType = "ultraWide";
-                            else if (focalLengths[0] > 5.0) deviceType = "telephoto";
+                    Set<CameraInfo> physicalCameraInfos = cameraInfo.getPhysicalCameraInfos();
+                    if (physicalCameraInfos.isEmpty()) continue;
+
+                    Log.d(TAG, "Logical camera " + logicalCameraId + " has " + physicalCameraInfos.size() + " physical cameras.");
+
+                    for (CameraInfo physicalCameraInfo : physicalCameraInfos) {
+                        String physicalId = Camera2CameraInfo.from(physicalCameraInfo).getCameraId();
+                        if (physicalId.equals(logicalCameraId)) continue; // Already added as logical
+
+                        try {
+                            CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(physicalId);
+                            String deviceType = "wideAngle";
+                            float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                            android.util.SizeF sensorSize = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE);
+
+                            if (focalLengths != null && focalLengths.length > 0 && sensorSize != null && sensorSize.getWidth() > 0) {
+                                double fov = 2 * Math.toDegrees(Math.atan(sensorSize.getWidth() / (2 * focalLengths[0])));
+                                if (fov > 90) deviceType = "ultraWide";
+                                else if (fov < 40) deviceType = "telephoto";
+                            } else if (focalLengths != null && focalLengths.length > 0) {
+                                if (focalLengths[0] < 3.0f) deviceType = "ultraWide";
+                                else if (focalLengths[0] > 5.0f) deviceType = "telephoto";
+                            }
+                            
+                            float physicalMinZoom = 1.0f;
+                            float physicalMaxZoom = 1.0f;
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                android.util.Range<Float> zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE);
+                                if (zoomRange != null) {
+                                    physicalMinZoom = zoomRange.getLower();
+                                    physicalMaxZoom = zoomRange.getUpper();
+                                }
+                            }
+                            
+                            String label = "Physical " + deviceType + " (" + position + ")";
+                            List<LensInfo> physicalLenses = new ArrayList<>();
+                            physicalLenses.add(new LensInfo(focalLengths != null ? focalLengths[0] : 4.25f, deviceType, 1.0f, physicalMaxZoom));
+                            
+                            devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
+                                physicalId, label, position, physicalLenses, physicalMinZoom, physicalMaxZoom, false
+                            ));
+                            Log.d(TAG, "Found physical camera: " + physicalId + " (" + label + ")");
+                        } catch (CameraAccessException e) {
+                            Log.e(TAG, "Failed to access characteristics for physical camera " + physicalId, e);
                         }
-                        List<LensInfo> physicalLenses = new ArrayList<>();
-                        physicalLenses.add(new LensInfo(focalLengths != null ? focalLengths[0] : 4.25f, deviceType, 1.0f, 1.0f));
-                        devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
-                            physicalId, "Physical " + deviceType + " (" + position + ")", position, physicalLenses, 1.0f, 1.0f, false
-                        ));
                     }
                 }
             }
