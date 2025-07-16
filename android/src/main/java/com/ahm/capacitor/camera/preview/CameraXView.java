@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.webkit.WebView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
@@ -39,6 +40,9 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import androidx.camera.camera2.interop.Camera2CameraInfo;
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
+import android.hardware.camera2.CameraCharacteristics;
 
 public class CameraXView implements LifecycleOwner {
     private static final String TAG = "CameraPreview CameraXView";
@@ -495,145 +499,58 @@ public class CameraXView implements LifecycleOwner {
         return bytes;
     }
 
+    @OptIn(markerClass = ExperimentalCamera2Interop.class)
     public static List<com.ahm.capacitor.camera.preview.model.CameraDevice> getAvailableDevicesStatic(Context context) {
         Log.d(TAG, "getAvailableDevicesStatic: Starting CameraX device enumeration");
-        
+        List<com.ahm.capacitor.camera.preview.model.CameraDevice> devices = new ArrayList<>();
         try {
-            // Initialize camera provider for device enumeration
-            ListenableFuture<ProcessCameraProvider> cameraProviderFuture = 
-                ProcessCameraProvider.getInstance(context);
+            ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
             ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
 
-            List<androidx.camera.core.CameraInfo> cameras = cameraProvider.getAvailableCameraInfos();
-            Log.d(TAG, "getAvailableDevices: Found " + cameras.size() + " cameras");
-
-            List<com.ahm.capacitor.camera.preview.model.CameraDevice> devices = new ArrayList<>();
-            List<LensInfo> frontLenses = new ArrayList<>();
-            List<LensInfo> rearLenses = new ArrayList<>();
-
-            for (androidx.camera.core.CameraInfo cameraInfo : cameras) {
-                try {
-                    boolean isBack = isBackCamera(cameraInfo);
-
-                    // CameraX provides simplified zoom ranges that often combine all physical cameras
-                    // We'll simulate the lens detection for now
-                    float maxZoom;  // Default max zoom
+            for (androidx.camera.core.CameraInfo cameraInfo : cameraProvider.getAvailableCameraInfos()) {
+                List<LensInfo> lenses = new ArrayList<>();
+                String position = isBackCamera(cameraInfo) ? "rear" : "front";
+                float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
+                float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    // Use Camera2 interop to get physical devices
+                    Camera2CameraInfo camera2Info = Camera2CameraInfo.from(cameraInfo);
+                    String logicalCameraId = camera2Info.getCameraId();
+                    android.hardware.camera2.CameraManager cameraManager = (android.hardware.camera2.CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
                     
-                    try {
-                        float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
-                        maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
-                        
-                        Log.d(TAG, "getAvailableDevices: Camera " + getCameraId(cameraInfo) + " - minZoom: " + minZoom + ", maxZoom: " + maxZoom + ", isBack: " + isBack);
-                        
-                        // For Samsung and many Android devices, CameraX logical cameras hide ultra-wide capability
-                        // We need to detect multi-camera support based on zoom range and device characteristics
-                        boolean isMultiCamera = false;
-                        
-                        if (isBack && maxZoom >= 4.0f) {
-                            // Rear cameras with 4x+ zoom typically have multiple lenses
-                            isMultiCamera = true;
-                            Log.d(TAG, "getAvailableDevices: Detected multi-camera system (rear, maxZoom: " + maxZoom + ")");
-                        } else if (!isBack && maxZoom >= 3.0f) {
-                            // Front cameras with 3x+ zoom may have multiple lenses
-                            isMultiCamera = true;
-                            Log.d(TAG, "getAvailableDevices: Detected multi-camera system (front, maxZoom: " + maxZoom + ")");
-                        } else if (minZoom < 1.0f) {
-                            // Explicit ultra-wide support
-                            isMultiCamera = true;
-                            Log.d(TAG, "getAvailableDevices: Detected ultra-wide support (minZoom: " + minZoom + ")");
-                        }
-                        
-                        if (isMultiCamera) {
-                            // Multi-camera system - create multiple lens entries
-                            Log.d(TAG, "getAvailableDevices: Creating multiple lens entries for multi-camera system");
-                            
-                            // Ultra-wide lens (0.5x) - assume available on multi-camera systems
-                            LensInfo ultraWideLens = new LensInfo(2.5f, "ultraWide", 0.5f, 2.0f);
-                            if (isBack) {
-                                rearLenses.add(ultraWideLens);
-                            } else {
-                                frontLenses.add(ultraWideLens);
-                            }
-                            Log.d(TAG, "getAvailableDevices: Added ultra-wide lens");
-                            
-                            // Wide lens (1x)
-                            LensInfo wideLens = new LensInfo(4.25f, "wideAngle", 1.0f, Math.min(maxZoom, 2.0f));
-                            if (isBack) {
-                                rearLenses.add(wideLens);
-                            } else {
-                                frontLenses.add(wideLens);
-                            }
-                            Log.d(TAG, "getAvailableDevices: Added wide-angle lens");
-                            
-                            // Telephoto lens (2x) - if max zoom is high enough
-                            if (maxZoom >= 3.0f) {
-                                LensInfo telephotoLens = new LensInfo(8.5f, "telephoto", 2.0f, maxZoom / 2.0f);
-                                if (isBack) {
-                                    rearLenses.add(telephotoLens);
-                                } else {
-                                    frontLenses.add(telephotoLens);
-                                }
-                                Log.d(TAG, "getAvailableDevices: Added telephoto lens");
-                            }
-                        } else {
-                            // Single camera
-                            Log.d(TAG, "getAvailableDevices: Creating single lens entry");
-                            LensInfo wideLens = new LensInfo(4.25f, "wideAngle", 1.0f, maxZoom);
-                            if (isBack) {
-                                rearLenses.add(wideLens);
-                            } else {
-                                frontLenses.add(wideLens);
+                    for (String physicalId : cameraManager.getCameraCharacteristics(logicalCameraId).getPhysicalCameraIds()) {
+                        CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(physicalId);
+                        int[] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+                        String deviceType = "wideAngle"; // default
+                        assert capabilities != null;
+                        if (Arrays.stream(capabilities).anyMatch(c -> c == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_ULTRA_HIGH_RESOLUTION_SENSOR)) {
+                            deviceType = "ultraWide";
+                        } else if (Arrays.stream(capabilities).anyMatch(c -> c == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)) {
+                             // Heuristic: check focal lengths to guess type
+                            float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                            if (focalLengths != null && focalLengths.length > 0) {
+                                if (focalLengths[0] < 3.0) deviceType = "ultraWide";
+                                else if (focalLengths[0] > 5.0) deviceType = "telephoto";
                             }
                         }
-                    } catch (Exception e) {
-                        Log.w(TAG, "getAvailableDevices: Error getting zoom info, using defaults", e);
-                        // Fallback: single wide lens
-                        LensInfo wideLens = new LensInfo(4.25f, "wideAngle", 1.0f, 10.0f);
-                        if (isBack) {
-                            rearLenses.add(wideLens);
-                        } else {
-                            frontLenses.add(wideLens);
-                        }
+                        // Note: Android doesn't have direct enums for dual/triple/etc. like iOS.
+                        // This logic is a best-effort approximation.
+                        lenses.add(new LensInfo(4.25f, deviceType, 1.0f, 1.0f));
                     }
-
-                } catch (Exception e) {
-                    Log.e(TAG, "getAvailableDevices: Error processing camera", e);
                 }
-            }
 
-            // Create devices
-            if (!frontLenses.isEmpty()) {
-                float minZoom = 1.0f;
-                float maxZoom = 1.0f;
+                if (lenses.isEmpty()) {
+                    // Fallback for older devices or single-lens cameras
+                    lenses.add(new LensInfo(4.25f, "wideAngle", 1.0f, maxZoom));
+                }
                 
-                for (LensInfo lens : frontLenses) {
-                    minZoom = Math.min(minZoom, lens.getBaseZoomRatio());
-                    maxZoom = Math.max(maxZoom, lens.getBaseZoomRatio() * lens.getDigitalZoom());
-                }
-
                 devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
-                    "front", "Front Camera", "front", frontLenses, minZoom, maxZoom
+                    getCameraId(cameraInfo), "Camera " + getCameraId(cameraInfo), position, lenses, minZoom, maxZoom
                 ));
             }
 
-            if (!rearLenses.isEmpty()) {
-                float minZoom = 1.0f;
-                float maxZoom = 1.0f;
-                
-                for (LensInfo lens : rearLenses) {
-                    minZoom = Math.min(minZoom, lens.getBaseZoomRatio());
-                    maxZoom = Math.max(maxZoom, lens.getBaseZoomRatio() * lens.getDigitalZoom());
-                }
-
-                devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
-                    "rear", "Back Camera", "rear", rearLenses, minZoom, maxZoom
-                ));
-            }
-
-            Log.d(TAG, "getAvailableDevicesStatic: Created " + devices.size() + " devices with " + 
-                      (frontLenses.size() + rearLenses.size()) + " total lenses");
             return devices;
-
         } catch (Exception e) {
             Log.e(TAG, "getAvailableDevicesStatic: Error getting devices", e);
             return Collections.emptyList();
@@ -832,7 +749,6 @@ public class CameraXView implements LifecycleOwner {
         List<Size> sizes = new ArrayList<>();
         try {
             ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
-            ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
             CameraSelector.Builder builder = new CameraSelector.Builder();
             if ("front".equals(facing)) {
                 builder.requireLensFacing(CameraSelector.LENS_FACING_FRONT);

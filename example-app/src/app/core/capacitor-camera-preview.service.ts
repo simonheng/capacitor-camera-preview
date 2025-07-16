@@ -1,13 +1,15 @@
 import { Injectable, NgZone } from '@angular/core';
 import {
   CameraDevice,
-  CameraLens,
-  CameraSessionConfiguration,
   CameraPreview,
-  CameraPreviewPlugin,
+  CameraPreviewFlashMode,
+  CameraPreviewOptions,
   CameraPreviewPictureOptions,
   FlashMode,
   LensInfo,
+  PictureFormat,
+  SupportedPictureSizes,
+  CameraPreviewPlugin,
 } from '@capgo/camera-preview';
 import { BehaviorSubject } from 'rxjs';
 
@@ -40,7 +42,7 @@ export class CapacitorCameraViewService {
    * Start the camera view
    * @param options Configuration options for the camera session
    */
-  async start(options: CameraSessionConfiguration = {}): Promise<void> {
+  async start(options: CameraPreviewOptions = {}): Promise<void> {
     await this.#cameraView.start(options);
     this.#cameraStarted.next(true);
   }
@@ -182,7 +184,7 @@ export class CapacitorCameraViewService {
    * Start video recording
    * @param options Configuration options for video recording
    */
-  async startRecordVideo(options: CameraSessionConfiguration = {}): Promise<void> {
+  async startRecordVideo(options: CameraPreviewOptions = {}): Promise<void> {
     return this.#cameraView.startRecordVideo(options);
   }
 

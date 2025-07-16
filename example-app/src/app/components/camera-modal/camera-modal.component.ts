@@ -30,7 +30,8 @@ import {
   type CameraPosition,
   type FlashMode,
   type LensInfo,
-  type PictureFormat
+  type PictureFormat,
+  type CameraLens,
 } from '@capgo/camera-preview';
 import { CapacitorCameraViewService } from '../../core/capacitor-camera-preview.service';
 
@@ -535,40 +536,25 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
     // Filter cameras by current position preference
     const currentPosition = this.position();
-    const currentPositionDevice = devices.find(device =>
+    const currentPositionDevices = devices.filter(device =>
       device.position === currentPosition
     );
 
-    if (!currentPositionDevice) return;
+    if (currentPositionDevices.length === 0) return;
 
-    // Use the lenses from the current position device for camera switching
-    const availableLenses = currentPositionDevice.lenses;
-
-    // Convert lenses to a camera-like structure for the switch buttons
-    const cameraOptions = availableLenses.map(lens => ({
-      deviceId: lens.deviceId,
-      label: lens.label,
-      position: currentPosition,
-      lenses: [lens],
-      minZoom: lens.minZoom,
-      maxZoom: lens.maxZoom
-    }));
-
-    this.availableCameras.set(cameraOptions);
+    // Use the found devices for the camera switching UI
+    this.availableCameras.set(currentPositionDevices);
 
     // Set initial camera selection to match current device if possible
     const currentDeviceId = this.currentDeviceId();
     let initialIndex = 0;
     if (currentDeviceId !== null && currentDeviceId !== undefined) {
-      const foundIndex = cameraOptions.findIndex(camera => camera.deviceId === currentDeviceId);
+      const foundIndex = currentPositionDevices.findIndex(camera => camera.deviceId === currentDeviceId);
       if (foundIndex >= 0) {
         initialIndex = foundIndex;
       }
     }
     this.selectedCameraIndex.set(initialIndex);
-
-    console.log('Current device ID:', this.currentDeviceId());
-    console.log('selectedCameraIndex:', this.selectedCameraIndex());
   }
 
   // Touch event handlers for pinch-to-zoom
@@ -603,26 +589,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     this.#touchStartDistance = 0;
   }
 
-  protected async testUltraWideZoom(): Promise<void> {
-    console.log('Testing ultra-wide zoom at 0.5x...');
-    try {
-      // Get current zoom data first
-      const zoomData = await this.#cameraViewService.getZoom();
-      console.log('Current zoom range:', zoomData.min, '-', zoomData.max);
-      console.log('Current zoom:', zoomData.current);
-      console.log('Current lens:', zoomData.lens);
-      
-      // Force set zoom to 0.5
-      await this.#cameraViewService.setZoom(0.5);
-      console.log('Successfully set zoom to 0.5x');
-      
-      // Check what actually happened
-      const newZoomData = await this.#cameraViewService.getZoom();
-      console.log('After setting 0.5x - actual zoom:', newZoomData.current);
-      console.log('After setting 0.5x - lens:', newZoomData.lens);
-      
-    } catch (error) {
-      console.error('Ultra-wide zoom test failed:', error);
-    }
+  protected getDisplayLenses(device: CameraDevice): CameraLens[] {
+    return device.lenses;
   }
 }

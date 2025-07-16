@@ -34,6 +34,7 @@ import { GalleryService } from '../../services/gallery.service';
 @Component({
   selector: 'app-camera-view',
   templateUrl: 'camera-view.page.html',
+  standalone: true,
   imports: [
     FormsModule,
     IonButton,
@@ -56,14 +57,14 @@ import { GalleryService } from '../../services/gallery.service';
     IonToolbar,
   ],
 })
-export class CameraSettingsPage implements OnInit {
+export class CameraViewPage implements OnInit {
   readonly #cameraViewService = inject(CapacitorCameraViewService);
   readonly #galleryService = inject(GalleryService);
   readonly #modalController = inject(ModalController);
 
   protected readonly cameraDevices = signal<CameraDevice[]>([]);
   protected readonly testResults = signal<string>('');
-
+  
   // Basic camera settings
   protected deviceId = model<string | null>(null);
   protected position = model<CameraPosition>('rear');
@@ -84,6 +85,8 @@ export class CameraSettingsPage implements OnInit {
   protected disableAudio = model<boolean>(false);
   protected enableHighResolution = model<boolean>(false);
   protected lockAndroidOrientation = model<boolean>(false);
+
+  protected toBack = model<boolean>(false);
 
   ngOnInit() {
     setTimeout(() => {

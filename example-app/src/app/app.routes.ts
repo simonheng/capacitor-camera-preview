@@ -10,7 +10,7 @@ export const routes: Routes = [
         path: 'camera',
         loadComponent: () =>
           import('./pages/camera-view/camera-view.page').then(
-            (m) => m.CameraSettingsPage,
+            (m) => m.CameraViewPage,
           ),
       },
       {
