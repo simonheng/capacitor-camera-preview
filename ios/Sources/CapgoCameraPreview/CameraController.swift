@@ -40,6 +40,13 @@ class CameraController: NSObject {
     var zoomFactor: CGFloat = 1.0
 
     var videoFileURL: URL?
+    private let saneMaxZoomFactor: CGFloat = 25.5
+
+    var isUsingMultiLensVirtualCamera: Bool {
+        guard let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera else { return false }
+        // A rear multi-lens virtual camera will have a min zoom of 1.0 but support wider angles
+        return device.position == .back && device.isVirtualDevice && device.constituentDevices.count > 1
+    }
 }
 
 extension CameraController {
@@ -63,35 +70,48 @@ extension CameraController {
             let session = AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: AVMediaType.video, position: .unspecified)
 
             let cameras = session.devices.compactMap { $0 }
-            print("Camera discovery found \(cameras.count) cameras")
+
+            // Log all found devices for debugging
+            print("[CameraPreview] Found \(cameras.count) devices:")
             for camera in cameras {
-                print("Camera: \(camera.localizedName) - Position: \(camera.position.rawValue) - ID: \(camera.uniqueID)")
+                let constituentCount = camera.isVirtualDevice ? camera.constituentDevices.count : 1
+                print("[CameraPreview] - \(camera.localizedName) (Position: \(camera.position.rawValue), Virtual: \(camera.isVirtualDevice), Lenses: \(constituentCount), Zoom: \(camera.minAvailableVideoZoomFactor)-\(camera.maxAvailableVideoZoomFactor))")
             }
+
             guard !cameras.isEmpty else {
-                print("ERROR: No cameras found during device discovery")
+                print("[CameraPreview] ERROR: No cameras found.")
                 throw CameraControllerError.noCamerasAvailable
             }
 
-            for camera in cameras {
-                if camera.position == .front {
-                    self.frontCamera = camera
-                }
+            // --- Corrected Device Selection Logic ---
+            // Find the virtual device with the most constituent cameras (this is the most capable one)
+            let rearVirtualDevices = cameras.filter { $0.position == .back && $0.isVirtualDevice }
+            let bestRearVirtualDevice = rearVirtualDevices.max { $0.constituentDevices.count < $1.constituentDevices.count }
 
-                if camera.position == .back {
-                    self.rearCamera = camera
+            self.frontCamera = cameras.first(where: { $0.position == .front })
 
-                    // Configure rear camera focus mode, but don't fail if it errors
-                    do {
-                        try camera.lockForConfiguration()
-                        if camera.isFocusModeSupported(.continuousAutoFocus) {
-                            camera.focusMode = .continuousAutoFocus
-                        }
-                        camera.unlockForConfiguration()
-                    } catch {
-                        print("Warning: Could not configure rear camera focus mode: \(error)")
+            if let bestCamera = bestRearVirtualDevice {
+                self.rearCamera = bestCamera
+                print("[CameraPreview] Selected best virtual rear camera: \(bestCamera.localizedName) with \(bestCamera.constituentDevices.count) physical cameras.")
+            } else if let firstRearCamera = cameras.first(where: { $0.position == .back }) {
+                // Fallback for devices without a virtual camera system
+                self.rearCamera = firstRearCamera
+                print("[CameraPreview] WARN: No virtual rear camera found. Selected first available: \(firstRearCamera.localizedName)")
+            }
+            // --- End of Correction ---
+
+            if let rearCamera = self.rearCamera {
+                do {
+                    try rearCamera.lockForConfiguration()
+                    if rearCamera.isFocusModeSupported(.continuousAutoFocus) {
+                        rearCamera.focusMode = .continuousAutoFocus
                     }
+                    rearCamera.unlockForConfiguration()
+                } catch {
+                    print("[CameraPreview] WARN: Could not set focus mode on rear camera. \(error)")
                 }
             }
+
             if disableAudio == false {
                 self.audioDevice = AVCaptureDevice.default(for: AVMediaType.audio)
             }
@@ -99,6 +119,8 @@ extension CameraController {
 
         func configureDeviceInputs() throws {
             guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
+
+            var selectedDevice: AVCaptureDevice?
 
             // If deviceId is specified, use that specific device
             if let deviceId = deviceId {
@@ -108,70 +130,61 @@ extension CameraController {
                     position: .unspecified
                 ).devices
 
-                guard let selectedDevice = allDevices.first(where: { $0.uniqueID == deviceId }) else {
+                selectedDevice = allDevices.first(where: { $0.uniqueID == deviceId })
+                guard selectedDevice != nil else {
                     throw CameraControllerError.noCamerasAvailable
-                }
-
-                let deviceInput = try AVCaptureDeviceInput(device: selectedDevice)
-                if captureSession.canAddInput(deviceInput) {
-                    captureSession.addInput(deviceInput)
-
-                    // Set the camera inputs based on device position
-                    if selectedDevice.position == .front {
-                        self.frontCameraInput = deviceInput
-                        self.frontCamera = selectedDevice
-                        self.currentCameraPosition = .front
-                    } else {
-                        self.rearCameraInput = deviceInput
-                        self.rearCamera = selectedDevice
-                        self.currentCameraPosition = .rear
-
-                        try selectedDevice.lockForConfiguration()
-                        selectedDevice.focusMode = .continuousAutoFocus
-                        selectedDevice.unlockForConfiguration()
-                    }
-                } else {
-                    throw CameraControllerError.inputsAreInvalid
                 }
             } else {
-                // Use position-based selection (legacy behavior)
+                // Use position-based selection
                 if cameraPosition == "rear" {
-                    if let rearCamera = self.rearCamera {
-                        print("Configuring rear camera: \(rearCamera.localizedName)")
-                        self.rearCameraInput = try AVCaptureDeviceInput(device: rearCamera)
-
-                        if captureSession.canAddInput(self.rearCameraInput!) {
-                            captureSession.addInput(self.rearCameraInput!)
-                            print("Successfully added rear camera input")
-                        }
-
-                        self.currentCameraPosition = .rear
-                    } else {
-                        print("ERROR: Rear camera requested but not available")
-                        throw CameraControllerError.noCamerasAvailable
-                    }
+                    selectedDevice = self.rearCamera
                 } else if cameraPosition == "front" {
-                    if let frontCamera = self.frontCamera {
-                        print("Configuring front camera: \(frontCamera.localizedName)")
-                        self.frontCameraInput = try AVCaptureDeviceInput(device: frontCamera)
-
-                        if captureSession.canAddInput(self.frontCameraInput!) {
-                            captureSession.addInput(self.frontCameraInput!)
-                            print("Successfully added front camera input")
-                        } else {
-                            print("ERROR: Cannot add front camera input to session")
-                            throw CameraControllerError.inputsAreInvalid
-                        }
-
-                        self.currentCameraPosition = .front
-                    } else {
-                        print("ERROR: Front camera requested but not available")
-                        throw CameraControllerError.noCamerasAvailable
-                    }
-                } else {
-                    print("ERROR: Invalid camera position: \(cameraPosition)")
-                    throw CameraControllerError.noCamerasAvailable
+                    selectedDevice = self.frontCamera
                 }
+            }
+
+            guard let finalDevice = selectedDevice else {
+                print("[CameraPreview] ERROR: No camera device selected for position: \(cameraPosition)")
+                throw CameraControllerError.noCamerasAvailable
+            }
+
+            print("[CameraPreview] Configuring device: \(finalDevice.localizedName)")
+            let deviceInput = try AVCaptureDeviceInput(device: finalDevice)
+
+            if captureSession.canAddInput(deviceInput) {
+                captureSession.addInput(deviceInput)
+
+                if finalDevice.position == .front {
+                    self.frontCameraInput = deviceInput
+                    self.frontCamera = finalDevice
+                    self.currentCameraPosition = .front
+                } else {
+                    self.rearCameraInput = deviceInput
+                    self.rearCamera = finalDevice
+                    self.currentCameraPosition = .rear
+
+                    // --- Corrected Initial Zoom Logic ---
+                    try finalDevice.lockForConfiguration()
+                    if finalDevice.isFocusModeSupported(.continuousAutoFocus) {
+                        finalDevice.focusMode = .continuousAutoFocus
+                    }
+
+                    // On a multi-camera system, a zoom factor of 2.0 often corresponds to the standard "1x" wide-angle lens.
+                    // We set this as the default to provide a familiar starting point for users.
+                    let defaultWideAngleZoom: CGFloat = 2.0
+                    if finalDevice.isVirtualDevice && finalDevice.constituentDevices.count > 1 && finalDevice.videoZoomFactor != defaultWideAngleZoom {
+                        // Check if 2.0 is a valid zoom factor before setting it.
+                        if defaultWideAngleZoom >= finalDevice.minAvailableVideoZoomFactor && defaultWideAngleZoom <= finalDevice.maxAvailableVideoZoomFactor {
+                             print("[CameraPreview] Multi-camera system detected. Setting initial zoom to \(defaultWideAngleZoom) (standard wide-angle).")
+                             finalDevice.videoZoomFactor = defaultWideAngleZoom
+                        }
+                    }
+                    finalDevice.unlockForConfiguration()
+                    // --- End of Correction ---
+                }
+            } else {
+                print("[CameraPreview] ERROR: Cannot add device input to session.")
+                throw CameraControllerError.inputsAreInvalid
             }
 
             // Add audio input
@@ -590,9 +603,11 @@ extension CameraController {
             throw CameraControllerError.noCamerasAvailable
         }
 
+        let effectiveMaxZoom = min(device.maxAvailableVideoZoomFactor, self.saneMaxZoomFactor)
+
         return (
             min: Float(device.minAvailableVideoZoomFactor),
-            max: Float(device.maxAvailableVideoZoomFactor),
+            max: Float(effectiveMaxZoom),
             current: Float(device.videoZoomFactor)
         )
     }
@@ -611,7 +626,8 @@ extension CameraController {
             throw CameraControllerError.noCamerasAvailable
         }
 
-        let zoomLevel = max(device.minAvailableVideoZoomFactor, min(level, device.maxAvailableVideoZoomFactor))
+        let effectiveMaxZoom = min(device.maxAvailableVideoZoomFactor, self.saneMaxZoomFactor)
+        let zoomLevel = max(device.minAvailableVideoZoomFactor, min(level, effectiveMaxZoom))
 
         do {
             try device.lockForConfiguration()
@@ -921,7 +937,8 @@ extension CameraController: UIGestureRecognizerDelegate {
     private func handlePinch(_ pinch: UIPinchGestureRecognizer) {
         guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }
 
-        func minMaxZoom(_ factor: CGFloat) -> CGFloat { return max(1.0, min(factor, device.activeFormat.videoMaxZoomFactor)) }
+        let effectiveMaxZoom = min(device.maxAvailableVideoZoomFactor, self.saneMaxZoomFactor)
+        func minMaxZoom(_ factor: CGFloat) -> CGFloat { return max(device.minAvailableVideoZoomFactor, min(factor, effectiveMaxZoom)) }
 
         func update(scale factor: CGFloat) {
             do {

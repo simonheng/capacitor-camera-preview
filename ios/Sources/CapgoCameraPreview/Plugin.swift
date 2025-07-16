@@ -672,15 +672,26 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             let zoomInfo = try self.cameraController.getZoom()
             let lensInfo = try self.cameraController.getCurrentLensInfo()
             
+            var minZoom = zoomInfo.min
+            var maxZoom = zoomInfo.max
+            var currentZoom = zoomInfo.current
+
+            // If using the multi-lens camera, translate the native zoom values for JS
+            if self.cameraController.isUsingMultiLensVirtualCamera {
+                minZoom -= 0.5
+                maxZoom -= 0.5
+                currentZoom -= 0.5
+            }
+
             call.resolve([
-                "min": zoomInfo.min,
-                "max": zoomInfo.max,
-                "current": zoomInfo.current,
+                "min": minZoom,
+                "max": maxZoom,
+                "current": currentZoom,
                 "lens": [
                     "focalLength": lensInfo.focalLength,
                     "deviceType": lensInfo.deviceType,
                     "baseZoomRatio": lensInfo.baseZoomRatio,
-                    "digitalZoom": Float(zoomInfo.current) / lensInfo.baseZoomRatio
+                    "digitalZoom": Float(currentZoom) / lensInfo.baseZoomRatio
                 ]
             ])
         } catch {
@@ -694,9 +705,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             return
         }
 
-        guard let level = call.getFloat("level") else {
+        guard var level = call.getFloat("level") else {
             call.reject("level parameter is required")
             return
+        }
+
+        // If using the multi-lens camera, translate the JS zoom value for the native layer
+        if self.cameraController.isUsingMultiLensVirtualCamera {
+            level += 0.5
         }
 
         let ramp = call.getBool("ramp") ?? true
