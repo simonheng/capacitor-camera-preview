@@ -323,7 +323,7 @@ public class CameraPreview
     final int width = call.getInt("width", 0);
     final int height = call.getInt("height", 0);
     final int paddingBottom = call.getInt("paddingBottom", 0);
-    final boolean toBack = call.getBoolean("toBack", "back".equals(position));
+    final boolean toBack = call.getBoolean("toBack", true);
     final boolean storeToFile = call.getBoolean("storeToFile", false);
     final boolean enableOpacity = call.getBoolean("enableOpacity", false);
     final boolean enableZoom = call.getBoolean("enableZoom", false);

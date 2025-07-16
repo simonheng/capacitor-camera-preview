@@ -531,7 +531,7 @@ Defines the configuration options for starting the camera preview.
 | **`x`**                            | <code>number</code>  | The horizontal origin of the preview, in pixels.                                                                  |                     |
 | **`y`**                            | <code>number</code>  | The vertical origin of the preview, in pixels.                                                                    |                     |
 | **`includeSafeAreaInsets`**        | <code>boolean</code> | Adjusts the y-position to account for safe areas (e.g., notches).                                                 | <code>false</code>  |
-| **`toBack`**                       | <code>boolean</code> | If true, places the preview behind the webview.                                                                   | <code>false</code>  |
+| **`toBack`**                       | <code>boolean</code> | If true, places the preview behind the webview.                                                                   | <code>true</code>   |
 | **`paddingBottom`**                | <code>number</code>  | Bottom padding for the preview, in pixels.                                                                        |                     |
 | **`rotateWhenOrientationChanged`** | <code>boolean</code> | Whether to rotate the preview when the device orientation changes.                                                | <code>true</code>   |
 | **`position`**                     | <code>string</code>  | The camera to use.                                                                                                | <code>"rear"</code> |

@@ -282,7 +282,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
 
         self.rotateWhenOrientationChanged = call.getBool("rotateWhenOrientationChanged") ?? true
-        self.toBack = call.getBool("toBack") ?? false
+        self.toBack = call.getBool("toBack") ?? true
         self.storeToFile = call.getBool("storeToFile") ?? false
         self.enableZoom = call.getBool("enableZoom") ?? false
         self.disableAudio = call.getBool("disableAudio") ?? false

@@ -107,7 +107,7 @@ export interface CameraPreviewOptions {
   /** 
    * If true, places the preview behind the webview.
    * @platform android
-   * @default false
+   * @default true
    */
   toBack?: boolean;
   /** 
