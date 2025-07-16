@@ -46,6 +46,8 @@ export interface CameraDevice {
   minZoom: number;
   /** The overall maximum zoom factor available across all lenses on this device. */
   maxZoom: number;
+  /** Identifies whether the device is a logical camera (composed of multiple physical lenses). */
+  isLogical: boolean;
 }
 
 /**

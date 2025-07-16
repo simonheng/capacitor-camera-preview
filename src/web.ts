@@ -331,6 +331,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         label: "Front Camera",
         position: "front",
         lenses: frontDevices,
+        isLogical: false,
         minZoom: Math.min(...frontDevices.map(d => d.minZoom)),
         maxZoom: Math.max(...frontDevices.map(d => d.maxZoom))
       });
@@ -342,6 +343,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         label: "Back Camera", 
         position: "rear",
         lenses: backDevices,
+        isLogical: false,
         minZoom: Math.min(...backDevices.map(d => d.minZoom)),
         maxZoom: Math.max(...backDevices.map(d => d.maxZoom))
       });

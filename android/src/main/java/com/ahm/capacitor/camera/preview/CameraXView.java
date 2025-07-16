@@ -43,6 +43,7 @@ import java.util.concurrent.Executor;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import android.hardware.camera2.CameraCharacteristics;
+import androidx.camera.core.CameraInfo;
 
 public class CameraXView implements LifecycleOwner {
     private static final String TAG = "CameraPreview CameraXView";
@@ -506,50 +507,43 @@ public class CameraXView implements LifecycleOwner {
         try {
             ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
             ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+            android.hardware.camera2.CameraManager cameraManager = (android.hardware.camera2.CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
 
-            for (androidx.camera.core.CameraInfo cameraInfo : cameraProvider.getAvailableCameraInfos()) {
-                List<LensInfo> lenses = new ArrayList<>();
+            for (CameraInfo cameraInfo : cameraProvider.getAvailableCameraInfos()) {
+                String logicalCameraId = Camera2CameraInfo.from(cameraInfo).getCameraId();
                 String position = isBackCamera(cameraInfo) ? "rear" : "front";
                 float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
-                float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
-                
+                float maxZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMaxZoomRatio();
+
+                // Add the logical camera first
+                List<LensInfo> logicalLenses = new ArrayList<>();
+                logicalLenses.add(new LensInfo(4.25f, "wideAngle", 1.0f, maxZoom)); // Represent as a single wide lens
+                devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
+                    logicalCameraId, "Logical Camera (" + position + ")", position, logicalLenses, minZoom, maxZoom, true
+                ));
+
+                // Then add the physical cameras
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    // Use Camera2 interop to get physical devices
-                    Camera2CameraInfo camera2Info = Camera2CameraInfo.from(cameraInfo);
-                    String logicalCameraId = camera2Info.getCameraId();
-                    android.hardware.camera2.CameraManager cameraManager = (android.hardware.camera2.CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
-                    
                     for (String physicalId : cameraManager.getCameraCharacteristics(logicalCameraId).getPhysicalCameraIds()) {
+                        if (physicalId.equals(logicalCameraId)) continue; // Skip the logical device itself
+
                         CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(physicalId);
-                        int[] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
                         String deviceType = "wideAngle"; // default
-                        assert capabilities != null;
-                        if (Arrays.stream(capabilities).anyMatch(c -> c == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_ULTRA_HIGH_RESOLUTION_SENSOR)) {
-                            deviceType = "ultraWide";
-                        } else if (Arrays.stream(capabilities).anyMatch(c -> c == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)) {
-                             // Heuristic: check focal lengths to guess type
-                            float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
-                            if (focalLengths != null && focalLengths.length > 0) {
-                                if (focalLengths[0] < 3.0) deviceType = "ultraWide";
-                                else if (focalLengths[0] > 5.0) deviceType = "telephoto";
-                            }
+                        float[] focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                        if (focalLengths != null && focalLengths.length > 0) {
+                            if (focalLengths[0] < 3.0) deviceType = "ultraWide";
+                            else if (focalLengths[0] > 5.0) deviceType = "telephoto";
                         }
-                        // Note: Android doesn't have direct enums for dual/triple/etc. like iOS.
-                        // This logic is a best-effort approximation.
-                        lenses.add(new LensInfo(4.25f, deviceType, 1.0f, 1.0f));
+                        
+                        List<LensInfo> physicalLenses = new ArrayList<>();
+                        physicalLenses.add(new LensInfo(focalLengths != null ? focalLengths[0] : 4.25f, deviceType, 1.0f, 1.0f));
+                        
+                        devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
+                            physicalId, "Physical " + deviceType + " (" + position + ")", position, physicalLenses, 1.0f, 1.0f, false
+                        ));
                     }
                 }
-
-                if (lenses.isEmpty()) {
-                    // Fallback for older devices or single-lens cameras
-                    lenses.add(new LensInfo(4.25f, "wideAngle", 1.0f, maxZoom));
-                }
-                
-                devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
-                    getCameraId(cameraInfo), "Camera " + getCameraId(cameraInfo), position, lenses, minZoom, maxZoom
-                ));
             }
-
             return devices;
         } catch (Exception e) {
             Log.e(TAG, "getAvailableDevicesStatic: Error getting devices", e);
@@ -748,7 +742,6 @@ public class CameraXView implements LifecycleOwner {
     public static List<Size> getSupportedPictureSizes(Context context, String facing) {
         List<Size> sizes = new ArrayList<>();
         try {
-            ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
             CameraSelector.Builder builder = new CameraSelector.Builder();
             if ("front".equals(facing)) {
                 builder.requireLensFacing(CameraSelector.LENS_FACING_FRONT);

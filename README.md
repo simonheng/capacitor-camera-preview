@@ -600,14 +600,15 @@ Defines the options for setting the camera preview's opacity.
 
 Represents a physical camera on the device (e.g., the front-facing camera).
 
-| Prop           | Type                                                      | Description                                                                 |
-| -------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **`deviceId`** | <code>string</code>                                       | A unique identifier for the camera device.                                  |
-| **`label`**    | <code>string</code>                                       | A human-readable name for the camera device.                                |
-| **`position`** | <code><a href="#cameraposition">CameraPosition</a></code> | The physical position of the camera on the device.                          |
-| **`lenses`**   | <code>CameraLens[]</code>                                 | A list of all available lenses for this camera device.                      |
-| **`minZoom`**  | <code>number</code>                                       | The overall minimum zoom factor available across all lenses on this device. |
-| **`maxZoom`**  | <code>number</code>                                       | The overall maximum zoom factor available across all lenses on this device. |
+| Prop            | Type                                                      | Description                                                                               |
+| --------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **`deviceId`**  | <code>string</code>                                       | A unique identifier for the camera device.                                                |
+| **`label`**     | <code>string</code>                                       | A human-readable name for the camera device.                                              |
+| **`position`**  | <code><a href="#cameraposition">CameraPosition</a></code> | The physical position of the camera on the device.                                        |
+| **`lenses`**    | <code>CameraLens[]</code>                                 | A list of all available lenses for this camera device.                                    |
+| **`minZoom`**   | <code>number</code>                                       | The overall minimum zoom factor available across all lenses on this device.               |
+| **`maxZoom`**   | <code>number</code>                                       | The overall maximum zoom factor available across all lenses on this device.               |
+| **`isLogical`** | <code>boolean</code>                                      | Identifies whether the device is a logical camera (composed of multiple physical lenses). |
 
 
 #### CameraLens

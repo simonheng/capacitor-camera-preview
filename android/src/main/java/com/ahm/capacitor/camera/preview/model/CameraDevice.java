@@ -12,14 +12,16 @@ public class CameraDevice {
     private final List<LensInfo> lenses;
     private final float minZoom;
     private final float maxZoom;
+    private final boolean isLogical;
 
-    public CameraDevice(String deviceId, String label, String position, List<LensInfo> lenses, float minZoom, float maxZoom) {
+    public CameraDevice(String deviceId, String label, String position, List<LensInfo> lenses, float minZoom, float maxZoom, boolean isLogical) {
         this.deviceId = deviceId;
         this.label = label;
         this.position = position;
         this.lenses = lenses;
         this.minZoom = minZoom;
         this.maxZoom = maxZoom;
+        this.isLogical = isLogical;
     }
 
     public String getDeviceId() {
@@ -44,5 +46,9 @@ public class CameraDevice {
 
     public float getMaxZoom() {
         return maxZoom;
+    }
+    
+    public boolean isLogical() {
+        return isLogical;
     }
 } 

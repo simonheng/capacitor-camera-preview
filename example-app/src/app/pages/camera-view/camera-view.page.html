@@ -11,27 +11,42 @@
       <ion-card-title>Available Devices</ion-card-title>
     </ion-card-header>
     <ion-card-content>
-      @for(device of cameraDevices(); track device.deviceId){
-        <ion-list>
+      <!-- Rear Cameras -->
+      <ion-list>
+        <ion-item-divider>
+          <ion-label>Rear Cameras</ion-label>
+        </ion-item-divider>
+        @for(device of rearCameras(); track device.deviceId){
           <ion-item>
             <ion-label>
-              <h3>{{ device.position === 'rear' ? 'Back Camera' : 'Front Camera' }}</h3>
+              <h3>{{ device.label }} {{ device.isLogical ? '(Logical - Default)' : '' }}</h3>
               <p>ID: {{ device.deviceId }}</p>
               <p>Zoom: {{ device.minZoom }}x - {{ device.maxZoom }}x</p>
+              @for(lens of device.lenses; track lens.deviceType){
+                <p class="lens-info">Lens: {{ lens.deviceType }} ({{ lens.baseZoomRatio }}x)</p>
+              }
             </ion-label>
           </ion-item>
-          <ion-list>
-            @for(lens of device.lenses; track lens.deviceType){
-              <ion-item>
-                <ion-label>
-                  <p>Lens: {{ lens.deviceType }}</p>
-                  <p>Base Zoom: {{ lens.baseZoomRatio }}x</p>
-                </ion-label>
-              </ion-item>
-            }
-          </ion-list>
-        </ion-list>
-      }
+        }
+      </ion-list>
+      <!-- Front Cameras -->
+      <ion-list>
+        <ion-item-divider>
+          <ion-label>Front Cameras</ion-label>
+        </ion-item-divider>
+        @for(device of frontCameras(); track device.deviceId){
+          <ion-item>
+            <ion-label>
+              <h3>{{ device.label }} {{ device.isLogical ? '(Logical - Default)' : '' }}</h3>
+              <p>ID: {{ device.deviceId }}</p>
+              <p>Zoom: {{ device.minZoom }}x - {{ device.maxZoom }}x</p>
+              @for(lens of device.lenses; track lens.deviceType){
+                <p class="lens-info">Lens: {{ lens.deviceType }} ({{ lens.baseZoomRatio }}x)</p>
+              }
+            </ion-label>
+          </ion-item>
+        }
+      </ion-list>
     </ion-card-content>
   </ion-card>
 

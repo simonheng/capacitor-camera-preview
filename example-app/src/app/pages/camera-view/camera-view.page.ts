@@ -1,7 +1,8 @@
-import { Component, inject, model, OnInit, signal } from '@angular/core';
+import { Component, inject, model, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   IonButton,
+  IonItemDivider,
   IonCard,
   IonCardContent,
   IonCardHeader,
@@ -38,6 +39,7 @@ import { GalleryService } from '../../services/gallery.service';
   imports: [
     FormsModule,
     IonButton,
+    IonItemDivider,
     IonCard,
     IonCardContent,
     IonCardHeader,
@@ -63,6 +65,8 @@ export class CameraViewPage implements OnInit {
   readonly #modalController = inject(ModalController);
 
   protected readonly cameraDevices = signal<CameraDevice[]>([]);
+  protected readonly rearCameras = computed(() => this.cameraDevices().filter(d => d.position === 'rear'));
+  protected readonly frontCameras = computed(() => this.cameraDevices().filter(d => d.position === 'front'));
   protected readonly testResults = signal<string>('');
   
   // Basic camera settings
