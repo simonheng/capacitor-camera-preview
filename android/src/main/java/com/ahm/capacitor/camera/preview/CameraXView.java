@@ -10,10 +10,10 @@ import android.util.Log;
 import android.util.Size;
 import android.view.ViewGroup;
 import android.webkit.WebView;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.camera.core.Camera;
+import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
@@ -27,12 +27,10 @@ import androidx.core.content.ContextCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
-
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
 import com.google.common.util.concurrent.ListenableFuture;
-
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.Arrays;
@@ -42,10 +40,11 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import android.hardware.camera2.CameraCharacteristics;
-import androidx.camera.core.CameraInfo;
 
 public class CameraXView implements LifecycleOwner {
     private static final String TAG = "CameraPreview CameraXView";
@@ -59,32 +58,21 @@ public class CameraXView implements LifecycleOwner {
         void onCameraStartError(String message);
     }
 
-    // CameraX components
     private ProcessCameraProvider cameraProvider;
     private Camera camera;
     private ImageCapture imageCapture;
     private ImageCapture sampleImageCapture;
     private PreviewView previewView;
-
-    // Camera state
     private CameraSelector currentCameraSelector;
     private String currentDeviceId;
     private int currentFlashMode = ImageCapture.FLASH_MODE_OFF;
-
-    // Configuration
     private CameraSessionConfiguration sessionConfig;
     private CameraXViewListener listener;
     private final Context context;
     private final WebView webView;
-
-    // Lifecycle
     private final LifecycleRegistry lifecycleRegistry;
-
-    // Threading
-    private HandlerThread backgroundThread;
     private final Executor mainExecutor;
-
-    // State tracking
+    private ExecutorService cameraExecutor;
     private boolean isRunning = false;
 
     public CameraXView(Context context, WebView webView) {
@@ -93,12 +81,7 @@ public class CameraXView implements LifecycleOwner {
         this.lifecycleRegistry = new LifecycleRegistry(this);
         this.mainExecutor = ContextCompat.getMainExecutor(context);
         
-        // Initialize lifecycle on main thread
-        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-            lifecycleRegistry.setCurrentState(Lifecycle.State.CREATED);
-        } else {
-            mainExecutor.execute(() -> lifecycleRegistry.setCurrentState(Lifecycle.State.CREATED));
-        }
+        mainExecutor.execute(() -> lifecycleRegistry.setCurrentState(Lifecycle.State.CREATED));
     }
 
     @NonNull
@@ -116,67 +99,36 @@ public class CameraXView implements LifecycleOwner {
     }
 
     public void startSession(CameraSessionConfiguration config) {
-        Log.d(TAG, "startSession: Starting CameraX session with config");
-        Log.d(TAG, "startSession: DeviceId=" + config.getDeviceId() +
-                   ", Position=" + config.getPosition() +
-                   ", Dimensions=" + config.getWidth() + "x" + config.getHeight());
-
         this.sessionConfig = config;
-
-        try {
-            startBackgroundThread();
+        cameraExecutor = Executors.newSingleThreadExecutor();
+        mainExecutor.execute(() -> {
             lifecycleRegistry.setCurrentState(Lifecycle.State.STARTED);
             setupCamera();
-        } catch (Exception e) {
-            Log.e(TAG, "startSession: Error during initialization", e);
-            if (listener != null) {
-                listener.onCameraStartError("Camera initialization failed: " + e.getMessage());
-            }
-        }
+        });
     }
 
     public void stopSession() {
-        Log.d(TAG, "stopSession: Stopping CameraX session");
         isRunning = false;
-        
-        if (cameraProvider != null) {
-            cameraProvider.unbindAll();
-        }
-        
-        lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
-        stopBackgroundThread();
-        removePreviewView();
-        Log.d(TAG, "stopSession: CameraX session stopped");
-    }
-
-    private void startBackgroundThread() {
-        backgroundThread = new HandlerThread("CameraXBackground");
-        backgroundThread.start();
-    }
-
-    private void stopBackgroundThread() {
-        if (backgroundThread != null) {
-            backgroundThread.quitSafely();
-            try {
-                backgroundThread.join();
-                backgroundThread = null;
-            } catch (InterruptedException e) {
-                Log.e(TAG, "Error stopping background thread", e);
+        mainExecutor.execute(() -> {
+            if (cameraProvider != null) {
+                cameraProvider.unbindAll();
             }
-        }
+            lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
+            if (cameraExecutor != null) {
+                cameraExecutor.shutdownNow();
+            }
+            removePreviewView();
+        });
     }
 
     private void setupCamera() {
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = 
-            ProcessCameraProvider.getInstance(context);
-
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
         cameraProviderFuture.addListener(() -> {
             try {
                 cameraProvider = cameraProviderFuture.get();
                 setupPreviewView();
                 bindCameraUseCases();
-            } catch (ExecutionException | InterruptedException e) {
-                Log.e(TAG, "setupCamera: Error initializing camera", e);
+            } catch (Exception e) {
                 if (listener != null) {
                     listener.onCameraStartError("Error initializing camera: " + e.getMessage());
                 }
@@ -185,42 +137,22 @@ public class CameraXView implements LifecycleOwner {
     }
 
     private void setupPreviewView() {
-        Log.d(TAG, "setupPreviewView: Setting up CameraX preview view");
-
-        // Remove existing preview view if any
         if (previewView != null) {
             removePreviewView();
         }
-
-        // Make WebView transparent if needed
         if (sessionConfig.isToBack()) {
             webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         }
-
         previewView = new PreviewView(context);
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
-
-        // Set layout parameters
-        ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(
-            sessionConfig.getWidth(),
-            sessionConfig.getHeight() - sessionConfig.getPaddingBottom()
-        );
-        previewView.setLayoutParams(layoutParams);
-
         ViewGroup parent = (ViewGroup) webView.getParent();
         if (parent != null) {
-            if (sessionConfig.isToBack()) {
-                parent.addView(previewView, 0);
-                parent.bringChildToFront(webView);
-            } else {
-                parent.addView(previewView);
-            }
+            parent.addView(previewView, new ViewGroup.LayoutParams(sessionConfig.getWidth(), sessionConfig.getHeight()));
+            if(sessionConfig.isToBack()) webView.bringToFront();
         }
     }
 
     private void removePreviewView() {
-        Log.d(TAG, "removePreviewView: Removing preview view");
-
         if (previewView != null) {
             ViewGroup parent = (ViewGroup) previewView.getParent();
             if (parent != null) {
@@ -228,69 +160,28 @@ public class CameraXView implements LifecycleOwner {
             }
             previewView = null;
         }
-
-        // Reset WebView background
         webView.setBackgroundColor(android.graphics.Color.WHITE);
     }
-
+    
     private void bindCameraUseCases() {
-        if (cameraProvider == null) {
-            Log.e(TAG, "bindCameraUseCases: Camera provider is null");
-            return;
-        }
-
-        try {
-            // Build camera selector
-            currentCameraSelector = buildCameraSelector();
-
-            // Define the resolution strategy
-            ResolutionStrategy resolutionStrategy = new ResolutionStrategy(
-                new Size(1920, 1080), 
-                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER
-            );
-            ResolutionSelector resolutionSelector = new ResolutionSelector.Builder()
-                .setResolutionStrategy(resolutionStrategy)
-                .build();
-
-            // Build use cases with the new ResolutionSelector
-            Preview preview = new Preview.Builder()
-                    .setResolutionSelector(resolutionSelector)
-                    .build();
-
-            imageCapture = new ImageCapture.Builder()
-                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                .setFlashMode(currentFlashMode)
-                .setResolutionSelector(resolutionSelector)
-                .build();
-
-            // For sample capture, we'll reuse the same imageCapture instance
-            sampleImageCapture = imageCapture;
-
-            // Connect preview to PreviewView
-            preview.setSurfaceProvider(previewView.getSurfaceProvider());
-
-            // Unbind any existing use cases and bind new ones
-            cameraProvider.unbindAll();
-            camera = cameraProvider.bindToLifecycle(this, currentCameraSelector, preview, imageCapture);
-
-            // Set initial zoom if specified
-            if (sessionConfig.getZoomFactor() != 1.0f) {
+        if (cameraProvider == null) return;
+        mainExecutor.execute(() -> {
+            try {
+                currentCameraSelector = buildCameraSelector();
+                ResolutionSelector resolutionSelector = new ResolutionSelector.Builder().setResolutionStrategy(new ResolutionStrategy(new Size(1920, 1080), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER)).build();
+                Preview preview = new Preview.Builder().setResolutionSelector(resolutionSelector).build();
+                imageCapture = new ImageCapture.Builder().setResolutionSelector(resolutionSelector).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setFlashMode(currentFlashMode).build();
+                sampleImageCapture = imageCapture;
+                preview.setSurfaceProvider(previewView.getSurfaceProvider());
+                cameraProvider.unbindAll();
+                camera = cameraProvider.bindToLifecycle(this, currentCameraSelector, preview, imageCapture);
                 setZoomInternal(sessionConfig.getZoomFactor());
+                isRunning = true;
+                if (listener != null) listener.onCameraStarted();
+            } catch (Exception e) {
+                if (listener != null) listener.onCameraStartError("Error binding camera: " + e.getMessage());
             }
-
-            isRunning = true;
-            Log.d(TAG, "bindCameraUseCases: Camera bound successfully");
-            
-            if (listener != null) {
-                listener.onCameraStarted();
-            }
-
-        } catch (Exception e) {
-            Log.e(TAG, "bindCameraUseCases: Error binding camera", e);
-            if (listener != null) {
-                listener.onCameraStartError("Error binding camera: " + e.getMessage());
-            }
-        }
+        });
     }
 
     @OptIn(markerClass = ExperimentalCamera2Interop.class)
@@ -299,56 +190,19 @@ public class CameraXView implements LifecycleOwner {
         final String deviceId = sessionConfig.getDeviceId();
 
         if (deviceId != null && !deviceId.isEmpty()) {
-            Log.d(TAG, "buildCameraSelector: Attempting to select camera with specific deviceId: " + deviceId);
             builder.addCameraFilter(cameraInfos -> {
-                List<androidx.camera.core.CameraInfo> filtered = new ArrayList<>();
-                for (androidx.camera.core.CameraInfo cameraInfo : cameraInfos) {
-                    try {
-                        String id = Camera2CameraInfo.from(cameraInfo).getCameraId();
-                        if (deviceId.equals(id)) {
-                            filtered.add(cameraInfo);
-                            return filtered; // Found the exact device, return immediately
-                        }
-                    } catch (Exception e) {
-                        // Ignore cameras that can't be queried
+                for (CameraInfo cameraInfo : cameraInfos) {
+                    if (deviceId.equals(Camera2CameraInfo.from(cameraInfo).getCameraId())) {
+                        return Collections.singletonList(cameraInfo);
                     }
                 }
-                // If we get here, the specific deviceId was not found, return empty to signal an issue
-                Log.w(TAG, "buildCameraSelector: Could not find camera with deviceId: " + deviceId);
                 return Collections.emptyList();
             });
         } else {
-             // Fallback to position-based selection
             String position = sessionConfig.getPosition();
             int requiredFacing = "front".equals(position) ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
-            
-            Log.d(TAG, "buildCameraSelector: Enabling automatic lens switching for " + position);
-            
-            builder.addCameraFilter(cameraInfos -> {
-                List<androidx.camera.core.CameraInfo> filteredCameras = new ArrayList<>();
-                android.hardware.camera2.CameraManager cameraManager = (android.hardware.camera2.CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
-
-                for (androidx.camera.core.CameraInfo cameraInfo : cameraInfos) {
-                    try {
-                        // Use CameraManager to get characteristics
-                        String cameraId = Camera2CameraInfo.from(cameraInfo).getCameraId();
-                        final boolean isLogical = isIsLogical(cameraManager, cameraId);
-
-                        if (cameraInfo.getLensFacing() == requiredFacing && isLogical) {
-                            // Default to the logical camera for this position
-                            filteredCameras.add(cameraInfo);
-                            return filteredCameras;
-                        }
-                    } catch(Exception e) {
-                        // ignore camera that cannot be queried
-                    }
-                }
-                
-                Log.d(TAG, "buildCameraSelector: Could not find a default logical camera, providing all " + cameraInfos.size() + " cameras for selection.");
-                return cameraInfos; // Fallback to all available cameras if no logical one is found
-            });
+            builder.requireLensFacing(requiredFacing);
         }
-
         return builder.build();
     }
 
@@ -415,7 +269,7 @@ public class CameraXView implements LifecycleOwner {
 
         imageCapture.takePicture(
             outputFileOptions,
-            ContextCompat.getMainExecutor(context),
+            cameraExecutor,
             new ImageCapture.OnImageSavedCallback() {
                 @Override
                 public void onError(@NonNull ImageCaptureException exception) {
@@ -472,7 +326,7 @@ public class CameraXView implements LifecycleOwner {
         }
 
         sampleImageCapture.takePicture(
-            ContextCompat.getMainExecutor(context),
+            cameraExecutor,
             new ImageCapture.OnImageCapturedCallback() {
                 @Override
                 public void onError(@NonNull ImageCaptureException exception) {
@@ -704,7 +558,7 @@ public class CameraXView implements LifecycleOwner {
                 } catch (Exception e) {
                     Log.e(TAG, "setZoom: Error checking final zoom", e);
                 }
-            }, ContextCompat.getMainExecutor(context));
+            }, mainExecutor);
             
         } catch (Exception e) {
             Log.e(TAG, "setZoom: Failed to set zoom to " + zoomRatio, e);
@@ -884,15 +738,46 @@ public class CameraXView implements LifecycleOwner {
         return currentDeviceId != null ? currentDeviceId : "unknown";
     }
 
+    @OptIn(markerClass = ExperimentalCamera2Interop.class)
     public void switchToDevice(String deviceId) {
-        Log.d(TAG, "switchToDevice: Switching to device " + deviceId);
-        currentDeviceId = deviceId;
+        Log.d(TAG, "switchToDevice: Attempting to switch to device " + deviceId);
         
-        // Camera operations must run on main thread
         mainExecutor.execute(() -> {
-            // For CameraX, we need to rebuild the camera selector and rebind
-            currentCameraSelector = buildCameraSelector();
-            bindCameraUseCases();
+            try {
+                List<CameraInfo> cameraInfos = cameraProvider.getAvailableCameraInfos();
+                CameraInfo targetCameraInfo = null;
+                for (CameraInfo cameraInfo : cameraInfos) {
+                    if (deviceId.equals(Camera2CameraInfo.from(cameraInfo).getCameraId())) {
+                        targetCameraInfo = cameraInfo;
+                        break;
+                    }
+                }
+
+                if (targetCameraInfo != null) {
+                    Log.d(TAG, "switchToDevice: Found matching CameraInfo for deviceId: " + deviceId);
+                    final CameraInfo finalTarget = targetCameraInfo;
+
+                    CameraSelector newSelector = new CameraSelector.Builder()
+                        .addCameraFilter(cameras -> {
+                            // This filter will receive a list of all cameras and must return the one we want.
+                            for (CameraInfo camera : cameras) {
+                                if (Camera2CameraInfo.from(camera).getCameraId().equals(deviceId)) {
+                                    return Collections.singletonList(camera);
+                                }
+                            }
+                            // Should not happen if our initial check passed, but as a fallback...
+                            return Collections.emptyList();
+                        }).build();
+
+                    currentCameraSelector = newSelector;
+                    currentDeviceId = deviceId;
+                    bindCameraUseCases(); // Rebind with the new, highly specific selector
+                } else {
+                    Log.e(TAG, "switchToDevice: Could not find any CameraInfo matching deviceId: " + deviceId);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "switchToDevice: Error switching camera", e);
+            }
         });
     }
 
@@ -926,7 +811,7 @@ public class CameraXView implements LifecycleOwner {
         currentDeviceId = null;
         
         // Camera operations must run on main thread
-        mainExecutor.execute(() -> {
+        cameraExecutor.execute(() -> {
             currentCameraSelector = buildCameraSelector();
             bindCameraUseCases();
         });

@@ -109,18 +109,17 @@ public class CameraPreview
     bridge
       .getActivity()
       .runOnUiThread(
-              () -> {
-                getBridge()
-                  .getActivity()
-                  .setRequestedOrientation(previousOrientationRequest);
-                if (cameraXView != null && cameraXView.isRunning()) {
-                  cameraXView.stopSession();
-                  cameraXView = null;
-                  call.resolve();
-                } else {
-                  call.reject("camera already stopped");
-                }
-              }
+        () -> {
+          getBridge()
+            .getActivity()
+            .setRequestedOrientation(previousOrientationRequest);
+
+          if (cameraXView != null && cameraXView.isRunning()) {
+            cameraXView.stopSession();
+            cameraXView = null;
+          }
+          call.resolve();
+        }
       );
   }
 
