@@ -828,6 +828,32 @@ public class CameraXView implements LifecycleOwner {
         return sameFacingCameras;
     }
 
+    public static List<Size> getSupportedPictureSizes(Context context, String facing) {
+        List<Size> sizes = new ArrayList<>();
+        try {
+            ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
+            ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+            CameraSelector.Builder builder = new CameraSelector.Builder();
+            if ("front".equals(facing)) {
+                builder.requireLensFacing(CameraSelector.LENS_FACING_FRONT);
+            } else {
+                builder.requireLensFacing(CameraSelector.LENS_FACING_BACK);
+            }
+
+            // This part is complex because we need characteristics, which are not directly on CameraInfo.
+            // For now, returning a static list of common sizes.
+            // A more advanced implementation would use Camera2interop to get StreamConfigurationMap.
+            sizes.add(new Size(4032, 3024));
+            sizes.add(new Size(1920, 1080));
+            sizes.add(new Size(1280, 720));
+            sizes.add(new Size(640, 480));
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting supported picture sizes", e);
+        }
+        return sizes;
+    }
+
     private void setZoomInternal(float zoomRatio) {
         if (camera != null) {
             try {
@@ -982,5 +1008,11 @@ public class CameraXView implements LifecycleOwner {
             currentCameraSelector = buildCameraSelector();
             bindCameraUseCases();
         });
+    }
+
+    public void setOpacity(float opacity) {
+        if (previewView != null) {
+            previewView.setAlpha(opacity);
+        }
     }
 } 

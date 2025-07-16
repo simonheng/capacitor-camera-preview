@@ -24,6 +24,7 @@ import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
 import java.util.List;
 import java.util.Objects;
+import android.util.Size;
 
 @CapacitorPlugin(
   name = "CameraPreview",
@@ -216,6 +217,61 @@ public class CameraPreview
     }
     cameraXView.switchToDevice(deviceId);
     call.resolve();
+  }
+
+  @PluginMethod
+  public void getSupportedPictureSizes(final PluginCall call) {
+    JSArray supportedPictureSizesResult = new JSArray();
+    List<Size> rearSizes = CameraXView.getSupportedPictureSizes(getContext(), "rear");
+    JSObject rear = new JSObject();
+    rear.put("facing", "rear");
+    JSArray rearSizesJs = new JSArray();
+    for(Size size : rearSizes) {
+      JSObject sizeJs = new JSObject();
+      sizeJs.put("width", size.getWidth());
+      sizeJs.put("height", size.getHeight());
+      rearSizesJs.put(sizeJs);
+    }
+    rear.put("supportedPictureSizes", rearSizesJs);
+    supportedPictureSizesResult.put(rear);
+    
+    List<Size> frontSizes = CameraXView.getSupportedPictureSizes(getContext(), "front");
+    JSObject front = new JSObject();
+    front.put("facing", "front");
+    JSArray frontSizesJs = new JSArray();
+    for(Size size : frontSizes) {
+      JSObject sizeJs = new JSObject();
+      sizeJs.put("width", size.getWidth());
+      sizeJs.put("height", size.getHeight());
+      frontSizesJs.put(sizeJs);
+    }
+    front.put("supportedPictureSizes", frontSizesJs);
+    supportedPictureSizesResult.put(front);
+    
+    JSObject ret = new JSObject();
+    ret.put("supportedPictureSizes", supportedPictureSizesResult);
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void setOpacity(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    Float opacity = call.getFloat("opacity", 1.0f);
+    cameraXView.setOpacity(opacity);
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void getHorizontalFov(PluginCall call) {
+    // CameraX does not provide a simple way to get FoV.
+    // This would require Camera2 interop to access camera characteristics.
+    // Returning a default/estimated value.
+    JSObject ret = new JSObject();
+    ret.put("result", 60.0); // A common default FoV
+    call.resolve(ret);
   }
 
   @PluginMethod
