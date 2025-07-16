@@ -205,7 +205,7 @@ public class CameraPreview
   }
 
   @PluginMethod
-  public void switchToDevice(PluginCall call) {
+  public void setDeviceId(PluginCall call) {
     String deviceId = call.getString("deviceId");
     if (deviceId == null || deviceId.isEmpty()) {
       call.reject("deviceId parameter is required");
