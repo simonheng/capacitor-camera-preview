@@ -507,17 +507,6 @@ public class CameraXView implements LifecycleOwner {
             float minZoom = 1.0f;
             float maxZoom = 10.0f;
 
-            // Check if any device has ultra-wide support (0.5x)
-            for (com.ahm.capacitor.camera.preview.model.CameraDevice device : devices) {
-                Log.d(TAG, "getZoomFactorsStatic: Device " + device.getDeviceId() + " - minZoom: " + device.getMinZoom() + ", maxZoom: " + device.getMaxZoom());
-                if (device.getMinZoom() < 1.0f) {
-                    minZoom = device.getMinZoom();
-                }
-                if (device.getMaxZoom() > maxZoom) {
-                    maxZoom = device.getMaxZoom();
-                }
-            }
-
             Log.d(TAG, "getZoomFactorsStatic: Final range - minZoom: " + minZoom + ", maxZoom: " + maxZoom);
             LensInfo defaultLens = new LensInfo(4.25f, "wideAngle", 1.0f, 1.0f);
             return new ZoomFactors(minZoom, maxZoom, 1.0f, defaultLens);
@@ -536,41 +525,8 @@ public class CameraXView implements LifecycleOwner {
         try {
             // Get the current zoom from active camera
             float currentZoom = Objects.requireNonNull(camera.getCameraInfo().getZoomState().getValue()).getZoomRatio();
-
-            // Get the full zoom range across all cameras for current position (front/back)
-            List<androidx.camera.core.CameraInfo> availableCameras = getAvailableCamerasForCurrentPosition();
-
-            float minZoom = 1.0f;
-            float maxZoom = 1.0f;
-
-            if (!availableCameras.isEmpty()) {
-                // Find the absolute min and max zoom across all cameras
-                for (androidx.camera.core.CameraInfo cameraInfo : availableCameras) {
-                    try {
-                        float cameraMinZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
-                        float cameraMaxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
-
-                        // For multi-camera, we need to consider the effective zoom ranges
-                        // If a camera has minZoom < 1.0, it likely supports ultra-wide (0.5x)
-                        if (cameraMinZoom < 1.0f) {
-                            minZoom = 0.5f; // Ultra-wide capability
-                        }
-
-                        // Samsung devices often hide ultra-wide in logical cameras
-                        // If maxZoom >= 4.0, assume ultra-wide is available even if not exposed
-                        if (cameraMaxZoom >= 4.0f && minZoom >= 1.0f) {
-                            Log.d(TAG, "getZoomFactors: Detected Samsung-style multi-camera (maxZoom: " + cameraMaxZoom + "), forcing ultra-wide support");
-                            minZoom = 0.5f; // Force ultra-wide support
-                        }
-
-                        maxZoom = Math.max(maxZoom, cameraMaxZoom);
-
-                        Log.d(TAG, "getZoomFactors: Camera " + getCameraId(cameraInfo) + " - range: " + cameraMinZoom + "-" + cameraMaxZoom);
-                    } catch (Exception e) {
-                        Log.w(TAG, "getZoomFactors: Error getting zoom info for camera", e);
-                    }
-                }
-            }
+            float minZoom = camera.getCameraInfo().getZoomState().getValue().getMinZoomRatio();
+            float maxZoom = camera.getCameraInfo().getZoomState().getValue().getMaxZoomRatio();
 
             Log.d(TAG, "getZoomFactors: Combined range - minZoom: " + minZoom + ", maxZoom: " + maxZoom + ", currentZoom: " + currentZoom);
 
@@ -596,14 +552,6 @@ public class CameraXView implements LifecycleOwner {
             // Determine device type based on zoom capabilities
             String deviceType = "wideAngle";
             float baseZoomRatio = 1.0f;
-
-            if (minZoom < 1.0f) {
-                deviceType = "ultraWide";
-                baseZoomRatio = 0.5f;
-            } else if (maxZoom > 5.0f) {
-                deviceType = "telephoto";
-                baseZoomRatio = 2.0f;
-            }
 
             float digitalZoom = currentZoom / baseZoomRatio;
 
