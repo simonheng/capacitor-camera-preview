@@ -80,25 +80,26 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     private func makeWebViewTransparent() {
         guard let webView = self.webView else { return }
         
-        // Set basic transparency properties
-        webView.isOpaque = false
-        webView.backgroundColor = UIColor.clear
-        webView.scrollView.backgroundColor = UIColor.clear
-        
-        // Make all subviews transparent
-        webView.subviews.forEach { subview in
-            if subview != webView.scrollView {
-                subview.backgroundColor = UIColor.clear
+        // Define a recursive function to traverse the view hierarchy
+        func makeSubviewsTransparent(_ view: UIView) {
+            // Set the background color to clear
+            view.backgroundColor = .clear
+            
+            // Recurse for all subviews
+            for subview in view.subviews {
+                makeSubviewsTransparent(subview)
             }
         }
         
-        // Specifically handle the scroll view's subviews
-        webView.scrollView.subviews.forEach { subview in
-            subview.backgroundColor = UIColor.clear
-        }
+        // Set the main webView to be transparent
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
         
-        // Set the superview background to clear if it exists
-        webView.superview?.backgroundColor = UIColor.clear
+        // Recursively make all subviews transparent
+        makeSubviewsTransparent(webView)
+        
+        // Also ensure the webview's container is transparent
+        webView.superview?.backgroundColor = .clear
         
         // Force a layout pass to apply changes
         DispatchQueue.main.async {
