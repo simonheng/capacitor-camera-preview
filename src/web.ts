@@ -165,6 +165,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         }
         context?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
 
+        if (options.saveToGallery) {
+          // saveToGallery is not supported on web
+        }
+        
         if ((options.format || "jpeg") === "jpeg") {
           base64EncodedImage = canvas
             .toDataURL("image/jpeg", (options.quality || 85) / 100.0)
@@ -178,6 +182,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
       resolve({
         value: base64EncodedImage,
+        exif: {},
       });
     });
   }

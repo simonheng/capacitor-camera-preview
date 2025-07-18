@@ -233,7 +233,7 @@ Stops the camera preview.
 ### capture(...)
 
 ```typescript
-capture(options: CameraPreviewPictureOptions) => Promise<{ value: string; }>
+capture(options: CameraPreviewPictureOptions) => Promise<{ value: string; exif: ExifData; }>
 ```
 
 Captures a picture from the camera.
@@ -242,7 +242,7 @@ Captures a picture from the camera.
 | ------------- | ----------------------------------------------------------------------------------- | ---------------------------------------- |
 | **`options`** | <code><a href="#camerapreviewpictureoptions">CameraPreviewPictureOptions</a></code> | - The options for capturing the picture. |
 
-**Returns:** <code>Promise&lt;{ value: string; }&gt;</code>
+**Returns:** <code>Promise&lt;{ value: string; exif: <a href="#exifdata">ExifData</a>; }&gt;</code>
 
 **Since:** 0.0.1
 
@@ -546,16 +546,22 @@ Defines the configuration options for starting the camera preview.
 | **`deviceId`**                     | <code>string</code>  | The `deviceId` of the camera to use. If provided, `position` is ignored.                                          |                     |
 
 
+#### ExifData
+
+Represents EXIF data extracted from an image.
+
+
 #### CameraPreviewPictureOptions
 
 Defines the options for capturing a picture.
 
-| Prop          | Type                                                    | Description                                                                               | Default             |
-| ------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------- |
-| **`height`**  | <code>number</code>                                     | The desired height of the picture in pixels. If not provided, the device default is used. |                     |
-| **`width`**   | <code>number</code>                                     | The desired width of the picture in pixels. If not provided, the device default is used.  |                     |
-| **`quality`** | <code>number</code>                                     | The quality of the captured image, from 0 to 100. Does not apply to `png` format.         | <code>85</code>     |
-| **`format`**  | <code><a href="#pictureformat">PictureFormat</a></code> | The format of the captured image.                                                         | <code>"jpeg"</code> |
+| Prop                | Type                                                    | Description                                                                               | Default             | Since |
+| ------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------- | ----- |
+| **`height`**        | <code>number</code>                                     | The desired height of the picture in pixels. If not provided, the device default is used. |                     |       |
+| **`width`**         | <code>number</code>                                     | The desired width of the picture in pixels. If not provided, the device default is used.  |                     |       |
+| **`quality`**       | <code>number</code>                                     | The quality of the captured image, from 0 to 100. Does not apply to `png` format.         | <code>85</code>     |       |
+| **`format`**        | <code><a href="#pictureformat">PictureFormat</a></code> | The format of the captured image.                                                         | <code>"jpeg"</code> |       |
+| **`saveToGallery`** | <code>boolean</code>                                    | If true, the captured image will be saved to the user's gallery.                          | <code>false</code>  | 7.5.0 |
 
 
 #### CameraSampleOptions

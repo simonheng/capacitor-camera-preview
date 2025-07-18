@@ -23,9 +23,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Testing</string>
+	<string>To be able to scan documents</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>App uses microphone for recording video</string>
+	<string>To be able to scan documents</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>To save photos to the gallery</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

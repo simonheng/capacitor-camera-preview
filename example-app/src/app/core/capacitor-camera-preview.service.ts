@@ -2,13 +2,11 @@ import { Injectable, NgZone } from '@angular/core';
 import {
   CameraDevice,
   CameraPreview,
-  CameraPreviewFlashMode,
   CameraPreviewOptions,
   CameraPreviewPictureOptions,
+  ExifData,
   FlashMode,
   LensInfo,
-  PictureFormat,
-  SupportedPictureSizes,
   CameraPreviewPlugin,
 } from '@capgo/camera-preview';
 import { BehaviorSubject } from 'rxjs';
@@ -68,12 +66,12 @@ export class CapacitorCameraViewService {
    * @param options Additional capture options
    * @returns A base64 encoded string of the captured photo
    */
-  async capture(quality: number = 90, options?: Partial<CameraPreviewPictureOptions>): Promise<string> {
+  async capture(quality: number = 90, options?: Partial<CameraPreviewPictureOptions>): Promise<{ value: string; exif: ExifData }> {
     const captureOptions: CameraPreviewPictureOptions = {
       quality,
       ...options,
     };
-    return (await this.#cameraView.capture(captureOptions)).value;
+    return this.#cameraView.capture(captureOptions);
   }
 
   /**

@@ -4,14 +4,10 @@ import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.RECORD_AUDIO;
 
 import android.content.pm.ActivityInfo;
-import android.graphics.Point;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
-import android.view.Display;
-import androidx.annotation.NonNull;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
-import com.getcapacitor.Logger;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -27,6 +23,8 @@ import java.util.Objects;
 import android.util.Size;
 import android.util.Log;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
+
+import org.json.JSONObject;
 
 @CapacitorPlugin(
   name = "CameraPreview",
@@ -83,15 +81,18 @@ public class CameraPreview
   }
 
   @PluginMethod
-  public void capture(PluginCall call) {
+  public void capture(final PluginCall call) {
     if (cameraXView == null || !cameraXView.isRunning()) {
       call.reject("Camera is not running");
       return;
     }
+
     bridge.saveCall(call);
     captureCallbackId = call.getCallbackId();
+
     Integer quality = Objects.requireNonNull(call.getInt("quality", 85));
-    cameraXView.capturePhoto(quality);
+    final boolean saveToGallery = Boolean.TRUE.equals(call.getBoolean("saveToGallery", false));
+    cameraXView.capturePhoto(quality, saveToGallery);
   }
 
   @PluginMethod
@@ -326,13 +327,13 @@ public class CameraPreview
     final int width = call.getInt("width", 0);
     final int height = call.getInt("height", 0);
     final int paddingBottom = call.getInt("paddingBottom", 0);
-    final boolean toBack = call.getBoolean("toBack", true);
-    final boolean storeToFile = call.getBoolean("storeToFile", false);
-    final boolean enableOpacity = call.getBoolean("enableOpacity", false);
-    final boolean enableZoom = call.getBoolean("enableZoom", false);
-    final boolean disableExifHeaderStripping = call.getBoolean("disableExifHeaderStripping", false);
-    final boolean lockOrientation = call.getBoolean("lockAndroidOrientation", false);
-    final boolean disableAudio = call.getBoolean("disableAudio", true);
+    final boolean toBack = Boolean.TRUE.equals(call.getBoolean("toBack", true));
+    final boolean storeToFile = Boolean.TRUE.equals(call.getBoolean("storeToFile", false));
+    final boolean enableOpacity = Boolean.TRUE.equals(call.getBoolean("enableOpacity", false));
+    final boolean enableZoom = Boolean.TRUE.equals(call.getBoolean("enableZoom", false));
+    final boolean disableExifHeaderStripping = Boolean.TRUE.equals(call.getBoolean("disableExifHeaderStripping", false));
+    final boolean lockOrientation = Boolean.TRUE.equals(call.getBoolean("lockAndroidOrientation", false));
+    final boolean disableAudio = Boolean.TRUE.equals(call.getBoolean("disableAudio", true));
     
     float targetZoom = 1.0f;
     // Check if the selected device is a physical ultra-wide
@@ -367,8 +368,8 @@ public class CameraPreview
         }
         int computedX = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, x, metrics);
         int computedY = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, y, metrics);
-        int computedWidth = width != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, width, metrics) : (int) getBridge().getWebView().getWidth();
-        int computedHeight = height != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, height, metrics) : (int) getBridge().getWebView().getHeight();
+        int computedWidth = width != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, width, metrics) : getBridge().getWebView().getWidth();
+        int computedHeight = height != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, height, metrics) : getBridge().getWebView().getHeight();
         computedHeight -= (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, paddingBottom, metrics);
 
         CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f);
@@ -382,15 +383,28 @@ public class CameraPreview
   }
 
   @Override
-  public void onPictureTaken(String result) {
-    JSObject jsObject = new JSObject();
-    jsObject.put("value", result);
-    bridge.getSavedCall(captureCallbackId).resolve(jsObject);
+  public void onPictureTaken(String base64, JSONObject exif) {
+    PluginCall pluginCall = bridge.getSavedCall(captureCallbackId);
+    if (pluginCall == null) {
+      Log.e("CameraPreview", "onPictureTaken: captureCallbackId is null");
+      return;
+    }
+    JSObject result = new JSObject();
+    result.put("value", base64);
+    result.put("exif", exif);
+    pluginCall.resolve(result);
+    bridge.releaseCall(pluginCall);
   }
 
   @Override
   public void onPictureTakenError(String message) {
-    bridge.getSavedCall(captureCallbackId).reject(message);
+    PluginCall pluginCall = bridge.getSavedCall(captureCallbackId);
+    if (pluginCall == null) {
+      Log.e("CameraPreview", "onPictureTakenError: captureCallbackId is null");
+      return;
+    }
+    pluginCall.reject(message);
+    bridge.releaseCall(pluginCall);
   }
 
   @Override
@@ -422,4 +436,5 @@ public class CameraPreview
       bridge.releaseCall(pluginCall);
     }
   }
+
 }

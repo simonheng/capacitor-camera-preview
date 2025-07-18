@@ -1,6 +1,8 @@
 import Foundation
 import Capacitor
 import AVFoundation
+import Photos
+import CoreImage
 
 extension UIWindow {
     static var isLandscape: Bool {
@@ -436,41 +438,54 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     @objc func capture(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
 
-            let quality: Int? = call.getInt("quality", 85)
+            let quality = call.getFloat("quality", 85)
+            let saveToGallery = call.getBool("saveToGallery", false)
 
-            self.cameraController.captureImage { (image, error) in
-
-                guard let image = image else {
-                    print(error ?? "Image capture error")
-                    guard let error = error else {
-                        call.reject("Image capture error")
-                        return
-                    }
+            self.cameraController.captureImage(quality: quality) { (image, error) in
+                if let error = error {
                     call.reject(error.localizedDescription)
                     return
                 }
-                let imageData: Data?
-                if self.cameraController.currentCameraPosition == .front {
-                    let flippedImage = image.withHorizontallyFlippedOrientation()
-                    imageData = flippedImage.jpegData(compressionQuality: CGFloat(quality!/100))
-                } else {
-                    imageData = image.jpegData(compressionQuality: CGFloat(quality!/100))
+
+                if saveToGallery {
+                    PHPhotoLibrary.shared().performChanges({
+                        PHAssetChangeRequest.creationRequestForAsset(from: image!)
+                    }, completionHandler: { (success, error) in
+                        if !success {
+                            Logger.error("CameraPreview", "Error saving image to gallery", error)
+                        }
+                    })
                 }
 
-                if self.storeToFile == false {
-                    let imageBase64 = imageData?.base64EncodedString()
-                    call.resolve(["value": imageBase64!])
-                } else {
-                    do {
-                        let fileUrl=self.getTempFilePath()
-                        try imageData?.write(to: fileUrl)
-                        call.resolve(["value": fileUrl.absoluteString])
-                    } catch {
-                        call.reject("error writing image to file")
-                    }
+                guard let imageData = image?.jpegData(compressionQuality: CGFloat(quality / 100.0)) else {
+                    call.reject("Failed to get JPEG data from image")
+                    return
                 }
+                
+                let exifData = self.getExifData(from: imageData)
+                let base64Image = imageData.base64EncodedString()
+                
+                var result = JSObject()
+                result["value"] = base64Image
+                result["exif"] = exifData
+                call.resolve(result)
             }
         }
+    }
+
+    private func getExifData(from imageData: Data) -> JSObject {
+        guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let imageProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
+              let exifDict = imageProperties[kCGImagePropertyExifDictionary as String] as? [String: Any] else {
+            return [:]
+        }
+        
+        var exifData = JSObject()
+        for (key, value) in exifDict {
+            exifData[key] = value
+        }
+        
+        return exifData
     }
 
     @objc func captureSample(_ call: CAPPluginCall) {

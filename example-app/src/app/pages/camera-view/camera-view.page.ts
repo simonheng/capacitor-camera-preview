@@ -23,6 +23,7 @@ import {
 import {
   CameraDevice,
   CameraPosition,
+  ExifData,
   FlashMode,
   PictureFormat,
 } from '@capgo/camera-preview';
@@ -123,6 +124,7 @@ export class CameraViewPage implements OnInit {
 
     const { data } = await cameraModal.onDidDismiss<{
       photo: string;
+      exif: ExifData;
       options?: any;
       type?: string;
     }>();
@@ -135,6 +137,9 @@ export class CameraViewPage implements OnInit {
       }
       if (data.options) {
         results += `\n  Options: ${JSON.stringify(data.options)}`;
+      }
+      if (data.exif) {
+        results += `\n  EXIF: ${JSON.stringify(data.exif, null, 2)}`;
       }
       this.testResults.set(results);
     }

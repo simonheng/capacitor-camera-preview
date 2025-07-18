@@ -4,7 +4,6 @@ import android.content.Context;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraManager;
 import android.os.Build;
-import android.os.HandlerThread;
 import android.util.Base64;
 import android.util.Log;
 import android.util.Size;
@@ -32,29 +31,37 @@ import com.ahm.capacitor.camera.preview.model.LensInfo;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Objects;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import android.hardware.camera2.CameraCharacteristics;
-import androidx.camera.extensions.ExtensionMode;
 import java.util.Set;
 import androidx.camera.core.ZoomState;
 import androidx.camera.core.ResolutionInfo;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Environment;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+import androidx.exifinterface.media.ExifInterface;
+import org.json.JSONObject;
+import java.nio.file.Files;
 
 public class CameraXView implements LifecycleOwner {
     private static final String TAG = "CameraPreview CameraXView";
 
     public interface CameraXViewListener {
-        void onPictureTaken(String result);
+        void onPictureTaken(String base64, JSONObject exif);
         void onPictureTakenError(String message);
         void onSampleTaken(String result);
         void onSampleTakenError(String message);
@@ -100,6 +107,26 @@ public class CameraXView implements LifecycleOwner {
 
     public boolean isRunning() {
         return isRunning;
+    }
+
+    private void saveImageToGallery(byte[] data) {
+        try {
+            File photo = new File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                "IMG_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new java.util.Date()) + ".jpg"
+            );
+            FileOutputStream fos = new FileOutputStream(photo);
+            fos.write(data);
+            fos.close();
+
+            // Notify the gallery of the new image
+            Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+            Uri contentUri = Uri.fromFile(photo);
+            mediaScanIntent.setData(contentUri);
+            context.sendBroadcast(mediaScanIntent);
+        } catch (IOException e) {
+            Log.e(TAG, "Error saving image to gallery", e);
+        }
     }
 
     public void startSession(CameraSessionConfiguration config) {
@@ -167,6 +194,7 @@ public class CameraXView implements LifecycleOwner {
         webView.setBackgroundColor(android.graphics.Color.WHITE);
     }
 
+    @OptIn(markerClass = ExperimentalCamera2Interop.class)
     private void bindCameraUseCases() {
         if (cameraProvider == null) return;
         mainExecutor.execute(() -> {
@@ -188,7 +216,6 @@ public class CameraXView implements LifecycleOwner {
                 Log.d(TAG, "Use cases bound. Inspecting active camera and use cases.");
                 CameraInfo cameraInfo = camera.getCameraInfo();
                 Log.d(TAG, "Bound Camera ID: " + Camera2CameraInfo.from(cameraInfo).getCameraId());
-                Log.d(TAG, "Implementation Type: " + cameraInfo.getImplementationType());
 
                 // Log zoom state
                 ZoomState zoomState = cameraInfo.getZoomState().getValue();
@@ -256,22 +283,6 @@ public class CameraXView implements LifecycleOwner {
         return builder.build();
     }
 
-    private static boolean isIsLogical(CameraManager cameraManager, String cameraId) throws CameraAccessException {
-        CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
-        int[] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
-
-        boolean isLogical = false;
-        if (capabilities != null) {
-           for (int capability : capabilities) {
-               if (capability == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) {
-                   isLogical = true;
-                   break;
-               }
-           }
-        }
-        return isLogical;
-    }
-
     private static String getCameraId(androidx.camera.core.CameraInfo cameraInfo) {
         try {
             // Generate a stable ID based on camera characteristics
@@ -303,7 +314,7 @@ public class CameraXView implements LifecycleOwner {
         }
     }
 
-    public void capturePhoto(int quality) {
+    public void capturePhoto(int quality, final boolean saveToGallery) {
         Log.d(TAG, "capturePhoto: Starting photo capture with quality: " + quality);
 
         if (imageCapture == null) {
@@ -313,9 +324,8 @@ public class CameraXView implements LifecycleOwner {
             return;
         }
 
-        ImageCapture.OutputFileOptions outputFileOptions = new ImageCapture.OutputFileOptions.Builder(
-            new java.io.File(context.getCacheDir(), "temp_image.jpg")
-        ).build();
+        File tempFile = new File(context.getCacheDir(), "temp_image.jpg");
+        ImageCapture.OutputFileOptions outputFileOptions = new ImageCapture.OutputFileOptions.Builder(tempFile).build();
 
         imageCapture.takePicture(
             outputFileOptions,
@@ -331,31 +341,24 @@ public class CameraXView implements LifecycleOwner {
 
                 @Override
                 public void onImageSaved(@NonNull ImageCapture.OutputFileResults output) {
-                    // Convert to base64
                     try {
-                        java.io.File tempFile = new java.io.File(context.getCacheDir(), "temp_image.jpg");
-                        byte[] bytes;
+                        byte[] bytes = Files.readAllBytes(tempFile.toPath());
+                        ExifInterface exifInterface = new ExifInterface(tempFile.getAbsolutePath());
+                        JSONObject exifData = getExifData(exifInterface);
 
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            bytes = Files.readAllBytes(tempFile.toPath());
-                        } else {
-                            // Fallback for older Android versions
-                            java.io.FileInputStream fis = new java.io.FileInputStream(tempFile);
-                            bytes = new byte[(int) tempFile.length()];
-                            fis.read(bytes);
-                            fis.close();
+                        if (saveToGallery) {
+                            saveImageToGallery(bytes);
                         }
 
                         String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
-
-                        // Clean up temp file
+                        
                         tempFile.delete();
 
                         if (listener != null) {
-                            listener.onPictureTaken(base64);
+                            listener.onPictureTaken(base64, exifData);
                         }
                     } catch (Exception e) {
-                        Log.e(TAG, "capturePhoto: Error converting to base64", e);
+                        Log.e(TAG, "capturePhoto: Error processing image", e);
                         if (listener != null) {
                             listener.onPictureTakenError("Error processing image: " + e.getMessage());
                         }
@@ -364,6 +367,166 @@ public class CameraXView implements LifecycleOwner {
             }
         );
     }
+
+    private JSONObject getExifData(ExifInterface exifInterface) {
+        JSONObject exifData = new JSONObject();
+        try {
+            // Add all available exif tags to a JSON object
+            for (String[] tag : EXIF_TAGS) {
+                String value = exifInterface.getAttribute(tag[0]);
+                if (value != null) {
+                    exifData.put(tag[1], value);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "getExifData: Error reading exif data", e);
+        }
+        return exifData;
+    }
+
+    private static final String[][] EXIF_TAGS = new String[][]{
+        {ExifInterface.TAG_APERTURE_VALUE, "ApertureValue"},
+        {ExifInterface.TAG_ARTIST, "Artist"},
+        {ExifInterface.TAG_BITS_PER_SAMPLE, "BitsPerSample"},
+        {ExifInterface.TAG_BRIGHTNESS_VALUE, "BrightnessValue"},
+        {ExifInterface.TAG_CFA_PATTERN, "CFAPattern"},
+        {ExifInterface.TAG_COLOR_SPACE, "ColorSpace"},
+        {ExifInterface.TAG_COMPONENTS_CONFIGURATION, "ComponentsConfiguration"},
+        {ExifInterface.TAG_COMPRESSED_BITS_PER_PIXEL, "CompressedBitsPerPixel"},
+        {ExifInterface.TAG_COMPRESSION, "Compression"},
+        {ExifInterface.TAG_CONTRAST, "Contrast"},
+        {ExifInterface.TAG_COPYRIGHT, "Copyright"},
+        {ExifInterface.TAG_CUSTOM_RENDERED, "CustomRendered"},
+        {ExifInterface.TAG_DATETIME, "DateTime"},
+        {ExifInterface.TAG_DATETIME_DIGITIZED, "DateTimeDigitized"},
+        {ExifInterface.TAG_DATETIME_ORIGINAL, "DateTimeOriginal"},
+        {ExifInterface.TAG_DEVICE_SETTING_DESCRIPTION, "DeviceSettingDescription"},
+        {ExifInterface.TAG_DIGITAL_ZOOM_RATIO, "DigitalZoomRatio"},
+        {ExifInterface.TAG_DNG_VERSION, "DNGVersion"},
+        {ExifInterface.TAG_EXIF_VERSION, "ExifVersion"},
+        {ExifInterface.TAG_EXPOSURE_BIAS_VALUE, "ExposureBiasValue"},
+        {ExifInterface.TAG_EXPOSURE_INDEX, "ExposureIndex"},
+        {ExifInterface.TAG_EXPOSURE_MODE, "ExposureMode"},
+        {ExifInterface.TAG_EXPOSURE_PROGRAM, "ExposureProgram"},
+        {ExifInterface.TAG_EXPOSURE_TIME, "ExposureTime"},
+        {ExifInterface.TAG_FILE_SOURCE, "FileSource"},
+        {ExifInterface.TAG_FLASH, "Flash"},
+        {ExifInterface.TAG_FLASHPIX_VERSION, "FlashpixVersion"},
+        {ExifInterface.TAG_FLASH_ENERGY, "FlashEnergy"},
+        {ExifInterface.TAG_FOCAL_LENGTH, "FocalLength"},
+        {ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM, "FocalLengthIn35mmFilm"},
+        {ExifInterface.TAG_FOCAL_PLANE_RESOLUTION_UNIT, "FocalPlaneResolutionUnit"},
+        {ExifInterface.TAG_FOCAL_PLANE_X_RESOLUTION, "FocalPlaneXResolution"},
+        {ExifInterface.TAG_FOCAL_PLANE_Y_RESOLUTION, "FocalPlaneYResolution"},
+        {ExifInterface.TAG_F_NUMBER, "FNumber"},
+        {ExifInterface.TAG_GAIN_CONTROL, "GainControl"},
+        {ExifInterface.TAG_GPS_ALTITUDE, "GPSAltitude"},
+        {ExifInterface.TAG_GPS_ALTITUDE_REF, "GPSAltitudeRef"},
+        {ExifInterface.TAG_GPS_AREA_INFORMATION, "GPSAreaInformation"},
+        {ExifInterface.TAG_GPS_DATESTAMP, "GPSDateStamp"},
+        {ExifInterface.TAG_GPS_DEST_BEARING, "GPSDestBearing"},
+        {ExifInterface.TAG_GPS_DEST_BEARING_REF, "GPSDestBearingRef"},
+        {ExifInterface.TAG_GPS_DEST_DISTANCE, "GPSDestDistance"},
+        {ExifInterface.TAG_GPS_DEST_DISTANCE_REF, "GPSDestDistanceRef"},
+        {ExifInterface.TAG_GPS_DEST_LATITUDE, "GPSDestLatitude"},
+        {ExifInterface.TAG_GPS_DEST_LATITUDE_REF, "GPSDestLatitudeRef"},
+        {ExifInterface.TAG_GPS_DEST_LONGITUDE, "GPSDestLongitude"},
+        {ExifInterface.TAG_GPS_DEST_LONGITUDE_REF, "GPSDestLongitudeRef"},
+        {ExifInterface.TAG_GPS_DIFFERENTIAL, "GPSDifferential"},
+        {ExifInterface.TAG_GPS_DOP, "GPSDOP"},
+        {ExifInterface.TAG_GPS_IMG_DIRECTION, "GPSImgDirection"},
+        {ExifInterface.TAG_GPS_IMG_DIRECTION_REF, "GPSImgDirectionRef"},
+        {ExifInterface.TAG_GPS_LATITUDE, "GPSLatitude"},
+        {ExifInterface.TAG_GPS_LATITUDE_REF, "GPSLatitudeRef"},
+        {ExifInterface.TAG_GPS_LONGITUDE, "GPSLongitude"},
+        {ExifInterface.TAG_GPS_LONGITUDE_REF, "GPSLongitudeRef"},
+        {ExifInterface.TAG_GPS_MAP_DATUM, "GPSMapDatum"},
+        {ExifInterface.TAG_GPS_MEASURE_MODE, "GPSMeasureMode"},
+        {ExifInterface.TAG_GPS_PROCESSING_METHOD, "GPSProcessingMethod"},
+        {ExifInterface.TAG_GPS_SATELLITES, "GPSSatellites"},
+        {ExifInterface.TAG_GPS_SPEED, "GPSSpeed"},
+        {ExifInterface.TAG_GPS_SPEED_REF, "GPSSpeedRef"},
+        {ExifInterface.TAG_GPS_STATUS, "GPSStatus"},
+        {ExifInterface.TAG_GPS_TIMESTAMP, "GPSTimeStamp"},
+        {ExifInterface.TAG_GPS_TRACK, "GPSTrack"},
+        {ExifInterface.TAG_GPS_TRACK_REF, "GPSTrackRef"},
+        {ExifInterface.TAG_GPS_VERSION_ID, "GPSVersionID"},
+        {ExifInterface.TAG_IMAGE_DESCRIPTION, "ImageDescription"},
+        {ExifInterface.TAG_IMAGE_LENGTH, "ImageLength"},
+        {ExifInterface.TAG_IMAGE_UNIQUE_ID, "ImageUniqueID"},
+        {ExifInterface.TAG_IMAGE_WIDTH, "ImageWidth"},
+        {ExifInterface.TAG_INTEROPERABILITY_INDEX, "InteroperabilityIndex"},
+        {ExifInterface.TAG_ISO_SPEED, "ISOSpeed"},
+        {ExifInterface.TAG_ISO_SPEED_LATITUDE_YYY, "ISOSpeedLatitudeyyy"},
+        {ExifInterface.TAG_ISO_SPEED_LATITUDE_ZZZ, "ISOSpeedLatitudezzz"},
+        {ExifInterface.TAG_JPEG_INTERCHANGE_FORMAT, "JPEGInterchangeFormat"},
+        {ExifInterface.TAG_JPEG_INTERCHANGE_FORMAT_LENGTH, "JPEGInterchangeFormatLength"},
+        {ExifInterface.TAG_LIGHT_SOURCE, "LightSource"},
+        {ExifInterface.TAG_MAKE, "Make"},
+        {ExifInterface.TAG_MAKER_NOTE, "MakerNote"},
+        {ExifInterface.TAG_MAX_APERTURE_VALUE, "MaxApertureValue"},
+        {ExifInterface.TAG_METERING_MODE, "MeteringMode"},
+        {ExifInterface.TAG_MODEL, "Model"},
+        {ExifInterface.TAG_NEW_SUBFILE_TYPE, "NewSubfileType"},
+        {ExifInterface.TAG_OECF, "OECF"},
+        {ExifInterface.TAG_OFFSET_TIME, "OffsetTime"},
+        {ExifInterface.TAG_OFFSET_TIME_DIGITIZED, "OffsetTimeDigitized"},
+        {ExifInterface.TAG_OFFSET_TIME_ORIGINAL, "OffsetTimeOriginal"},
+        {ExifInterface.TAG_ORF_ASPECT_FRAME, "ORFAspectFrame"},
+        {ExifInterface.TAG_ORF_PREVIEW_IMAGE_LENGTH, "ORFPreviewImageLength"},
+        {ExifInterface.TAG_ORF_PREVIEW_IMAGE_START, "ORFPreviewImageStart"},
+        {ExifInterface.TAG_ORF_THUMBNAIL_IMAGE, "ORFThumbnailImage"},
+        {ExifInterface.TAG_ORIENTATION, "Orientation"},
+        {ExifInterface.TAG_PHOTOMETRIC_INTERPRETATION, "PhotometricInterpretation"},
+        {ExifInterface.TAG_PIXEL_X_DIMENSION, "PixelXDimension"},
+        {ExifInterface.TAG_PIXEL_Y_DIMENSION, "PixelYDimension"},
+        {ExifInterface.TAG_PLANAR_CONFIGURATION, "PlanarConfiguration"},
+        {ExifInterface.TAG_PRIMARY_CHROMATICITIES, "PrimaryChromaticities"},
+        {ExifInterface.TAG_RECOMMENDED_EXPOSURE_INDEX, "RecommendedExposureIndex"},
+        {ExifInterface.TAG_REFERENCE_BLACK_WHITE, "ReferenceBlackWhite"},
+        {ExifInterface.TAG_RELATED_SOUND_FILE, "RelatedSoundFile"},
+        {ExifInterface.TAG_RESOLUTION_UNIT, "ResolutionUnit"},
+        {ExifInterface.TAG_ROWS_PER_STRIP, "RowsPerStrip"},
+        {ExifInterface.TAG_RW2_ISO, "RW2ISO"},
+        {ExifInterface.TAG_RW2_JPG_FROM_RAW, "RW2JpgFromRaw"},
+        {ExifInterface.TAG_RW2_SENSOR_BOTTOM_BORDER, "RW2SensorBottomBorder"},
+        {ExifInterface.TAG_RW2_SENSOR_LEFT_BORDER, "RW2SensorLeftBorder"},
+        {ExifInterface.TAG_RW2_SENSOR_RIGHT_BORDER, "RW2SensorRightBorder"},
+        {ExifInterface.TAG_RW2_SENSOR_TOP_BORDER, "RW2SensorTopBorder"},
+        {ExifInterface.TAG_SAMPLES_PER_PIXEL, "SamplesPerPixel"},
+        {ExifInterface.TAG_SATURATION, "Saturation"},
+        {ExifInterface.TAG_SCENE_CAPTURE_TYPE, "SceneCaptureType"},
+        {ExifInterface.TAG_SCENE_TYPE, "SceneType"},
+        {ExifInterface.TAG_SENSING_METHOD, "SensingMethod"},
+        {ExifInterface.TAG_SENSITIVITY_TYPE, "SensitivityType"},
+        {ExifInterface.TAG_SHARPNESS, "Sharpness"},
+        {ExifInterface.TAG_SHUTTER_SPEED_VALUE, "ShutterSpeedValue"},
+        {ExifInterface.TAG_SOFTWARE, "Software"},
+        {ExifInterface.TAG_SPATIAL_FREQUENCY_RESPONSE, "SpatialFrequencyResponse"},
+        {ExifInterface.TAG_SPECTRAL_SENSITIVITY, "SpectralSensitivity"},
+        {ExifInterface.TAG_STANDARD_OUTPUT_SENSITIVITY, "StandardOutputSensitivity"},
+        {ExifInterface.TAG_STRIP_BYTE_COUNTS, "StripByteCounts"},
+        {ExifInterface.TAG_STRIP_OFFSETS, "StripOffsets"},
+        {ExifInterface.TAG_SUBFILE_TYPE, "SubfileType"},
+        {ExifInterface.TAG_SUBJECT_AREA, "SubjectArea"},
+        {ExifInterface.TAG_SUBJECT_DISTANCE, "SubjectDistance"},
+        {ExifInterface.TAG_SUBJECT_DISTANCE_RANGE, "SubjectDistanceRange"},
+        {ExifInterface.TAG_SUBJECT_LOCATION, "SubjectLocation"},
+        {ExifInterface.TAG_SUBSEC_TIME, "SubSecTime"},
+        {ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, "SubSecTimeDigitized"},
+        {ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, "SubSecTimeOriginal"},
+        {ExifInterface.TAG_THUMBNAIL_IMAGE_LENGTH, "ThumbnailImageLength"},
+        {ExifInterface.TAG_THUMBNAIL_IMAGE_WIDTH, "ThumbnailImageWidth"},
+        {ExifInterface.TAG_TRANSFER_FUNCTION, "TransferFunction"},
+        {ExifInterface.TAG_USER_COMMENT, "UserComment"},
+        {ExifInterface.TAG_WHITE_BALANCE, "WhiteBalance"},
+        {ExifInterface.TAG_WHITE_POINT, "WhitePoint"},
+        {ExifInterface.TAG_X_RESOLUTION, "XResolution"},
+        {ExifInterface.TAG_Y_CB_CR_COEFFICIENTS, "YCbCrCoefficients"},
+        {ExifInterface.TAG_Y_CB_CR_POSITIONING, "YCbCrPositioning"},
+        {ExifInterface.TAG_Y_CB_CR_SUB_SAMPLING, "YCbCrSubSampling"},
+        {ExifInterface.TAG_Y_RESOLUTION, "YResolution"}
+    };
 
     public void captureSample(int quality) {
         Log.d(TAG, "captureSample: Starting sample capture with quality: " + quality);
@@ -498,11 +661,10 @@ public class CameraXView implements LifecycleOwner {
         }
     }
 
-    public static ZoomFactors getZoomFactorsStatic(Context context) {
+    public static ZoomFactors getZoomFactorsStatic() {
         try {
             // For static method, return default zoom factors
             // We can try to detect if ultra-wide is available by checking device list
-            List<com.ahm.capacitor.camera.preview.model.CameraDevice> devices = getAvailableDevicesStatic(context);
 
             float minZoom = 1.0f;
             float maxZoom = 10.0f;
@@ -519,7 +681,7 @@ public class CameraXView implements LifecycleOwner {
 
     public ZoomFactors getZoomFactors() {
         if (camera == null) {
-            return getZoomFactorsStatic(context);
+            return getZoomFactorsStatic();
         }
 
         try {
@@ -546,8 +708,6 @@ public class CameraXView implements LifecycleOwner {
 
         try {
             float currentZoom = Objects.requireNonNull(camera.getCameraInfo().getZoomState().getValue()).getZoomRatio();
-            float minZoom = camera.getCameraInfo().getZoomState().getValue().getMinZoomRatio();
-            float maxZoom = camera.getCameraInfo().getZoomState().getValue().getMaxZoomRatio();
 
             // Determine device type based on zoom capabilities
             String deviceType = "wideAngle";
@@ -592,46 +752,6 @@ public class CameraXView implements LifecycleOwner {
             Log.e(TAG, "setZoom: Failed to set zoom to " + zoomRatio, e);
             throw e;
         }
-    }
-
-    private List<androidx.camera.core.CameraInfo> getAvailableCamerasForCurrentPosition() {
-        if (cameraProvider == null) {
-            Log.w(TAG, "getAvailableCamerasForCurrentPosition: cameraProvider is null");
-            return Collections.emptyList();
-        }
-
-        List<androidx.camera.core.CameraInfo> allCameras = cameraProvider.getAvailableCameraInfos();
-        List<androidx.camera.core.CameraInfo> sameFacingCameras = new ArrayList<>();
-
-        Log.d(TAG, "getAvailableCamerasForCurrentPosition: Total cameras available: " + allCameras.size());
-
-        // Determine current facing direction from the session config to avoid restricted API call
-        boolean isCurrentBack = "back".equals(sessionConfig.getPosition());
-        Log.d(TAG, "getAvailableCamerasForCurrentPosition: Looking for " + (isCurrentBack ? "back" : "front") + " cameras");
-
-        for (int i = 0; i < allCameras.size(); i++) {
-            androidx.camera.core.CameraInfo cameraInfo = allCameras.get(i);
-            boolean isCameraBack = isBackCamera(cameraInfo);
-            String cameraId = getCameraId(cameraInfo);
-
-            Log.d(TAG, "getAvailableCamerasForCurrentPosition: Camera " + i + " - ID: " + cameraId + ", isBack: " + isCameraBack);
-
-            try {
-                float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
-                float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
-                Log.d(TAG, "getAvailableCamerasForCurrentPosition: Camera " + i + " zoom range: " + minZoom + "-" + maxZoom);
-            } catch (Exception e) {
-                Log.w(TAG, "getAvailableCamerasForCurrentPosition: Cannot get zoom info for camera " + i + ": " + e.getMessage());
-            }
-
-            if (isCameraBack == isCurrentBack) {
-                sameFacingCameras.add(cameraInfo);
-                Log.d(TAG, "getAvailableCamerasForCurrentPosition: Added camera " + i + " (" + cameraId + ") to same-facing list");
-            }
-        }
-
-        Log.d(TAG, "getAvailableCamerasForCurrentPosition: Found " + sameFacingCameras.size() + " cameras for " + (isCurrentBack ? "back" : "front"));
-        return sameFacingCameras;
     }
 
     public static List<Size> getSupportedPictureSizes(String facing) {
@@ -786,13 +906,13 @@ public class CameraXView implements LifecycleOwner {
                     Log.d(TAG, "switchToDevice: Found matching CameraInfo for deviceId: " + deviceId);
                     final CameraInfo finalTarget = targetCameraInfo;
 
-                    CameraSelector newSelector = new CameraSelector.Builder()
+                    // This filter will receive a list of all cameras and must return the one we want.
+
+                    currentCameraSelector = new CameraSelector.Builder()
                         .addCameraFilter(cameras -> {
                             // This filter will receive a list of all cameras and must return the one we want.
                             return Collections.singletonList(finalTarget);
                         }).build();
-
-                    currentCameraSelector = newSelector;
                     currentDeviceId = deviceId;
                     bindCameraUseCases(); // Rebind with the new, highly specific selector
                 } else {

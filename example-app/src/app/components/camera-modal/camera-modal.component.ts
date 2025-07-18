@@ -25,6 +25,7 @@ import {
 import {
   type CameraDevice,
   type CameraPosition,
+  type ExifData,
   type FlashMode,
   type LensInfo,
   type PictureFormat,
@@ -207,10 +208,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         };
       }
 
-      const photo = await this.#cameraViewService.capture(quality, captureOptions);
+      const { value, exif } = await this.#cameraViewService.capture(quality, captureOptions);
 
       await this.#modalController.dismiss({
-        photo,
+        photo: value,
+        exif: exif,
         options: captureOptions,
         type: 'capture',
       });

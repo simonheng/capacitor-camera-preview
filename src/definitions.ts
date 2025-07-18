@@ -199,6 +199,17 @@ export interface CameraPreviewPictureOptions {
    * @default "jpeg"
    */
   format?: PictureFormat;
+  /**
+   * If true, the captured image will be saved to the user's gallery.
+   * @default false
+   * @since 7.5.0
+   */
+  saveToGallery?: boolean;
+}
+
+/** Represents EXIF data extracted from an image. */
+export interface ExifData {
+  [key: string]: any;
 }
 
 export type PictureFormat = "jpeg" | "png";
@@ -280,7 +291,9 @@ export interface CameraPreviewPlugin {
    * The `value` is a base64 encoded string unless `storeToFile` is true, in which case it's a file path.
    * @since 0.0.1
    */
-  capture(options: CameraPreviewPictureOptions): Promise<{ value: string }>;
+  capture(
+    options: CameraPreviewPictureOptions
+  ): Promise<{ value: string; exif: ExifData }>;
 
   /**
    * Captures a single frame from the camera preview stream.
