@@ -168,7 +168,11 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         if (options.saveToGallery) {
           // saveToGallery is not supported on web
         }
-        
+
+        if (options.withExifLocation) {
+          // withExifLocation is not supported on web
+        }
+
         if ((options.format || "jpeg") === "jpeg") {
           base64EncodedImage = canvas
             .toDataURL("image/jpeg", (options.quality || 85) / 100.0)

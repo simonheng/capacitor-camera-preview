@@ -8,6 +8,7 @@
 
 import AVFoundation
 import UIKit
+import CoreLocation
 
 class CameraController: NSObject {
     var captureSession: AVCaptureSession?
@@ -427,15 +428,74 @@ extension CameraController {
         }
     }
 
-    func captureImage(completion: @escaping (UIImage?, Error?) -> Void) {
-        guard let captureSession = captureSession, captureSession.isRunning else { completion(nil, CameraControllerError.captureSessionIsMissing); return }
+    func captureImage(width: Int?, height: Int?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
+        guard let photoOutput = self.photoOutput else {
+            completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
+            return
+        }
+        
         let settings = AVCapturePhotoSettings()
+        if photoOutput.isHighResolutionCaptureEnabled {
+            settings.isHighResolutionCaptureEnabled = true
+        }
 
-        settings.flashMode = self.flashMode
-        settings.isHighResolutionPhotoEnabled = self.highResolutionOutput
+        self.photoCaptureCompletionBlock = { (image, error) in
+            if let error = error {
+                completion(nil, error)
+                return
+            }
+            
+            guard let image = image else {
+                completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to capture image"]))
+                return
+            }
 
-        self.photoOutput?.capturePhoto(with: settings, delegate: self)
-        self.photoCaptureCompletionBlock = completion
+            if let location = gpsLocation {
+                self.addGPSMetadata(to: image, location: location)
+            }
+            
+            if let width = width, let height = height {
+                let resizedImage = self.resizeImage(image: image, to: CGSize(width: width, height: height))
+                completion(resizedImage, nil)
+            } else {
+                completion(image, nil)
+            }
+        }
+        
+        photoOutput.capturePhoto(with: settings, delegate: self)
+    }
+
+    func addGPSMetadata(to image: UIImage, location: CLLocation) {
+        guard let jpegData = image.jpegData(compressionQuality: 1.0),
+              let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
+              let uti = CGImageSourceGetType(source) else { return }
+        
+        let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
+        
+        let gpsDict: [String: Any] = [
+            kCGImagePropertyGPSLatitude as String: abs(location.coordinate.latitude),
+            kCGImagePropertyGPSLatitudeRef as String: location.coordinate.latitude >= 0 ? "N" : "S",
+            kCGImagePropertyGPSLongitude as String: abs(location.coordinate.longitude),
+            kCGImagePropertyGPSLongitudeRef as String: location.coordinate.longitude >= 0 ? "E" : "W",
+            kCGImagePropertyGPSTimeStamp as String: location.timestamp.ISO8601Format(),
+            kCGImagePropertyGPSAltitude as String: location.altitude,
+            kCGImagePropertyGPSAltitudeRef as String: location.altitude >= 0 ? 0 : 1
+        ]
+        
+        metadata[kCGImagePropertyGPSDictionary as String] = gpsDict
+        
+        let destData = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(destData, uti, 1, nil) else { return }
+        CGImageDestinationAddImageFromSource(destination, source, 0, metadata as CFDictionary)
+        CGImageDestinationFinalize(destination)
+    }
+
+    func resizeImage(image: UIImage, to size: CGSize) -> UIImage? {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let resizedImage = renderer.image { (context) in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        return resizedImage
     }
 
     func captureSample(completion: @escaping (UIImage?, Error?) -> Void) {

@@ -92,6 +92,52 @@ Then run
 npx cap sync
 ```
 
+## Optional Configuration
+
+To use certain features of this plugin, you will need to add the following permissions/keys to your native project configurations.
+
+### Android
+
+In your `android/app/src/main/AndroidManifest.xml`:
+
+- **Audio Recording** (`disableAudio: false`):
+  ```xml
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  ```
+
+- **Saving to Gallery** (`saveToGallery: true`):
+  ```xml
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+  ```
+
+- **Location in EXIF Data** (`withExifLocation: true`):
+  ```xml
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  ```
+
+### iOS
+
+In your `ios/App/App/Info.plist`, you must provide descriptions for the permissions your app requires. The keys are added automatically, but you need to provide the `string` values.
+
+- **Audio Recording** (`disableAudio: false`):
+  ```xml
+  <key>NSMicrophoneUsageDescription</key>
+  <string>To record audio with videos</string>
+  ```
+
+- **Saving to Gallery** (`saveToGallery: true`):
+  ```xml
+  <key>NSPhotoLibraryAddUsageDescription</key>
+  <string>To save photos to your gallery</string>
+  ```
+
+- **Location in EXIF Data** (`withExifLocation: true`):
+  ```xml
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>To add location data to your photos</string>
+  ```
+
 ## Extra Android installation steps
 
 **Important** `camera-preview` 3+ requires Gradle 7.
@@ -538,7 +584,7 @@ Defines the configuration options for starting the camera preview.
 | **`storeToFile`**                  | <code>boolean</code> | If true, saves the captured image to a file and returns the file path. If false, returns a base64 encoded string. | <code>false</code>  |
 | **`disableExifHeaderStripping`**   | <code>boolean</code> | If true, prevents the plugin from rotating the image based on EXIF data.                                          | <code>false</code>  |
 | **`enableHighResolution`**         | <code>boolean</code> | If true, enables high-resolution image capture.                                                                   | <code>false</code>  |
-| **`disableAudio`**                 | <code>boolean</code> | If true, disables the audio stream, preventing audio permission requests.                                         | <code>false</code>  |
+| **`disableAudio`**                 | <code>boolean</code> | If true, disables the audio stream, preventing audio permission requests.                                         | <code>true</code>   |
 | **`lockAndroidOrientation`**       | <code>boolean</code> | If true, locks the device orientation while the camera is active.                                                 | <code>false</code>  |
 | **`enableOpacity`**                | <code>boolean</code> | If true, allows the camera preview's opacity to be changed.                                                       | <code>false</code>  |
 | **`enableZoom`**                   | <code>boolean</code> | If true, enables pinch-to-zoom functionality on the preview.                                                      | <code>false</code>  |
@@ -555,13 +601,14 @@ Represents EXIF data extracted from an image.
 
 Defines the options for capturing a picture.
 
-| Prop                | Type                                                    | Description                                                                               | Default             | Since |
-| ------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------- | ----- |
-| **`height`**        | <code>number</code>                                     | The desired height of the picture in pixels. If not provided, the device default is used. |                     |       |
-| **`width`**         | <code>number</code>                                     | The desired width of the picture in pixels. If not provided, the device default is used.  |                     |       |
-| **`quality`**       | <code>number</code>                                     | The quality of the captured image, from 0 to 100. Does not apply to `png` format.         | <code>85</code>     |       |
-| **`format`**        | <code><a href="#pictureformat">PictureFormat</a></code> | The format of the captured image.                                                         | <code>"jpeg"</code> |       |
-| **`saveToGallery`** | <code>boolean</code>                                    | If true, the captured image will be saved to the user's gallery.                          | <code>false</code>  | 7.5.0 |
+| Prop                   | Type                                                    | Description                                                                                                                                | Default             | Since |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- | ----- |
+| **`height`**           | <code>number</code>                                     | The desired height of the picture in pixels. If not provided, the device default is used.                                                  |                     |       |
+| **`width`**            | <code>number</code>                                     | The desired width of the picture in pixels. If not provided, the device default is used.                                                   |                     |       |
+| **`quality`**          | <code>number</code>                                     | The quality of the captured image, from 0 to 100. Does not apply to `png` format.                                                          | <code>85</code>     |       |
+| **`format`**           | <code><a href="#pictureformat">PictureFormat</a></code> | The format of the captured image.                                                                                                          | <code>"jpeg"</code> |       |
+| **`saveToGallery`**    | <code>boolean</code>                                    | If true, the captured image will be saved to the user's gallery.                                                                           | <code>false</code>  | 7.5.0 |
+| **`withExifLocation`** | <code>boolean</code>                                    | If true, the plugin will attempt to add GPS location data to the image's EXIF metadata. This may prompt the user for location permissions. | <code>false</code>  | 7.6.0 |
 
 
 #### CameraSampleOptions

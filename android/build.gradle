@@ -49,7 +49,8 @@ dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation 'androidx.exifinterface:exifinterface:1.4.1'
-    
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
+
     // CameraX dependencies
     def camerax_version = "1.5.0-beta01"
     implementation "androidx.camera:camera-core:${camerax_version}"

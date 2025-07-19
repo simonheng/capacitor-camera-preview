@@ -30,6 +30,7 @@ import {
   type LensInfo,
   type PictureFormat,
   type CameraLens,
+  type CameraPreviewPictureOptions,
 } from '@capgo/camera-preview';
 import { CapacitorCameraViewService } from '../../core/capacitor-camera-preview.service';
 
@@ -82,6 +83,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly disableAudio = input<boolean>(true);
   public readonly enableHighResolution = input<boolean>(true);
   public readonly lockAndroidOrientation = input<boolean>(true);
+  public readonly saveToGallery = input<boolean>(false);
+  public readonly withExifLocation = input<boolean>(false);
 
   protected readonly cameraStarted = toSignal(
     this.#cameraViewService.cameraStarted,
@@ -193,7 +196,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       const quality = this.pictureQuality();
       const format = this.pictureFormat();
 
-      let captureOptions = { quality };
+      let captureOptions: Partial<CameraPreviewPictureOptions> = { quality, saveToGallery: this.saveToGallery(), withExifLocation: this.withExifLocation() };
       if (format === 'png') {
         captureOptions = { ...captureOptions, ...{ format } };
       }

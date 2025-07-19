@@ -26,8 +26,6 @@
 	<string>To be able to scan documents</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>To be able to scan documents</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>To save photos to the gallery</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

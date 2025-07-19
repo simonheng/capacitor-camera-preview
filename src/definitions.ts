@@ -146,7 +146,7 @@ export interface CameraPreviewOptions {
   enableHighResolution?: boolean;
   /** 
    * If true, disables the audio stream, preventing audio permission requests.
-   * @default false
+   * @default true
    */
   disableAudio?: boolean;
   /** 
@@ -205,6 +205,13 @@ export interface CameraPreviewPictureOptions {
    * @since 7.5.0
    */
   saveToGallery?: boolean;
+  /**
+   * If true, the plugin will attempt to add GPS location data to the image's EXIF metadata.
+   * This may prompt the user for location permissions.
+   * @default false
+   * @since 7.6.0
+   */
+  withExifLocation?: boolean;
 }
 
 /** Represents EXIF data extracted from an image. */

@@ -56,6 +56,11 @@ import java.util.Locale;
 import androidx.exifinterface.media.ExifInterface;
 import org.json.JSONObject;
 import java.nio.file.Files;
+import android.graphics.BitmapFactory;
+import android.graphics.Bitmap;
+import android.graphics.Matrix;
+import java.io.ByteArrayOutputStream;
+import android.location.Location;
 
 public class CameraXView implements LifecycleOwner {
     private static final String TAG = "CameraPreview CameraXView";
@@ -314,7 +319,7 @@ public class CameraXView implements LifecycleOwner {
         }
     }
 
-    public void capturePhoto(int quality, final boolean saveToGallery) {
+    public void capturePhoto(int quality, final boolean saveToGallery, Integer width, Integer height, Location location) {
         Log.d(TAG, "capturePhoto: Starting photo capture with quality: " + quality);
 
         if (imageCapture == null) {
@@ -344,8 +349,21 @@ public class CameraXView implements LifecycleOwner {
                     try {
                         byte[] bytes = Files.readAllBytes(tempFile.toPath());
                         ExifInterface exifInterface = new ExifInterface(tempFile.getAbsolutePath());
+                        
+                        if (location != null) {
+                            exifInterface.setGpsInfo(location);
+                        }
+                        
                         JSONObject exifData = getExifData(exifInterface);
 
+                        if (width != null && height != null) {
+                            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                            Bitmap resizedBitmap = resizeBitmap(bitmap, width, height);
+                            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                            resizedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream);
+                            bytes = stream.toByteArray();
+                        }
+                        
                         if (saveToGallery) {
                             saveImageToGallery(bytes);
                         }
@@ -368,6 +386,10 @@ public class CameraXView implements LifecycleOwner {
         );
     }
 
+    private Bitmap resizeBitmap(Bitmap bitmap, int width, int height) {
+        return Bitmap.createScaledBitmap(bitmap, width, height, true);
+    }
+    
     private JSONObject getExifData(ExifInterface exifInterface) {
         JSONObject exifData = new JSONObject();
         try {

@@ -3,6 +3,7 @@ import Capacitor
 import AVFoundation
 import Photos
 import CoreImage
+import CoreLocation
 
 extension UIWindow {
     static var isLandscape: Bool {
@@ -76,7 +77,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     var enableZoom: Bool?
     var highResolutionOutput: Bool = false
     var disableAudio: Bool = false
-
+    var locationManager: CLLocationManager?
+    var currentLocation: CLLocation?
+    
     // MARK: - Transparency Methods
     
     private func makeWebViewTransparent() {
@@ -288,7 +291,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         self.toBack = call.getBool("toBack") ?? true
         self.storeToFile = call.getBool("storeToFile") ?? false
         self.enableZoom = call.getBool("enableZoom") ?? false
-        self.disableAudio = call.getBool("disableAudio") ?? false
+        self.disableAudio = call.getBool("disableAudio") ?? true
 
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
             guard granted else {
@@ -440,8 +443,18 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
 
             let quality = call.getFloat("quality", 85)
             let saveToGallery = call.getBool("saveToGallery", false)
+            let withExifLocation = call.getBool("withExifLocation", false)
+            let width = call.getInt("width")
+            let height = call.getInt("height")
 
-            self.cameraController.captureImage(quality: quality) { (image, error) in
+            if withExifLocation {
+                self.locationManager = CLLocationManager()
+                self.locationManager?.delegate = self
+                self.locationManager?.requestWhenInUseAuthorization()
+                self.locationManager?.startUpdatingLocation()
+            }
+
+            self.cameraController.captureImage(width: width, height: height, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
                 if let error = error {
                     call.reject(error.localizedDescription)
                     return
@@ -812,6 +825,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        self.currentLocation = locations.last
+        self.locationManager?.stopUpdatingLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Logger.error("CameraPreview", "Failed to get location", error)
+    }
 
 
 }

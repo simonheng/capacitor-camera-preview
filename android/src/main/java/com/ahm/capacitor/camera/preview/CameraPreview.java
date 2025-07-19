@@ -3,6 +3,7 @@ package com.ahm.capacitor.camera.preview;
 import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.RECORD_AUDIO;
 
+import android.Manifest;
 import android.content.pm.ActivityInfo;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
@@ -23,8 +24,11 @@ import java.util.Objects;
 import android.util.Size;
 import android.util.Log;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
-
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import org.json.JSONObject;
+import android.location.Location;
+import com.getcapacitor.Logger;
 
 @CapacitorPlugin(
   name = "CameraPreview",
@@ -37,6 +41,10 @@ import org.json.JSONObject;
       strings = { CAMERA },
       alias = CameraPreview.CAMERA_ONLY_PERMISSION_ALIAS
     ),
+    @Permission(
+      strings = { Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION },
+      alias = CameraPreview.CAMERA_WITH_LOCATION_PERMISSION_ALIAS
+    )
   }
 )
 public class CameraPreview
@@ -45,12 +53,15 @@ public class CameraPreview
 
   static final String CAMERA_WITH_AUDIO_PERMISSION_ALIAS = "cameraWithAudio";
   static final String CAMERA_ONLY_PERMISSION_ALIAS = "cameraOnly";
+  static final String CAMERA_WITH_LOCATION_PERMISSION_ALIAS = "cameraWithLocation";
 
   private String captureCallbackId = "";
   private String snapshotCallbackId = "";
   private String cameraStartCallbackId = "";
   private int previousOrientationRequest = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
   private CameraXView cameraXView;
+  private FusedLocationProviderClient fusedLocationClient;
+  private Location lastLocation;
 
   @PluginMethod
   public void start(PluginCall call) {
@@ -87,12 +98,56 @@ public class CameraPreview
       return;
     }
 
+    final boolean withExifLocation = call.getBoolean("withExifLocation", false);
+
+    if (withExifLocation) {
+      if (getPermissionState(CAMERA_WITH_LOCATION_PERMISSION_ALIAS) != PermissionState.GRANTED) {
+        requestPermissionForAlias(CAMERA_WITH_LOCATION_PERMISSION_ALIAS, call, "captureWithLocationPermission");
+      } else {
+        getLocationAndCapture(call);
+      }
+    } else {
+      captureWithoutLocation(call);
+    }
+  }
+
+  @PermissionCallback
+  private void captureWithLocationPermission(PluginCall call) {
+    if (getPermissionState(CAMERA_WITH_LOCATION_PERMISSION_ALIAS) == PermissionState.GRANTED) {
+      getLocationAndCapture(call);
+    } else {
+      Logger.warn("Location permission denied. Capturing photo without location data.");
+      captureWithoutLocation(call);
+    }
+  }
+
+  private void getLocationAndCapture(PluginCall call) {
+      if (fusedLocationClient == null) {
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(getContext());
+      }
+        fusedLocationClient.getLastLocation().addOnSuccessListener(getActivity(), location -> {
+        lastLocation = location;
+        proceedWithCapture(call, lastLocation);
+      }).addOnFailureListener(e -> {
+        Logger.error("Failed to get location: " + e.getMessage());
+        proceedWithCapture(call, null);
+      });
+  }
+
+  private void captureWithoutLocation(PluginCall call) {
+    proceedWithCapture(call, null);
+  }
+
+  private void proceedWithCapture(PluginCall call, Location location) {
     bridge.saveCall(call);
     captureCallbackId = call.getCallbackId();
 
     Integer quality = Objects.requireNonNull(call.getInt("quality", 85));
-    final boolean saveToGallery = Boolean.TRUE.equals(call.getBoolean("saveToGallery", false));
-    cameraXView.capturePhoto(quality, saveToGallery);
+    final boolean saveToGallery = call.getBoolean("saveToGallery", false);
+    Integer width = call.getInt("width");
+    Integer height = call.getInt("height");
+    
+    cameraXView.capturePhoto(quality, saveToGallery, width, height, location);
   }
 
   @PluginMethod

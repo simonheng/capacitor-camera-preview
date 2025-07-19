@@ -86,6 +86,8 @@ export class CameraViewPage implements OnInit {
   protected disableAudio = model<boolean>(false);
   protected enableHighResolution = model<boolean>(false);
   protected lockAndroidOrientation = model<boolean>(false);
+  protected saveToGallery = model<boolean>(false);
+  protected withExifLocation = model<boolean>(false);
 
   protected toBack = model<boolean>(false);
 
@@ -117,6 +119,8 @@ export class CameraViewPage implements OnInit {
         disableAudio: this.disableAudio(),
         enableHighResolution: this.enableHighResolution(),
         lockAndroidOrientation: this.lockAndroidOrientation(),
+        saveToGallery: this.saveToGallery(),
+        withExifLocation: this.withExifLocation(),
       },
     });
 
