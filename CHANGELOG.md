@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [7.3.12](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.11...7.3.12) (2025-07-21)
+
+
+### Bug Fixes
+
+* **deps:** update dependency com.google.gms:google-services to v4.4.3 ([#204](https://github.com/Cap-go/capacitor-camera-preview/issues/204)) ([49d943d](https://github.com/Cap-go/capacitor-camera-preview/commit/49d943d99aca03429aabe34f4260a1d5fd3a2b84))
+
 ### [7.3.11](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.10...7.3.11) (2025-07-21)
 
 ### [7.3.10](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.9...7.3.10) (2025-07-19)
