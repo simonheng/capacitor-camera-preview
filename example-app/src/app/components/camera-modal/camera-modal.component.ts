@@ -8,6 +8,7 @@ import {
   OnDestroy,
   OnInit,
   signal,
+  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Capacitor } from '@capacitor/core';
@@ -19,6 +20,8 @@ import {
   IonFab,
   IonFabButton,
   IonIcon,
+  IonSelect,
+  IonSelectOption,
   IonSpinner,
   ModalController,
 } from '@ionic/angular/standalone';
@@ -52,6 +55,8 @@ function getDistance(touch1: Touch, touch2: Touch): number {
     IonFab,
     IonFabButton,
     IonIcon,
+    IonSelect,
+    IonSelectOption,
     IonSpinner,
   ],
   host: {

@@ -11,10 +11,12 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
+  IonInput,
   IonItem,
   IonLabel,
   IonList,
   IonRange,
+  IonSelect,
   IonSelectOption,
   IonTitle,
   IonToolbar,
@@ -47,10 +49,12 @@ import { GalleryService } from '../../services/gallery.service';
     IonContent,
     IonHeader,
     IonIcon,
+    IonInput,
     IonItem,
     IonLabel,
     IonList,
     IonRange,
+    IonSelect,
     IonSelectOption,
     IonTitle,
     IonToolbar,
@@ -65,7 +69,7 @@ export class CameraViewPage implements OnInit {
   protected readonly rearCameras = computed(() => this.cameraDevices().filter(d => d.position === 'rear'));
   protected readonly frontCameras = computed(() => this.cameraDevices().filter(d => d.position === 'front'));
   protected readonly testResults = signal<string>('');
-  
+
   // Basic camera settings
   protected deviceId = model<string | null>(null);
   protected position = model<CameraPosition>('rear');
