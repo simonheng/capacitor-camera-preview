@@ -27,6 +27,7 @@ class CameraController: NSObject {
     var fileVideoOutput: AVCaptureMovieFileOutput?
 
     var previewLayer: AVCaptureVideoPreviewLayer?
+    var gridOverlayView: GridOverlayView?
 
     var flashMode = AVCaptureDevice.FlashMode.off
     var photoCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
@@ -317,6 +318,19 @@ extension CameraController {
         self.previewLayer?.frame = view.frame
 
         updateVideoOrientation()
+    }
+
+    func addGridOverlay(to view: UIView, gridMode: String) {
+        removeGridOverlay()
+
+        gridOverlayView = GridOverlayView(frame: view.bounds)
+        gridOverlayView?.gridMode = gridMode
+        view.addSubview(gridOverlayView!)
+    }
+
+    func removeGridOverlay() {
+        gridOverlayView?.removeFromSuperview()
+        gridOverlayView = nil
     }
 
     func setupGestures(target: UIView, enableZoom: Bool) {

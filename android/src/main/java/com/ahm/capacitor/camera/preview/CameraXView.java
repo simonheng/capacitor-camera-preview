@@ -29,6 +29,7 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
+import android.widget.FrameLayout;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -82,6 +83,8 @@ public class CameraXView implements LifecycleOwner {
     private ImageCapture imageCapture;
     private ImageCapture sampleImageCapture;
     private PreviewView previewView;
+    private GridOverlayView gridOverlayView;
+    private FrameLayout previewContainer;
     private CameraSelector currentCameraSelector;
     private String currentDeviceId;
     private int currentFlashMode = ImageCapture.FLASH_MODE_OFF;
@@ -182,22 +185,46 @@ public class CameraXView implements LifecycleOwner {
         if (sessionConfig.isToBack()) {
             webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         }
+
+        // Create a container to hold both the preview and grid overlay
+        previewContainer = new FrameLayout(context);
+
+        // Create and setup the preview view
         previewView = new PreviewView(context);
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        previewContainer.addView(previewView, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        // Create and setup the grid overlay
+        gridOverlayView = new GridOverlayView(context);
+        gridOverlayView.setGridMode(sessionConfig.getGridMode());
+        previewContainer.addView(gridOverlayView, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
         ViewGroup parent = (ViewGroup) webView.getParent();
         if (parent != null) {
-            parent.addView(previewView, new ViewGroup.LayoutParams(sessionConfig.getWidth(), sessionConfig.getHeight()));
+            parent.addView(previewContainer, new ViewGroup.LayoutParams(sessionConfig.getWidth(), sessionConfig.getHeight()));
             if(sessionConfig.isToBack()) webView.bringToFront();
         }
     }
 
     private void removePreviewView() {
-        if (previewView != null) {
-            ViewGroup parent = (ViewGroup) previewView.getParent();
+        if (previewContainer != null) {
+            ViewGroup parent = (ViewGroup) previewContainer.getParent();
             if (parent != null) {
-                parent.removeView(previewView);
+                parent.removeView(previewContainer);
             }
+            previewContainer = null;
+        }
+        if (previewView != null) {
             previewView = null;
+        }
+        if (gridOverlayView != null) {
+            gridOverlayView = null;
         }
         webView.setBackgroundColor(android.graphics.Color.WHITE);
     }
@@ -986,7 +1013,8 @@ public class CameraXView implements LifecycleOwner {
             sessionConfig.isDisableExifHeaderStripping(), // disableExifHeaderStripping
             sessionConfig.isDisableAudio(), // disableAudio
             sessionConfig.getZoomFactor(), // zoomFactor
-            sessionConfig.getAspectRatio()
+            sessionConfig.getAspectRatio(), // aspectRatio
+            sessionConfig.getGridMode() // gridMode
         );
 
         // Clear current device ID to force position-based selection

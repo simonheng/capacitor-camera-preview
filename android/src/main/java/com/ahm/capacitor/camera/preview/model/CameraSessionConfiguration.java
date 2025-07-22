@@ -19,12 +19,13 @@ public class CameraSessionConfiguration {
     private final boolean disableAudio;
     private final float zoomFactor;
     private final String aspectRatio;
+    private final String gridMode;
     private float targetZoom = 1.0f;
 
     public CameraSessionConfiguration(String deviceId, String position, int x, int y, int width, int height,
                                     int paddingBottom, boolean toBack, boolean storeToFile, boolean enableOpacity,
                                     boolean enableZoom, boolean disableExifHeaderStripping, boolean disableAudio,
-                                    float zoomFactor, String aspectRatio) {
+                                    float zoomFactor, String aspectRatio, String gridMode) {
         this.deviceId = deviceId;
         this.position = position;
         this.x = x;
@@ -40,6 +41,7 @@ public class CameraSessionConfiguration {
         this.disableAudio = disableAudio;
         this.zoomFactor = zoomFactor;
         this.aspectRatio = aspectRatio;
+        this.gridMode = gridMode != null ? gridMode : "none";
     }
 
     public void setTargetZoom(float zoom) {
@@ -65,4 +67,5 @@ public class CameraSessionConfiguration {
     public boolean isDisableAudio() { return disableAudio; }
     public float getZoomFactor() { return zoomFactor; }
     public String getAspectRatio() { return aspectRatio; }
+    public String getGridMode() { return gridMode; }
 }

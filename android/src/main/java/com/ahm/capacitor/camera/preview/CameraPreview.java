@@ -390,6 +390,7 @@ public class CameraPreview
     final boolean lockOrientation = Boolean.TRUE.equals(call.getBoolean("lockAndroidOrientation", false));
     final boolean disableAudio = Boolean.TRUE.equals(call.getBoolean("disableAudio", true));
     final String aspectRatio = call.getString("aspectRatio");
+    final String gridMode = call.getString("gridMode", "none");
 
     float targetZoom = 1.0f;
     // Check if the selected device is a physical ultra-wide
@@ -428,7 +429,7 @@ public class CameraPreview
         int computedHeight = height != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, height, metrics) : getBridge().getWebView().getHeight();
         computedHeight -= (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, paddingBottom, metrics);
 
-        CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f, aspectRatio);
+        CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f, aspectRatio, gridMode);
         config.setTargetZoom(finalTargetZoom);
 
         bridge.saveCall(call);

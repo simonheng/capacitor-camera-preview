@@ -91,6 +91,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly lockAndroidOrientation = input<boolean>(true);
   public readonly saveToGallery = input<boolean>(false);
   public readonly withExifLocation = input<boolean>(false);
+  public readonly gridMode = input<'none' | '3x3' | '4x4'>('none');
 
   protected readonly cameraStarted = toSignal(
     this.#cameraViewService.cameraStarted,
@@ -164,6 +165,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       lockAndroidOrientation: this.lockAndroidOrientation(),
       toBack: true,
       aspectRatio: this.currentAspectRatio(),
+      gridMode: this.gridMode(),
     };
 
     await this.#cameraViewService.start(startOptions);

@@ -2,6 +2,8 @@ export type CameraPosition = "rear" | "front";
 
 export type FlashMode = CameraPreviewFlashMode;
 
+export type GridMode = "none" | "3x3" | "4x4";
+
 export enum DeviceType {
   ULTRA_WIDE = "ultraWide",
   WIDE_ANGLE = "wideAngle",
@@ -105,6 +107,12 @@ export interface CameraPreviewOptions {
    * @since 2.0.0
    */
   aspectRatio?: '4:3' | '16:9';
+  /**
+   * The grid overlay to display on the camera preview.
+   * @default "none"
+   * @since 2.1.0
+   */
+  gridMode?: GridMode;
   /**
    * Adjusts the y-position to account for safe areas (e.g., notches).
    * @platform ios

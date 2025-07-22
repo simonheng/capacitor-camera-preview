@@ -262,6 +262,18 @@
             With Exif Location
           </ion-checkbox>
         </ion-item>
+
+        <ion-item>
+          <ion-select
+            [(ngModel)]="gridMode"
+            label="Grid Overlay"
+            label-placement="floating"
+          >
+            <ion-select-option value="none">None</ion-select-option>
+            <ion-select-option value="3x3">3x3 Grid</ion-select-option>
+            <ion-select-option value="4x4">4x4 Grid</ion-select-option>
+          </ion-select>
+        </ion-item>
       </ion-list>
 
       <!-- Testing Features -->

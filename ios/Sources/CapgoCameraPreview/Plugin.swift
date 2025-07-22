@@ -80,15 +80,19 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     var locationManager: CLLocationManager?
     var currentLocation: CLLocation?
 
+
     // MARK: - Transparency Methods
+
 
     private func makeWebViewTransparent() {
         guard let webView = self.webView else { return }
+
 
         // Define a recursive function to traverse the view hierarchy
         func makeSubviewsTransparent(_ view: UIView) {
             // Set the background color to clear
             view.backgroundColor = .clear
+
 
             // Recurse for all subviews
             for subview in view.subviews {
@@ -96,15 +100,19 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             }
         }
 
+
         // Set the main webView to be transparent
         webView.isOpaque = false
         webView.backgroundColor = .clear
 
+
         // Recursively make all subviews transparent
         makeSubviewsTransparent(webView)
 
+
         // Also ensure the webview's container is transparent
         webView.superview?.backgroundColor = .clear
+
 
         // Force a layout pass to apply changes
         DispatchQueue.main.async {
@@ -149,6 +157,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             }
         }
 
+        cameraController.updateVideoOrientation()
+
                 cameraController.updateVideoOrientation()
 
         // Update grid overlay frame if it exists
@@ -162,6 +172,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+
     @objc func appDidBecomeActive() {
         if self.isInitialized {
             DispatchQueue.main.async {
@@ -169,6 +180,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             }
         }
     }
+
 
     @objc func appWillEnterForeground() {
         if self.isInitialized {
@@ -319,8 +331,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         let height = self.paddingBottom != nil ? self.height! - self.paddingBottom!: self.height!
                         self.previewView = UIView(frame: CGRect(x: self.posX ?? 0, y: self.posY ?? 0, width: self.width!, height: height))
 
+
                         // Make webview transparent - comprehensive approach
                         self.makeWebViewTransparent()
+
 
                         self.webView?.superview?.addSubview(self.previewView)
                         if self.toBack! {
@@ -336,9 +350,15 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                             self.cameraController.addGridOverlay(to: self.previewView, gridMode: gridMode)
                         }
 
+                        // Add grid overlay if enabled
+                        if gridMode != "none" {
+                            self.cameraController.addGridOverlay(to: self.previewView, gridMode: gridMode)
+                        }
+
                         if self.rotateWhenOrientationChanged == true {
                             NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.rotated), name: UIDevice.orientationDidChangeNotification, object: nil)
                         }
+
 
                         // Add observers for app state changes to maintain transparency
                         NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
@@ -384,8 +404,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                             self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                             self.previewView.isUserInteractionEnabled = true
 
+
                             // Ensure webview remains transparent after flip
                             self.makeWebViewTransparent()
+
 
                             call.resolve()
                         }
@@ -423,6 +445,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             }
 
             // Always attempt to stop and clean up, regardless of captureSession state
+            self.cameraController.removeGridOverlay()
             if let previewView = self.previewView {
                 previewView.removeFromSuperview()
                 self.previewView = nil
@@ -432,6 +455,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             self.isInitialized = false
             self.isInitializing = false
             self.cameraController.cleanup()
+
 
             // Remove notification observers
             NotificationCenter.default.removeObserver(self)
@@ -487,8 +511,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                     return
                 }
 
+
                 let exifData = self.getExifData(from: imageData)
                 let base64Image = imageData.base64EncodedString()
+
 
                 var result = JSObject()
                 result["value"] = base64Image
@@ -505,10 +531,12 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             return [:]
         }
 
+
         var exifData = JSObject()
         for (key, value) in exifDict {
             exifData[key] = value
         }
+
 
         return exifData
     }
@@ -653,7 +681,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         for device in session.devices {
             var lenses: [[String: Any]] = []
 
+
             let constituentDevices = device.isVirtualDevice ? device.constituentDevices : [device]
+
 
             for lensDevice in constituentDevices {
                 var deviceType: String
@@ -675,6 +705,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                     baseZoomRatio = 2.0 // A common value for telephoto lenses
                 }
 
+
                 let lensInfo: [String: Any] = [
                     "label": lensDevice.localizedName,
                     "deviceType": deviceType,
@@ -686,6 +717,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                 lenses.append(lensInfo)
             }
 
+
             let deviceData: [String: Any] = [
                 "deviceId": device.uniqueID,
                 "label": device.localizedName,
@@ -695,6 +727,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                 "maxZoom": Float(device.maxAvailableVideoZoomFactor),
                 "isLogical": device.isVirtualDevice
             ]
+
 
             devices.append(deviceData)
         }
@@ -711,6 +744,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         do {
             let zoomInfo = try self.cameraController.getZoom()
             let lensInfo = try self.cameraController.getCurrentLensInfo()
+
 
             var minZoom = zoomInfo.min
             var maxZoom = zoomInfo.max
@@ -808,8 +842,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                         self.previewView.isUserInteractionEnabled = true
 
+
                         // Ensure webview remains transparent after device switch
                         self.makeWebViewTransparent()
+
 
                         call.resolve()
                     }

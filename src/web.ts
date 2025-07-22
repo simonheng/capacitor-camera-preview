@@ -47,6 +47,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     const video = document.getElementById("video");
     const parent = document.getElementById(options?.parent || "");
+    const gridMode = options?.gridMode || "none";
 
     if (!video) {
       const videoElement = document.createElement("video");
@@ -75,6 +76,13 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       }
 
       parent?.appendChild(videoElement);
+
+      // Create and add grid overlay if needed
+      if (gridMode !== "none") {
+        const gridOverlay = this.createGridOverlay(gridMode);
+        gridOverlay.id = "camera-grid-overlay";
+        parent?.appendChild(gridOverlay);
+      }
 
       if (navigator?.mediaDevices?.getUserMedia) {
         const constraints: MediaStreamConstraints = {
@@ -138,6 +146,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
       video.remove();
     }
+
+    // Remove grid overlay if it exists
+    const gridOverlay = document.getElementById("camera-grid-overlay");
+    gridOverlay?.remove();
   }
 
   async capture(options: CameraPreviewPictureOptions): Promise<any> {
@@ -302,7 +314,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       // Determine device type based on label
       let deviceType: DeviceType = DeviceType.WIDE_ANGLE;
       let baseZoomRatio = 1.0;
-      
+
       if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
         deviceType = DeviceType.ULTRA_WIDE;
         baseZoomRatio = 0.5;
@@ -349,7 +361,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     if (backDevices.length > 0) {
       result.push({
         deviceId: backDevices[0].deviceId,
-        label: "Back Camera", 
+        label: "Back Camera",
         position: "rear",
         lenses: backDevices,
         isLogical: false,
@@ -384,7 +396,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     // Get current device info to determine lens type
     let deviceType: DeviceType = DeviceType.WIDE_ANGLE;
     let baseZoomRatio = 1.0;
-    
+
     if (this.currentDeviceId) {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const device = devices.find(d => d.deviceId === this.currentDeviceId);
@@ -505,5 +517,51 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
   }
 
+  private createGridOverlay(gridMode: string): HTMLElement {
+    const overlay = document.createElement("div");
+    overlay.style.position = "absolute";
+    overlay.style.top = "0";
+    overlay.style.left = "0";
+    overlay.style.width = "100%";
+    overlay.style.height = "100%";
+    overlay.style.pointerEvents = "none";
+    overlay.style.zIndex = "10";
+
+    const divisions = gridMode === "3x3" ? 3 : 4;
+
+    // Create SVG for grid lines
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.style.width = "100%";
+    svg.style.height = "100%";
+    svg.style.position = "absolute";
+    svg.style.top = "0";
+    svg.style.left = "0";
+
+    // Create grid lines
+    for (let i = 1; i < divisions; i++) {
+      // Vertical lines
+      const verticalLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      verticalLine.setAttribute("x1", `${(i / divisions) * 100}%`);
+      verticalLine.setAttribute("y1", "0%");
+      verticalLine.setAttribute("x2", `${(i / divisions) * 100}%`);
+      verticalLine.setAttribute("y2", "100%");
+      verticalLine.setAttribute("stroke", "rgba(255, 255, 255, 0.5)");
+      verticalLine.setAttribute("stroke-width", "1");
+      svg.appendChild(verticalLine);
+
+      // Horizontal lines
+      const horizontalLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      horizontalLine.setAttribute("x1", "0%");
+      horizontalLine.setAttribute("y1", `${(i / divisions) * 100}%`);
+      horizontalLine.setAttribute("x2", "100%");
+      horizontalLine.setAttribute("y2", `${(i / divisions) * 100}%`);
+      horizontalLine.setAttribute("stroke", "rgba(255, 255, 255, 0.5)");
+      horizontalLine.setAttribute("stroke-width", "1");
+      svg.appendChild(horizontalLine);
+    }
+
+    overlay.appendChild(svg);
+    return overlay;
+  }
 
 }

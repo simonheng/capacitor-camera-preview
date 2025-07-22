@@ -92,6 +92,7 @@ export class CameraViewPage implements OnInit {
   protected lockAndroidOrientation = model<boolean>(false);
   protected saveToGallery = model<boolean>(false);
   protected withExifLocation = model<boolean>(false);
+  protected gridMode = model<'none' | '3x3' | '4x4'>('none');
 
   protected toBack = model<boolean>(false);
 
@@ -125,6 +126,7 @@ export class CameraViewPage implements OnInit {
         lockAndroidOrientation: this.lockAndroidOrientation(),
         saveToGallery: this.saveToGallery(),
         withExifLocation: this.withExifLocation(),
+        gridMode: this.gridMode(),
       },
     });
 
