@@ -106,7 +106,7 @@ export interface CameraPreviewOptions {
    *
    * @since 2.0.0
    */
-  aspectRatio?: '4:3' | '16:9';
+  aspectRatio?: '4:3' | '16:9' | 'fill';
   /**
    * The grid overlay to display on the camera preview.
    * @default "none"
