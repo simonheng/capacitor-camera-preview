@@ -51,7 +51,7 @@ class CameraController: NSObject {
 }
 
 extension CameraController {
-    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, completionHandler: @escaping (Error?) -> Void) {
+    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, completionHandler: @escaping (Error?) -> Void) {
         func createCaptureSession() {
             self.captureSession = AVCaptureSession()
         }
@@ -204,11 +204,54 @@ extension CameraController {
         func configurePhotoOutput(cameraMode: Bool) throws {
             guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
 
-            //  TODO: check if that really useful
-            if !cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.photo) {
-                captureSession.sessionPreset = .photo
-            } else if cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.high) {
-                captureSession.sessionPreset = .high
+            // Configure session preset based on aspect ratio and other settings
+            var targetPreset: AVCaptureSession.Preset = .photo // Default preset
+
+            if let aspectRatio = aspectRatio {
+                switch aspectRatio {
+                case "16:9":
+                    // Use HD presets for 16:9 aspect ratio
+                    if self.highResolutionOutput && captureSession.canSetSessionPreset(.hd1920x1080) {
+                        targetPreset = .hd1920x1080
+                    } else if captureSession.canSetSessionPreset(.hd1280x720) {
+                        targetPreset = .hd1280x720
+                    } else {
+                        targetPreset = .high
+                    }
+                case "4:3":
+                    // Use photo preset for 4:3 aspect ratio (traditional photo format)
+                    if self.highResolutionOutput && captureSession.canSetSessionPreset(.photo) {
+                        targetPreset = .photo
+                    } else {
+                        targetPreset = .medium
+                    }
+                default:
+                    // Default behavior for unrecognized aspect ratios
+                    if !cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.photo) {
+                        targetPreset = .photo
+                    } else if cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.high) {
+                        targetPreset = .high
+                    }
+                }
+            } else {
+                // Original logic when no aspect ratio is specified
+                if !cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.photo) {
+                    targetPreset = .photo
+                } else if cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.high) {
+                    targetPreset = .high
+                }
+            }
+
+            // Apply the determined preset
+            if captureSession.canSetSessionPreset(targetPreset) {
+                captureSession.sessionPreset = targetPreset
+                print("[CameraPreview] Set session preset to \(targetPreset) for aspect ratio: \(aspectRatio ?? "default")")
+            } else {
+                // Fallback to a basic preset if the target preset is not supported
+                print("[CameraPreview] Target preset \(targetPreset) not supported, falling back to .medium")
+                if captureSession.canSetSessionPreset(.medium) {
+                    captureSession.sessionPreset = .medium
+                }
             }
 
             self.photoOutput = AVCapturePhotoOutput()
@@ -433,7 +476,7 @@ extension CameraController {
             completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
             return
         }
-        
+
         let settings = AVCapturePhotoSettings()
         if photoOutput.isHighResolutionCaptureEnabled {
             settings.isHighResolutionCaptureEnabled = true
@@ -444,7 +487,7 @@ extension CameraController {
                 completion(nil, error)
                 return
             }
-            
+
             guard let image = image else {
                 completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to capture image"]))
                 return
@@ -453,7 +496,7 @@ extension CameraController {
             if let location = gpsLocation {
                 self.addGPSMetadata(to: image, location: location)
             }
-            
+
             if let width = width, let height = height {
                 let resizedImage = self.resizeImage(image: image, to: CGSize(width: width, height: height))
                 completion(resizedImage, nil)
@@ -461,7 +504,7 @@ extension CameraController {
                 completion(image, nil)
             }
         }
-        
+
         photoOutput.capturePhoto(with: settings, delegate: self)
     }
 
@@ -469,9 +512,9 @@ extension CameraController {
         guard let jpegData = image.jpegData(compressionQuality: 1.0),
               let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
               let uti = CGImageSourceGetType(source) else { return }
-        
+
         let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
-        
+
         let gpsDict: [String: Any] = [
             kCGImagePropertyGPSLatitude as String: abs(location.coordinate.latitude),
             kCGImagePropertyGPSLatitudeRef as String: location.coordinate.latitude >= 0 ? "N" : "S",
@@ -481,9 +524,9 @@ extension CameraController {
             kCGImagePropertyGPSAltitude as String: location.altitude,
             kCGImagePropertyGPSAltitudeRef as String: location.altitude >= 0 ? 0 : 1
         ]
-        
+
         metadata[kCGImagePropertyGPSDictionary as String] = gpsDict
-        
+
         let destData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(destData, uti, 1, nil) else { return }
         CGImageDestinationAddImageFromSource(destination, source, 0, metadata as CFDictionary)
@@ -737,7 +780,7 @@ extension CameraController {
 
         return device.uniqueID
     }
-    
+
     func getCurrentLensInfo() throws -> (focalLength: Float, deviceType: String, baseZoomRatio: Float) {
         var currentCamera: AVCaptureDevice?
         switch currentCameraPosition {
