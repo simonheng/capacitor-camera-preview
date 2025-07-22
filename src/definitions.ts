@@ -2,6 +2,8 @@ export type CameraPosition = "rear" | "front";
 
 export type FlashMode = CameraPreviewFlashMode;
 
+export type GridMode = "none" | "3x3" | "4x4";
+
 export enum DeviceType {
   ULTRA_WIDE = "ultraWide",
   WIDE_ANGLE = "wideAngle",
@@ -68,121 +70,125 @@ export interface LensInfo {
  * Defines the configuration options for starting the camera preview.
  */
 export interface CameraPreviewOptions {
-  /** 
+  /**
    * The parent element to attach the video preview to.
    * @platform web
    */
   parent?: string;
-  /** 
+  /**
    * A CSS class name to add to the preview element.
    * @platform web
    */
   className?: string;
-  /** 
+  /**
    * The width of the preview in pixels. Defaults to the screen width.
    * @platform android, ios, web
    */
   width?: number;
-  /** 
+  /**
    * The height of the preview in pixels. Defaults to the screen height.
    * @platform android, ios, web
    */
   height?: number;
-  /** 
+  /**
    * The horizontal origin of the preview, in pixels.
    * @platform android, ios
    */
   x?: number;
-  /** 
+  /**
    * The vertical origin of the preview, in pixels.
    * @platform android, ios
    */
   y?: number;
   /**
-   * The aspect ratio of the preview.
+   * The aspect ratio of the camera preview, '4:3' or '16:9'.
+   * If not set, the camera will use the default aspect ratio.
    *
-   * If provided, the preview will be sized to this aspect ratio, respecting `width` or `height` as a constraint.
-   * If `aspectRatio` is 'fill', the preview will fill the container.
-   * @platform android, ios, web
-   * @default "fill"
+   * @since 2.0.0
    */
-  aspectRatio?: '4:3' | '16:9' | 'fill';
+  aspectRatio?: '4:3' | '16:9';
+  /**
+   * The grid overlay to display on the camera preview.
+   * @default "none"
+   * @since 2.1.0
+   */
+  gridMode?: GridMode;
   /**
    * Adjusts the y-position to account for safe areas (e.g., notches).
    * @platform ios
    * @default false
    */
   includeSafeAreaInsets?: boolean;
-  /** 
+  /**
    * If true, places the preview behind the webview.
    * @platform android
    * @default true
    */
   toBack?: boolean;
-  /** 
+  /**
    * Bottom padding for the preview, in pixels.
    * @platform android, ios
    */
   paddingBottom?: number;
-  /** 
+  /**
    * Whether to rotate the preview when the device orientation changes.
    * @platform ios
    * @default true
    */
   rotateWhenOrientationChanged?: boolean;
-  /** 
+  /**
    * The camera to use.
    * @default "rear"
    */
   position?: CameraPosition | string;
-  /** 
+  /**
    * If true, saves the captured image to a file and returns the file path.
    * If false, returns a base64 encoded string.
    * @default false
    */
   storeToFile?: boolean;
-  /** 
+  /**
    * If true, prevents the plugin from rotating the image based on EXIF data.
    * @platform android
    * @default false
    */
   disableExifHeaderStripping?: boolean;
-  /** 
+  /**
    * If true, enables high-resolution image capture.
    * @platform ios
    * @default false
    */
   enableHighResolution?: boolean;
-  /** 
+  /**
    * If true, disables the audio stream, preventing audio permission requests.
    * @default true
    */
   disableAudio?: boolean;
-  /** 
+  /**
    * If true, locks the device orientation while the camera is active.
    * @platform android
    * @default false
    */
   lockAndroidOrientation?: boolean;
-  /** 
+  /**
    * If true, allows the camera preview's opacity to be changed.
    * @platform android, web
    * @default false
    */
   enableOpacity?: boolean;
-  /** 
+  /**
    * If true, enables pinch-to-zoom functionality on the preview.
    * @platform android
    * @default false
    */
   enableZoom?: boolean;
-  /** 
+  /**
    * If true, uses the video-optimized preset for the camera session.
    * @platform ios
    * @default false
    */
   enableVideoMode?: boolean;
-  /** 
+  /**
    * The `deviceId` of the camera to use. If provided, `position` is ignored.
    * @platform ios
    */
@@ -197,13 +203,13 @@ export interface CameraPreviewPictureOptions {
   height?: number;
   /** The desired width of the picture in pixels. If not provided, the device default is used. */
   width?: number;
-  /** 
+  /**
    * The quality of the captured image, from 0 to 100.
    * Does not apply to `png` format.
    * @default 85
    */
   quality?: number;
-  /** 
+  /**
    * The format of the captured image.
    * @default "jpeg"
    */
@@ -250,7 +256,7 @@ export interface SupportedPictureSizes {
  * Defines the options for capturing a sample frame from the camera preview.
  */
 export interface CameraSampleOptions {
-  /** 
+  /**
    * The quality of the captured sample, from 0 to 100.
    * @default 85
    */
@@ -271,7 +277,7 @@ export type CameraPreviewFlashMode =
  * Defines the options for setting the camera preview's opacity.
  */
 export interface CameraOpacityOptions {
-  /** 
+  /**
    * The opacity percentage, from 0.0 (fully transparent) to 1.0 (fully opaque).
    * @default 1.0
    */
@@ -444,9 +450,9 @@ export interface CameraPreviewPlugin {
    * @returns {Promise<{ min: number; max: number; current: number; lens: LensInfo }>} A promise that resolves with the zoom state.
    * @since 7.4.0
    */
-  getZoom(): Promise<{ 
-    min: number; 
-    max: number; 
+  getZoom(): Promise<{
+    min: number;
+    max: number;
     current: number;
     lens: LensInfo;
   }>;

@@ -8,6 +8,7 @@ import {
   OnDestroy,
   OnInit,
   signal,
+  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Capacitor } from '@capacitor/core';
@@ -19,6 +20,8 @@ import {
   IonFab,
   IonFabButton,
   IonIcon,
+  IonSelect,
+  IonSelectOption,
   IonSpinner,
   ModalController,
 } from '@ionic/angular/standalone';
@@ -52,6 +55,8 @@ function getDistance(touch1: Touch, touch2: Touch): number {
     IonFab,
     IonFabButton,
     IonIcon,
+    IonSelect,
+    IonSelectOption,
     IonSpinner,
   ],
   host: {
@@ -81,6 +86,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly useCustomSize = input<boolean>(false);
   public readonly pictureWidth = input<number>(1920);
   public readonly pictureHeight = input<number>(1080);
+  public readonly aspectRatio = input<'4:3' | '16:9'>('4:3');
 
   // Camera behavior inputs
   public readonly opacity = input<number>(100);
@@ -90,6 +96,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly lockAndroidOrientation = input<boolean>(true);
   public readonly saveToGallery = input<boolean>(false);
   public readonly withExifLocation = input<boolean>(false);
+  public readonly gridMode = input<'none' | '3x3' | '4x4'>('none');
 
   protected readonly cameraStarted = toSignal(
     this.#cameraViewService.cameraStarted,
@@ -117,6 +124,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Camera switching functionality
   protected readonly availableCameras = signal<CameraDevice[]>([]);
   protected readonly selectedCameraIndex = signal<number>(0);
+  protected readonly currentAspectRatio = signal<'4:3' | '16:9'>('4:3');
 
   protected readonly canZoomIn = computed(() => {
     return this.currentZoomFactor() + 0.1 <= this.maxZoom();
@@ -166,6 +174,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       enableHighResolution: this.enableHighResolution(),
       lockAndroidOrientation: this.lockAndroidOrientation(),
       toBack: true,
+      aspectRatio: this.currentAspectRatio(),
+      gridMode: this.gridMode(),
     };
 
     await this.#cameraViewService.start(startOptions);
@@ -318,6 +328,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('Failed to set flash mode', error);
     }
+  }
+
+  protected async toggleAspectRatio(): Promise<void> {
+    this.currentAspectRatio.set(this.currentAspectRatio() === '4:3' ? '16:9' : '4:3');
+    await this.stop();
+    await this.startCamera();
   }
 
   protected async switchToDevice(deviceId: string): Promise<void> {

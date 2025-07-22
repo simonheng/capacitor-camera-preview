@@ -5,6 +5,7 @@ import Photos
 import CoreImage
 import CoreLocation
 
+
 extension UIWindow {
     static var isLandscape: Bool {
         if #available(iOS 13.0, *) {
@@ -35,7 +36,7 @@ extension UIWindow {
  * here: https://capacitor.ionicframework.com/docs/plugins/ios
  */
 @objc(CameraPreview)
-public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
+public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelegate {
     public let identifier = "CameraPreviewPlugin"
     public let jsName = "CameraPreview"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -84,31 +85,38 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     private var aspectRatio: String?
     
     // MARK: - Transparency Methods
-    
+
+
     private func makeWebViewTransparent() {
         guard let webView = self.webView else { return }
-        
+
+
         // Define a recursive function to traverse the view hierarchy
         func makeSubviewsTransparent(_ view: UIView) {
             // Set the background color to clear
             view.backgroundColor = .clear
-            
+
+
             // Recurse for all subviews
             for subview in view.subviews {
                 makeSubviewsTransparent(subview)
             }
         }
-        
+
+
         // Set the main webView to be transparent
         webView.isOpaque = false
         webView.backgroundColor = .clear
-        
+
+
         // Recursively make all subviews transparent
         makeSubviewsTransparent(webView)
-        
+
+
         // Also ensure the webview's container is transparent
         webView.superview?.backgroundColor = .clear
-        
+
+
         // Force a layout pass to apply changes
         DispatchQueue.main.async {
             webView.setNeedsLayout()
@@ -153,7 +161,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
 
         cameraController.updateVideoOrientation()
-        
+
+                cameraController.updateVideoOrientation()
+
+        // Update grid overlay frame if it exists
+        if let gridOverlay = self.cameraController.gridOverlayView {
+            gridOverlay.frame = previewView.bounds
+        }
+
         // Ensure webview remains transparent after rotation
         if self.isInitialized {
             self.makeWebViewTransparent()
@@ -185,7 +200,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             }
         }
     }
-    
+
+
     @objc func appWillEnterForeground() {
         if self.isInitialized {
             DispatchQueue.main.async {
@@ -314,6 +330,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         self.enableZoom = call.getBool("enableZoom") ?? false
         self.disableAudio = call.getBool("disableAudio") ?? true
         self.aspectRatio = call.getString("aspectRatio")
+        let gridMode = call.getString("gridMode") ?? "none"
 
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
             guard granted else {
@@ -325,7 +342,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                 if self.cameraController.captureSession?.isRunning ?? false {
                     call.reject("camera already started")
                 } else {
-                    self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode) {error in
+                    self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: aspectRatio) {error in
                         if let error = error {
                             print(error)
                             call.reject(error.localizedDescription)
@@ -335,7 +352,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         
                         // Make webview transparent - comprehensive approach
                         self.makeWebViewTransparent()
-                        
+
+
                         self.webView?.superview?.addSubview(self.previewView)
                         if self.toBack! {
                             self.webView?.superview?.bringSubviewToFront(self.webView!)
@@ -345,10 +363,21 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         let frontView = self.toBack! ? self.webView : self.previewView
                         self.cameraController.setupGestures(target: frontView ?? self.previewView, enableZoom: self.enableZoom!)
 
+                        // Add grid overlay if enabled
+                        if gridMode != "none" {
+                            self.cameraController.addGridOverlay(to: self.previewView, gridMode: gridMode)
+                        }
+
+                        // Add grid overlay if enabled
+                        if gridMode != "none" {
+                            self.cameraController.addGridOverlay(to: self.previewView, gridMode: gridMode)
+                        }
+
                         if self.rotateWhenOrientationChanged == true {
                             NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.rotated), name: UIDevice.orientationDidChangeNotification, object: nil)
                         }
-                        
+
+
                         // Add observers for app state changes to maintain transparency
                         NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
                         NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
@@ -398,10 +427,12 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                             self.cameraController.previewLayer?.frame = self.previewView.bounds
                             self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                             self.previewView.isUserInteractionEnabled = true
-                            
+
+
                             // Ensure webview remains transparent after flip
                             self.makeWebViewTransparent()
-                            
+
+
                             call.resolve()
                         }
                     } catch {
@@ -438,6 +469,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             }
 
             // Always attempt to stop and clean up, regardless of captureSession state
+            self.cameraController.removeGridOverlay()
             if let previewView = self.previewView {
                 previewView.removeFromSuperview()
                 self.previewView = nil
@@ -447,7 +479,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
             self.isInitialized = false
             self.isInitializing = false
             self.cameraController.cleanup()
-            
+
+
             // Remove notification observers
             NotificationCenter.default.removeObserver(self)
 
@@ -492,7 +525,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         PHAssetChangeRequest.creationRequestForAsset(from: image!)
                     }, completionHandler: { (success, error) in
                         if !success {
-                            Logger.error("CameraPreview", "Error saving image to gallery", error)
+                            print("CameraPreview: Error saving image to gallery: \(error?.localizedDescription ?? "Unknown error")")
                         }
                     })
                 }
@@ -501,10 +534,12 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                     call.reject("Failed to get JPEG data from image")
                     return
                 }
-                
+
+
                 let exifData = self.getExifData(from: imageData)
                 let base64Image = imageData.base64EncodedString()
-                
+
+
                 var result = JSObject()
                 result["value"] = base64Image
                 result["exif"] = exifData
@@ -519,12 +554,28 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
               let exifDict = imageProperties[kCGImagePropertyExifDictionary as String] as? [String: Any] else {
             return [:]
         }
-        
+
+
         var exifData = JSObject()
         for (key, value) in exifDict {
-            exifData[key] = value
+            // Convert value to JSValue-compatible type
+            if let stringValue = value as? String {
+                exifData[key] = stringValue
+            } else if let numberValue = value as? NSNumber {
+                exifData[key] = numberValue
+            } else if let boolValue = value as? Bool {
+                exifData[key] = boolValue
+            } else if let arrayValue = value as? [Any] {
+                exifData[key] = arrayValue
+            } else if let dictValue = value as? [String: Any] {
+                exifData[key] = JSObject(_immutableCocoaDictionary: NSMutableDictionary(dictionary: dictValue))
+            } else {
+                // Convert other types to string as fallback
+                exifData[key] = String(describing: value)
+            }
         }
-        
+
+
         return exifData
     }
 
@@ -667,9 +718,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         // Collect all devices by position
         for device in session.devices {
             var lenses: [[String: Any]] = []
-            
+
+
             let constituentDevices = device.isVirtualDevice ? device.constituentDevices : [device]
-            
+
+
             for lensDevice in constituentDevices {
                 var deviceType: String
                 switch lensDevice.deviceType {
@@ -689,7 +742,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                 } else if lensDevice.deviceType == .builtInTelephotoCamera {
                     baseZoomRatio = 2.0 // A common value for telephoto lenses
                 }
-                
+
+
                 let lensInfo: [String: Any] = [
                     "label": lensDevice.localizedName,
                     "deviceType": deviceType,
@@ -700,7 +754,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                 ]
                 lenses.append(lensInfo)
             }
-            
+
+
             let deviceData: [String: Any] = [
                 "deviceId": device.uniqueID,
                 "label": device.localizedName,
@@ -710,7 +765,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                 "maxZoom": Float(device.maxAvailableVideoZoomFactor),
                 "isLogical": device.isVirtualDevice
             ]
-            
+
+
             devices.append(deviceData)
         }
 
@@ -726,7 +782,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         do {
             let zoomInfo = try self.cameraController.getZoom()
             let lensInfo = try self.cameraController.getCurrentLensInfo()
-            
+
+
             var minZoom = zoomInfo.min
             var maxZoom = zoomInfo.max
             var currentZoom = zoomInfo.current
@@ -822,10 +879,12 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         self.cameraController.previewLayer?.frame = self.previewView.bounds
                         self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                         self.previewView.isUserInteractionEnabled = true
-                        
+
+
                         // Ensure webview remains transparent after device switch
                         self.makeWebViewTransparent()
-                        
+
+
                         call.resolve()
                     }
                 } catch {
@@ -852,13 +911,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         self.currentLocation = locations.last
         self.locationManager?.stopUpdatingLocation()
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        Logger.error("CameraPreview", "Failed to get location", error)
+    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("CameraPreview: Failed to get location: \(error.localizedDescription)")
     }
 
     private func updateCameraFrame() {

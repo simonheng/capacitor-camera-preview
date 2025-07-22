@@ -18,6 +18,8 @@ import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
+import androidx.camera.core.AspectRatio;
+import androidx.camera.core.resolutionselector.AspectRatioStrategy;
 import androidx.camera.core.resolutionselector.ResolutionSelector;
 import androidx.camera.core.resolutionselector.ResolutionStrategy;
 import androidx.camera.lifecycle.ProcessCameraProvider;
@@ -27,6 +29,7 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
+import android.widget.FrameLayout;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -64,6 +67,7 @@ import android.location.Location;
 import android.widget.FrameLayout;
 import androidx.lifecycle.LifecycleObserver;
 import androidx.lifecycle.OnLifecycleEvent;
+import android.util.Rational;
 
 public class CameraXView implements LifecycleOwner, LifecycleObserver {
     private static final String TAG = "CameraPreview CameraXView";
@@ -82,6 +86,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     private ImageCapture imageCapture;
     private ImageCapture sampleImageCapture;
     private PreviewView previewView;
+    private GridOverlayView gridOverlayView;
+    private FrameLayout previewContainer;
     private CameraSelector currentCameraSelector;
     private String currentDeviceId;
     private int currentFlashMode = ImageCapture.FLASH_MODE_OFF;
@@ -182,22 +188,46 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         if (sessionConfig.isToBack()) {
             webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         }
+
+        // Create a container to hold both the preview and grid overlay
+        previewContainer = new FrameLayout(context);
+
+        // Create and setup the preview view
         previewView = new PreviewView(context);
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        previewContainer.addView(previewView, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        // Create and setup the grid overlay
+        gridOverlayView = new GridOverlayView(context);
+        gridOverlayView.setGridMode(sessionConfig.getGridMode());
+        previewContainer.addView(gridOverlayView, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
         ViewGroup parent = (ViewGroup) webView.getParent();
         if (parent != null) {
-            parent.addView(previewView, new ViewGroup.LayoutParams(sessionConfig.getWidth(), sessionConfig.getHeight()));
+            parent.addView(previewContainer, new ViewGroup.LayoutParams(sessionConfig.getWidth(), sessionConfig.getHeight()));
             if(sessionConfig.isToBack()) webView.bringToFront();
         }
     }
 
     private void removePreviewView() {
-        if (previewView != null) {
-            ViewGroup parent = (ViewGroup) previewView.getParent();
+        if (previewContainer != null) {
+            ViewGroup parent = (ViewGroup) previewContainer.getParent();
             if (parent != null) {
-                parent.removeView(previewView);
+                parent.removeView(previewContainer);
             }
+            previewContainer = null;
+        }
+        if (previewView != null) {
             previewView = null;
+        }
+        if (gridOverlayView != null) {
+            gridOverlayView = null;
         }
         webView.setBackgroundColor(android.graphics.Color.WHITE);
     }
@@ -209,9 +239,22 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             try {
                 Log.d(TAG, "Building camera selector with deviceId: " + sessionConfig.getDeviceId() + " and position: " + sessionConfig.getPosition());
                 currentCameraSelector = buildCameraSelector();
-                ResolutionSelector resolutionSelector = new ResolutionSelector.Builder()
-                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
-                        .build();
+
+                ResolutionSelector.Builder resolutionSelectorBuilder = new ResolutionSelector.Builder()
+                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY);
+
+                if (sessionConfig.getAspectRatio() != null) {
+                    int aspectRatio;
+                    if ("16:9".equals(sessionConfig.getAspectRatio())) {
+                        aspectRatio = AspectRatio.RATIO_16_9;
+                    } else { // "4:3"
+                        aspectRatio = AspectRatio.RATIO_4_3;
+                    }
+                    resolutionSelectorBuilder.setAspectRatioStrategy(new AspectRatioStrategy(aspectRatio, AspectRatioStrategy.FALLBACK_RULE_AUTO));
+                }
+
+                ResolutionSelector resolutionSelector = resolutionSelectorBuilder.build();
+
                 Preview preview = new Preview.Builder().setResolutionSelector(resolutionSelector).build();
                 imageCapture = new ImageCapture.Builder().setResolutionSelector(resolutionSelector).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setFlashMode(currentFlashMode).build();
                 sampleImageCapture = imageCapture;
@@ -352,11 +395,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                     try {
                         byte[] bytes = Files.readAllBytes(tempFile.toPath());
                         ExifInterface exifInterface = new ExifInterface(tempFile.getAbsolutePath());
-                        
+
                         if (location != null) {
                             exifInterface.setGpsInfo(location);
                         }
-                        
+
                         JSONObject exifData = getExifData(exifInterface);
 
                         if (width != null && height != null) {
@@ -366,13 +409,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                             resizedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream);
                             bytes = stream.toByteArray();
                         }
-                        
+
                         if (saveToGallery) {
                             saveImageToGallery(bytes);
                         }
 
                         String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
-                        
+
                         tempFile.delete();
 
                         if (listener != null) {
@@ -392,7 +435,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     private Bitmap resizeBitmap(Bitmap bitmap, int width, int height) {
         return Bitmap.createScaledBitmap(bitmap, width, height, true);
     }
-    
+
     private JSONObject getExifData(ExifInterface exifInterface) {
         JSONObject exifData = new JSONObject();
         try {
@@ -618,7 +661,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             for (CameraInfo cameraInfo : cameraProvider.getAvailableCameraInfos()) {
                 String logicalCameraId = Camera2CameraInfo.from(cameraInfo).getCameraId();
                 String position = isBackCamera(cameraInfo) ? "rear" : "front";
-                
+
                 // Add logical camera
                 float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
                 float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
@@ -654,7 +697,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                                 if (focalLengths[0] < 3.0f) deviceType = "ultraWide";
                                 else if (focalLengths[0] > 5.0f) deviceType = "telephoto";
                             }
-                            
+
                             float physicalMinZoom = 1.0f;
                             float physicalMaxZoom = 1.0f;
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -664,11 +707,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                                     physicalMaxZoom = zoomRange.getUpper();
                                 }
                             }
-                            
+
                             String label = "Physical " + deviceType + " (" + position + ")";
                             List<LensInfo> physicalLenses = new ArrayList<>();
                             physicalLenses.add(new LensInfo(focalLengths != null ? focalLengths[0] : 4.25f, deviceType, 1.0f, physicalMaxZoom));
-                            
+
                             devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
                                 physicalId, label, position, physicalLenses, physicalMinZoom, physicalMaxZoom, false
                             ));
@@ -972,7 +1015,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             sessionConfig.isEnableZoom(), // enableZoom
             sessionConfig.isDisableExifHeaderStripping(), // disableExifHeaderStripping
             sessionConfig.isDisableAudio(), // disableAudio
-            sessionConfig.getZoomFactor() // zoomFactor
+            sessionConfig.getZoomFactor(), // zoomFactor
+            sessionConfig.getAspectRatio(), // aspectRatio
+            sessionConfig.getGridMode() // gridMode
         );
 
         // Clear current device ID to force position-based selection
