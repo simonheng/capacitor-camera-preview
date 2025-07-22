@@ -393,7 +393,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                 @Override
                 public void onImageSaved(@NonNull ImageCapture.OutputFileResults output) {
                     try {
-                        byte[] bytes = Files.readAllBytes(tempFile.toPath());
+                        // Read file using FileInputStream for compatibility
+                        byte[] bytes = new byte[(int) tempFile.length()];
+                        java.io.FileInputStream fis = new java.io.FileInputStream(tempFile);
+                        fis.read(bytes);
+                        fis.close();
+                        
                         ExifInterface exifInterface = new ExifInterface(tempFile.getAbsolutePath());
 
                         if (location != null) {
@@ -1061,7 +1066,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         previewView.setLayoutParams(layoutParams);
 
         if (listener != null) {
-            listener.onCameraStarted(layoutParams.width, layoutParams.height, layoutParams.leftMargin, layoutParams.topMargin);
+            listener.onCameraStarted();
         }
     }
 
@@ -1089,7 +1094,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                     sessionConfig.getDisableExifHeaderStripping(),
                     sessionConfig.getDisableAudio(),
                     sessionConfig.getZoomFactor(),
-                    aspectRatio
+                    aspectRatio,
+                    sessionConfig.getGridMode()
             );
             updateLayoutParams();
         }

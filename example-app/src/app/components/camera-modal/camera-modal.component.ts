@@ -55,8 +55,6 @@ function getDistance(touch1: Touch, touch2: Touch): number {
     IonFab,
     IonFabButton,
     IonIcon,
-    IonSelect,
-    IonSelectOption,
     IonSpinner,
   ],
   host: {
@@ -86,7 +84,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly useCustomSize = input<boolean>(false);
   public readonly pictureWidth = input<number>(1920);
   public readonly pictureHeight = input<number>(1080);
-  public readonly aspectRatio = input<'4:3' | '16:9'>('4:3');
 
   // Camera behavior inputs
   public readonly opacity = input<number>(100);
@@ -124,7 +121,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Camera switching functionality
   protected readonly availableCameras = signal<CameraDevice[]>([]);
   protected readonly selectedCameraIndex = signal<number>(0);
-  protected readonly currentAspectRatio = signal<'4:3' | '16:9'>('4:3');
+  protected readonly currentAspectRatio = signal<'4:3' | '16:9' | 'fill'>('4:3');
 
   protected readonly canZoomIn = computed(() => {
     return this.currentZoomFactor() + 0.1 <= this.maxZoom();
@@ -168,7 +165,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       y: this.y(),
       width: this.width(),
       height: this.height(),
-      aspectRatio: this.aspectRatio(),
       enableZoom: this.enableZoom(),
       disableAudio: this.disableAudio(),
       enableHighResolution: this.enableHighResolution(),
@@ -331,7 +327,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async toggleAspectRatio(): Promise<void> {
-    this.currentAspectRatio.set(this.currentAspectRatio() === '4:3' ? '16:9' : '4:3');
+    this.currentAspectRatio.set(this.currentAspectRatio() === '4:3' ? '16:9' : this.currentAspectRatio() === '16:9' ? 'fill' : '4:3');
     await this.stop();
     await this.startCamera();
   }

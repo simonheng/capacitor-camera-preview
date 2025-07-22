@@ -422,7 +422,7 @@ public class CameraPreview
 
     previousOrientationRequest = getBridge().getActivity().getRequestedOrientation();
     cameraXView = new CameraXView(getContext(), getBridge().getWebView());
-    cameraXView.setListener(this);
+    cameraXView.setListener((CameraXView.CameraXViewListener) this);
 
     String finalDeviceId = deviceId;
     float finalTargetZoom = targetZoom;
@@ -473,15 +473,8 @@ public class CameraPreview
   }
 
   @Override
-  public void onSampleTaken(String result) {
-    JSObject jsObject = new JSObject();
-    jsObject.put("value", result);
-    bridge.getSavedCall(snapshotCallbackId).resolve(jsObject);
-  }
-
-  @Override
-  public void onSampleTakenError(String message) {
-    bridge.getSavedCall(snapshotCallbackId).reject(message);
+  public void onCaptureStarted() {
+    Log.i("CameraPreview", "Capture started");
   }
 
   @Override
@@ -502,15 +495,6 @@ public class CameraPreview
   @Override
   public void onCameraStopped() {
     // This method is no longer needed as onCameraStarted handles the promise resolution.
-  }
-
-  @Override
-  public void onCameraStartError(String message) {
-    PluginCall pluginCall = bridge.getSavedCall(cameraStartCallbackId);
-    if (pluginCall != null) {
-      pluginCall.reject(message);
-      bridge.releaseCall(pluginCall);
-    }
   }
 
   @PluginMethod

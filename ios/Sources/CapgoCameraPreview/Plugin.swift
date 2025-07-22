@@ -950,8 +950,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             self.previewView.frame = frame
         }
         
-        if let cameraController = self.cameraController as? CameraController {
-            cameraController.updateFrame(frame: frame)
-        }
+        // Update the preview layer frame to match the preview view
+        self.cameraController.previewLayer?.frame = frame
     }
 }

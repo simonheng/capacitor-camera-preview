@@ -21,7 +21,6 @@ public class CameraSessionConfiguration {
     private final String aspectRatio;
     private final String gridMode;
     private float targetZoom = 1.0f;
-    private final String aspectRatio;
 
     public CameraSessionConfiguration(String deviceId, String position, int x, int y, int width, int height,
                                     int paddingBottom, boolean toBack, boolean storeToFile, boolean enableOpacity,
@@ -69,4 +68,12 @@ public class CameraSessionConfiguration {
     public float getZoomFactor() { return zoomFactor; }
     public String getAspectRatio() { return aspectRatio; }
     public String getGridMode() { return gridMode; }
+
+    // Additional getters with "get" prefix for compatibility
+    public boolean getToBack() { return toBack; }
+    public boolean getStoreToFile() { return storeToFile; }
+    public boolean getEnableOpacity() { return enableOpacity; }
+    public boolean getEnableZoom() { return enableZoom; }
+    public boolean getDisableExifHeaderStripping() { return disableExifHeaderStripping; }
+    public boolean getDisableAudio() { return disableAudio; }
 }
