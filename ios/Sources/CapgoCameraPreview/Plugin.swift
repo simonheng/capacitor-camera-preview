@@ -342,7 +342,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 if self.cameraController.captureSession?.isRunning ?? false {
                     call.reject("camera already started")
                 } else {
-                    self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: aspectRatio) {error in
+                    self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio) {error in
                         if let error = error {
                             print(error)
                             call.reject(error.localizedDescription)
@@ -386,10 +386,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                         self.isInitialized = true
                         
                         var returnedObject = JSObject()
-                        returnedObject["width"] = self.previewView.frame.width
-                        returnedObject["height"] = self.previewView.frame.height
-                        returnedObject["x"] = self.previewView.frame.origin.x
-                        returnedObject["y"] = self.previewView.frame.origin.y
+                        returnedObject["width"] = self.previewView.frame.width as any JSValue
+                        returnedObject["height"] = self.previewView.frame.height as any JSValue
+                        returnedObject["x"] = self.previewView.frame.origin.x as any JSValue
+                        returnedObject["y"] = self.previewView.frame.origin.y as any JSValue
                         call.resolve(returnedObject)
 
                     }
