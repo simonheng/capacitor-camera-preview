@@ -492,9 +492,6 @@ extension CameraController {
         }
 
         let settings = AVCapturePhotoSettings()
-        if photoOutput.isHighResolutionCaptureEnabled {
-            settings.isHighResolutionCaptureEnabled = true
-        }
 
         self.photoCaptureCompletionBlock = { (image, error) in
             if let error = error {
@@ -527,14 +524,18 @@ extension CameraController {
               let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
               let uti = CGImageSourceGetType(source) else { return }
 
-        let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
+        var metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+        formatter.timeZone = TimeZone(abbreviation: "UTC")
 
         let gpsDict: [String: Any] = [
             kCGImagePropertyGPSLatitude as String: abs(location.coordinate.latitude),
             kCGImagePropertyGPSLatitudeRef as String: location.coordinate.latitude >= 0 ? "N" : "S",
             kCGImagePropertyGPSLongitude as String: abs(location.coordinate.longitude),
             kCGImagePropertyGPSLongitudeRef as String: location.coordinate.longitude >= 0 ? "E" : "W",
-            kCGImagePropertyGPSTimeStamp as String: location.timestamp.ISO8601Format(),
+            kCGImagePropertyGPSTimeStamp as String: formatter.string(from: location.timestamp),
             kCGImagePropertyGPSAltitude as String: location.altitude,
             kCGImagePropertyGPSAltitudeRef as String: location.altitude >= 0 ? 0 : 1
         ]

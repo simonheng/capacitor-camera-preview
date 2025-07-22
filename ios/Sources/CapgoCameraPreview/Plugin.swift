@@ -5,6 +5,7 @@ import Photos
 import CoreImage
 import CoreLocation
 
+
 extension UIWindow {
     static var isLandscape: Bool {
         if #available(iOS 13.0, *) {
@@ -35,7 +36,7 @@ extension UIWindow {
  * here: https://capacitor.ionicframework.com/docs/plugins/ios
  */
 @objc(CameraPreview)
-public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
+public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelegate {
     public let identifier = "CameraPreviewPlugin"
     public let jsName = "CameraPreview"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -501,7 +502,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                         PHAssetChangeRequest.creationRequestForAsset(from: image!)
                     }, completionHandler: { (success, error) in
                         if !success {
-                            Logger.error("CameraPreview", "Error saving image to gallery", error)
+                            print("CameraPreview: Error saving image to gallery: \(error?.localizedDescription ?? "Unknown error")")
                         }
                     })
                 }
@@ -534,7 +535,21 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
 
         var exifData = JSObject()
         for (key, value) in exifDict {
-            exifData[key] = value
+            // Convert value to JSValue-compatible type
+            if let stringValue = value as? String {
+                exifData[key] = stringValue
+            } else if let numberValue = value as? NSNumber {
+                exifData[key] = numberValue
+            } else if let boolValue = value as? Bool {
+                exifData[key] = boolValue
+            } else if let arrayValue = value as? [Any] {
+                exifData[key] = arrayValue
+            } else if let dictValue = value as? [String: Any] {
+                exifData[key] = JSObject(_immutableCocoaDictionary: NSMutableDictionary(dictionary: dictValue))
+            } else {
+                // Convert other types to string as fallback
+                exifData[key] = String(describing: value)
+            }
         }
 
 
@@ -873,13 +888,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         self.currentLocation = locations.last
         self.locationManager?.stopUpdatingLocation()
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        Logger.error("CameraPreview", "Failed to get location", error)
+    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("CameraPreview: Failed to get location: \(error.localizedDescription)")
     }
 
 
