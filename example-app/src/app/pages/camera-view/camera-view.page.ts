@@ -11,7 +11,9 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
+  IonSelect,
   IonItem,
+  IonInput,
   IonLabel,
   IonList,
   IonRange,
@@ -46,11 +48,13 @@ import { GalleryService } from '../../services/gallery.service';
     IonCheckbox,
     IonContent,
     IonHeader,
+    IonInput,
     IonIcon,
     IonItem,
     IonLabel,
     IonList,
     IonRange,
+    IonSelect,
     IonSelectOption,
     IonTitle,
     IonToolbar,
@@ -73,6 +77,13 @@ export class CameraViewPage implements OnInit {
   protected useTripleCameraIfAvailable = model<boolean>(false);
   protected initialZoomFactor = model<number>(1.0);
 
+  // Preview settings
+  protected previewX = model<number>(0);
+  protected previewY = model<number>(0);
+  protected previewWidth = model<number>(0);
+  protected previewHeight = model<number>(0);
+  protected aspectRatio = model<'4:3' | '16:9' | 'fill'>('fill');
+
   // Picture settings
   protected pictureFormat = model<PictureFormat>('jpeg');
   protected pictureQuality = model<number>(85);
@@ -83,7 +94,7 @@ export class CameraViewPage implements OnInit {
   // Camera behavior settings
   protected opacity = model<number>(100);
   protected enableZoom = model<boolean>(false);
-  protected disableAudio = model<boolean>(false);
+  protected disableAudio = model<boolean>(true);
   protected enableHighResolution = model<boolean>(false);
   protected lockAndroidOrientation = model<boolean>(false);
   protected saveToGallery = model<boolean>(false);
@@ -107,6 +118,11 @@ export class CameraViewPage implements OnInit {
         deviceId: this.deviceId(),
         position: this.position(),
         quality: this.quality(),
+        x: this.previewX(),
+        y: this.previewY(),
+        width: this.previewWidth(),
+        height: this.previewHeight(),
+        aspectRatio: this.aspectRatio(),
         useTripleCameraIfAvailable: this.useTripleCameraIfAvailable(),
         initialZoomFactor: this.initialZoomFactor(),
         pictureFormat: this.pictureFormat(),

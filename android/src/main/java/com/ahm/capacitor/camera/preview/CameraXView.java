@@ -61,8 +61,11 @@ import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import java.io.ByteArrayOutputStream;
 import android.location.Location;
+import android.widget.FrameLayout;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.OnLifecycleEvent;
 
-public class CameraXView implements LifecycleOwner {
+public class CameraXView implements LifecycleOwner, LifecycleObserver {
     private static final String TAG = "CameraPreview CameraXView";
 
     public interface CameraXViewListener {
@@ -985,6 +988,65 @@ public class CameraXView implements LifecycleOwner {
     public void setOpacity(float opacity) {
         if (previewView != null) {
             previewView.setAlpha(opacity);
+        }
+    }
+
+    private void updateLayoutParams() {
+        if (sessionConfig == null) return;
+
+        FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
+                sessionConfig.getWidth(),
+                sessionConfig.getHeight()
+        );
+        layoutParams.leftMargin = sessionConfig.getX();
+        layoutParams.topMargin = sessionConfig.getY();
+
+        if (sessionConfig.getAspectRatio() != null && !sessionConfig.getAspectRatio().equals("fill")) {
+            String[] ratios = sessionConfig.getAspectRatio().split(":");
+            float ratio = Float.parseFloat(ratios[0]) / Float.parseFloat(ratios[1]);
+            if (sessionConfig.getWidth() > 0) {
+                layoutParams.height = (int) (sessionConfig.getWidth() / ratio);
+            } else if (sessionConfig.getHeight() > 0) {
+                layoutParams.width = (int) (sessionConfig.getHeight() * ratio);
+            }
+        } else {
+            previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        }
+
+        previewView.setLayoutParams(layoutParams);
+
+        if (listener != null) {
+            listener.onCameraStarted(layoutParams.width, layoutParams.height, layoutParams.leftMargin, layoutParams.topMargin);
+        }
+    }
+
+    public String getAspectRatio() {
+        if (sessionConfig != null) {
+            return sessionConfig.getAspectRatio();
+        }
+        return "fill";
+    }
+
+    public void setAspectRatio(String aspectRatio) {
+        if (sessionConfig != null) {
+            sessionConfig = new CameraSessionConfiguration(
+                    sessionConfig.getDeviceId(),
+                    sessionConfig.getPosition(),
+                    sessionConfig.getX(),
+                    sessionConfig.getY(),
+                    sessionConfig.getWidth(),
+                    sessionConfig.getHeight(),
+                    sessionConfig.getPaddingBottom(),
+                    sessionConfig.getToBack(),
+                    sessionConfig.getStoreToFile(),
+                    sessionConfig.getEnableOpacity(),
+                    sessionConfig.getEnableZoom(),
+                    sessionConfig.getDisableExifHeaderStripping(),
+                    sessionConfig.getDisableAudio(),
+                    sessionConfig.getZoomFactor(),
+                    aspectRatio
+            );
+            updateLayoutParams();
         }
     }
 }

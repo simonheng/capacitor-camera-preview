@@ -1,3 +1,7 @@
+ion-content::part(background) {
+  background: transparent;
+}
+
 h3 {
   margin: 20px 0 10px 0;
   color: var(--ion-color-primary);

@@ -130,6 +130,14 @@ export class CapacitorCameraViewService {
     return (await this.#cameraView.getSupportedFlashModes()).result;
   }
 
+  async setAspectRatio(aspectRatio: '4:3' | '16:9' | 'fill'): Promise<void> {
+    return CameraPreview.setAspectRatio({ aspectRatio });
+  }
+
+  async getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' | 'fill' }> {
+    return CameraPreview.getAspectRatio();
+  }
+
   /**
    * Set the flash mode
    * @param mode The flash mode to set

@@ -220,6 +220,8 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`capture(...)`](#capture)
 * [`captureSample(...)`](#capturesample)
 * [`getSupportedFlashModes()`](#getsupportedflashmodes)
+* [`setAspectRatio(...)`](#setaspectratio)
+* [`getAspectRatio()`](#getaspectratio)
 * [`getHorizontalFov()`](#gethorizontalfov)
 * [`getSupportedPictureSizes()`](#getsupportedpicturesizes)
 * [`setFlashMode(...)`](#setflashmode)
@@ -249,7 +251,7 @@ The main interface for the CameraPreview plugin.
 ### start(...)
 
 ```typescript
-start(options: CameraPreviewOptions) => Promise<void>
+start(options: CameraPreviewOptions) => Promise<{ width: number; height: number; x: number; y: number; }>
 ```
 
 Starts the camera preview.
@@ -257,6 +259,8 @@ Starts the camera preview.
 | Param         | Type                                                                  | Description                                 |
 | ------------- | --------------------------------------------------------------------- | ------------------------------------------- |
 | **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | - The configuration for the camera preview. |
+
+**Returns:** <code>Promise&lt;{ width: number; height: number; x: number; y: number; }&gt;</code>
 
 **Since:** 0.0.1
 
@@ -325,6 +329,38 @@ Gets the flash modes supported by the active camera.
 **Returns:** <code>Promise&lt;{ result: CameraPreviewFlashMode[]; }&gt;</code>
 
 **Since:** 0.0.1
+
+--------------------
+
+
+### setAspectRatio(...)
+
+```typescript
+setAspectRatio(options: { aspectRatio: '4:3' | '16:9' | 'fill'; }) => Promise<void>
+```
+
+Set the aspect ratio of the camera preview.
+
+| Param         | Type                                                     | Description                 |
+| ------------- | -------------------------------------------------------- | --------------------------- |
+| **`options`** | <code>{ aspectRatio: '4:3' \| '16:9' \| 'fill'; }</code> | - The desired aspect ratio. |
+
+**Since:** 7.4.0
+
+--------------------
+
+
+### getAspectRatio()
+
+```typescript
+getAspectRatio() => Promise<{ aspectRatio: '4:3' | '16:9' | 'fill'; }>
+```
+
+Gets the current aspect ratio of the camera preview.
+
+**Returns:** <code>Promise&lt;{ aspectRatio: '4:3' | '16:9' | 'fill'; }&gt;</code>
+
+**Since:** 7.4.0
 
 --------------------
 
@@ -568,28 +604,29 @@ Gets the ID of the currently active camera device.
 
 Defines the configuration options for starting the camera preview.
 
-| Prop                               | Type                 | Description                                                                                                       | Default             |
-| ---------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------- |
-| **`parent`**                       | <code>string</code>  | The parent element to attach the video preview to.                                                                |                     |
-| **`className`**                    | <code>string</code>  | A CSS class name to add to the preview element.                                                                   |                     |
-| **`width`**                        | <code>number</code>  | The width of the preview in pixels. Defaults to the screen width.                                                 |                     |
-| **`height`**                       | <code>number</code>  | The height of the preview in pixels. Defaults to the screen height.                                               |                     |
-| **`x`**                            | <code>number</code>  | The horizontal origin of the preview, in pixels.                                                                  |                     |
-| **`y`**                            | <code>number</code>  | The vertical origin of the preview, in pixels.                                                                    |                     |
-| **`includeSafeAreaInsets`**        | <code>boolean</code> | Adjusts the y-position to account for safe areas (e.g., notches).                                                 | <code>false</code>  |
-| **`toBack`**                       | <code>boolean</code> | If true, places the preview behind the webview.                                                                   | <code>true</code>   |
-| **`paddingBottom`**                | <code>number</code>  | Bottom padding for the preview, in pixels.                                                                        |                     |
-| **`rotateWhenOrientationChanged`** | <code>boolean</code> | Whether to rotate the preview when the device orientation changes.                                                | <code>true</code>   |
-| **`position`**                     | <code>string</code>  | The camera to use.                                                                                                | <code>"rear"</code> |
-| **`storeToFile`**                  | <code>boolean</code> | If true, saves the captured image to a file and returns the file path. If false, returns a base64 encoded string. | <code>false</code>  |
-| **`disableExifHeaderStripping`**   | <code>boolean</code> | If true, prevents the plugin from rotating the image based on EXIF data.                                          | <code>false</code>  |
-| **`enableHighResolution`**         | <code>boolean</code> | If true, enables high-resolution image capture.                                                                   | <code>false</code>  |
-| **`disableAudio`**                 | <code>boolean</code> | If true, disables the audio stream, preventing audio permission requests.                                         | <code>true</code>   |
-| **`lockAndroidOrientation`**       | <code>boolean</code> | If true, locks the device orientation while the camera is active.                                                 | <code>false</code>  |
-| **`enableOpacity`**                | <code>boolean</code> | If true, allows the camera preview's opacity to be changed.                                                       | <code>false</code>  |
-| **`enableZoom`**                   | <code>boolean</code> | If true, enables pinch-to-zoom functionality on the preview.                                                      | <code>false</code>  |
-| **`enableVideoMode`**              | <code>boolean</code> | If true, uses the video-optimized preset for the camera session.                                                  | <code>false</code>  |
-| **`deviceId`**                     | <code>string</code>  | The `deviceId` of the camera to use. If provided, `position` is ignored.                                          |                     |
+| Prop                               | Type                                   | Description                                                                                                                                                                                                    | Default             |
+| ---------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| **`parent`**                       | <code>string</code>                    | The parent element to attach the video preview to.                                                                                                                                                             |                     |
+| **`className`**                    | <code>string</code>                    | A CSS class name to add to the preview element.                                                                                                                                                                |                     |
+| **`width`**                        | <code>number</code>                    | The width of the preview in pixels. Defaults to the screen width.                                                                                                                                              |                     |
+| **`height`**                       | <code>number</code>                    | The height of the preview in pixels. Defaults to the screen height.                                                                                                                                            |                     |
+| **`x`**                            | <code>number</code>                    | The horizontal origin of the preview, in pixels.                                                                                                                                                               |                     |
+| **`y`**                            | <code>number</code>                    | The vertical origin of the preview, in pixels.                                                                                                                                                                 |                     |
+| **`aspectRatio`**                  | <code>'4:3' \| '16:9' \| 'fill'</code> | The aspect ratio of the preview. If provided, the preview will be sized to this aspect ratio, respecting `width` or `height` as a constraint. If `aspectRatio` is 'fill', the preview will fill the container. | <code>"fill"</code> |
+| **`includeSafeAreaInsets`**        | <code>boolean</code>                   | Adjusts the y-position to account for safe areas (e.g., notches).                                                                                                                                              | <code>false</code>  |
+| **`toBack`**                       | <code>boolean</code>                   | If true, places the preview behind the webview.                                                                                                                                                                | <code>true</code>   |
+| **`paddingBottom`**                | <code>number</code>                    | Bottom padding for the preview, in pixels.                                                                                                                                                                     |                     |
+| **`rotateWhenOrientationChanged`** | <code>boolean</code>                   | Whether to rotate the preview when the device orientation changes.                                                                                                                                             | <code>true</code>   |
+| **`position`**                     | <code>string</code>                    | The camera to use.                                                                                                                                                                                             | <code>"rear"</code> |
+| **`storeToFile`**                  | <code>boolean</code>                   | If true, saves the captured image to a file and returns the file path. If false, returns a base64 encoded string.                                                                                              | <code>false</code>  |
+| **`disableExifHeaderStripping`**   | <code>boolean</code>                   | If true, prevents the plugin from rotating the image based on EXIF data.                                                                                                                                       | <code>false</code>  |
+| **`enableHighResolution`**         | <code>boolean</code>                   | If true, enables high-resolution image capture.                                                                                                                                                                | <code>false</code>  |
+| **`disableAudio`**                 | <code>boolean</code>                   | If true, disables the audio stream, preventing audio permission requests.                                                                                                                                      | <code>true</code>   |
+| **`lockAndroidOrientation`**       | <code>boolean</code>                   | If true, locks the device orientation while the camera is active.                                                                                                                                              | <code>false</code>  |
+| **`enableOpacity`**                | <code>boolean</code>                   | If true, allows the camera preview's opacity to be changed.                                                                                                                                                    | <code>false</code>  |
+| **`enableZoom`**                   | <code>boolean</code>                   | If true, enables pinch-to-zoom functionality on the preview.                                                                                                                                                   | <code>false</code>  |
+| **`enableVideoMode`**              | <code>boolean</code>                   | If true, uses the video-optimized preset for the camera session.                                                                                                                                               | <code>false</code>  |
+| **`deviceId`**                     | <code>string</code>                    | The `deviceId` of the camera to use. If provided, `position` is ignored.                                                                                                                                       |                     |
 
 
 #### ExifData

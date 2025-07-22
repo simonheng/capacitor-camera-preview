@@ -57,7 +57,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setZoom", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getFlashMode", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setDeviceId", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setAspectRatio", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getAspectRatio", returnType: CAPPluginReturnPromise)
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -79,6 +81,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
     var disableAudio: Bool = false
     var locationManager: CLLocationManager?
     var currentLocation: CLLocation?
+    private var aspectRatio: String?
     
     // MARK: - Transparency Methods
     
@@ -155,6 +158,24 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         if self.isInitialized {
             self.makeWebViewTransparent()
         }
+    }
+    
+    @objc func setAspectRatio(_ call: CAPPluginCall) {
+        guard self.isInitialized else {
+            call.reject("camera not started")
+            return
+        }
+        self.aspectRatio = call.getString("aspectRatio")
+        self.updateCameraFrame()
+        call.resolve()
+    }
+
+    @objc func getAspectRatio(_ call: CAPPluginCall) {
+        guard self.isInitialized else {
+            call.reject("camera not started")
+            return
+        }
+        call.resolve(["aspectRatio": self.aspectRatio ?? "fill"])
     }
     
     @objc func appDidBecomeActive() {
@@ -292,6 +313,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         self.storeToFile = call.getBool("storeToFile") ?? false
         self.enableZoom = call.getBool("enableZoom") ?? false
         self.disableAudio = call.getBool("disableAudio") ?? true
+        self.aspectRatio = call.getString("aspectRatio")
 
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
             guard granted else {
@@ -309,8 +331,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
                             call.reject(error.localizedDescription)
                             return
                         }
-                        let height = self.paddingBottom != nil ? self.height! - self.paddingBottom!: self.height!
-                        self.previewView = UIView(frame: CGRect(x: self.posX ?? 0, y: self.posY ?? 0, width: self.width!, height: height))
+                        self.updateCameraFrame()
                         
                         // Make webview transparent - comprehensive approach
                         self.makeWebViewTransparent()
@@ -334,7 +355,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
 
                         self.isInitializing = false
                         self.isInitialized = true
-                        call.resolve()
+                        
+                        var returnedObject = JSObject()
+                        returnedObject["width"] = self.previewView.frame.width
+                        returnedObject["height"] = self.previewView.frame.height
+                        returnedObject["x"] = self.previewView.frame.origin.x
+                        returnedObject["y"] = self.previewView.frame.origin.y
+                        call.resolve(returnedObject)
 
                     }
                 }
@@ -834,5 +861,38 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin {
         Logger.error("CameraPreview", "Failed to get location", error)
     }
 
+    private func updateCameraFrame() {
+        guard let width = self.width, var height = self.height, let posX = self.posX, let posY = self.posY else { return }
+        let paddingBottom = self.paddingBottom ?? 0
+        height -= paddingBottom
 
+        var frame = CGRect(x: posX, y: posY, width: width, height: height)
+
+        if let aspectRatio = self.aspectRatio, aspectRatio != "fill" {
+            let ratioParts = aspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
+            let ratio = ratioParts[0] / ratioParts[1]
+            let viewWidth = Double(width)
+            let viewHeight = Double(height)
+
+            if viewWidth / ratio > viewHeight {
+                let newWidth = viewHeight * ratio
+                frame.origin.x += (viewWidth - newWidth) / 2
+                frame.size.width = newWidth
+            } else {
+                let newHeight = viewWidth / ratio
+                frame.origin.y += (viewHeight - newHeight) / 2
+                frame.size.height = newHeight
+            }
+        }
+        
+        if self.previewView == nil {
+            self.previewView = UIView(frame: frame)
+        } else {
+            self.previewView.frame = frame
+        }
+        
+        if let cameraController = self.cameraController as? CameraController {
+            cameraController.updateFrame(frame: frame)
+        }
+    }
 }

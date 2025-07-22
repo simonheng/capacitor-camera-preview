@@ -30,6 +30,14 @@ import org.json.JSONObject;
 import android.location.Location;
 import com.getcapacitor.Logger;
 
+interface CameraPreviewListener {
+  void onPictureTaken(String base64, JSONObject exif);
+  void onPictureTakenError(String message);
+  void onCameraStarted(int width, int height, int x, int y);
+  void onCameraStopped();
+  void onCaptureStarted();
+}
+
 @CapacitorPlugin(
   name = "CameraPreview",
   permissions = {
@@ -49,7 +57,7 @@ import com.getcapacitor.Logger;
 )
 public class CameraPreview
   extends Plugin
-  implements CameraXView.CameraXViewListener {
+  implements CameraPreviewListener {
 
   static final String CAMERA_WITH_AUDIO_PERMISSION_ALIAS = "cameraWithAudio";
   static final String CAMERA_ONLY_PERMISSION_ALIAS = "cameraOnly";
@@ -389,7 +397,8 @@ public class CameraPreview
     final boolean disableExifHeaderStripping = Boolean.TRUE.equals(call.getBoolean("disableExifHeaderStripping", false));
     final boolean lockOrientation = Boolean.TRUE.equals(call.getBoolean("lockAndroidOrientation", false));
     final boolean disableAudio = Boolean.TRUE.equals(call.getBoolean("disableAudio", true));
-    
+    final String aspectRatio = call.getString("aspectRatio", "fill");
+
     float targetZoom = 1.0f;
     // Check if the selected device is a physical ultra-wide
     if (originalDeviceId != null) {
@@ -427,7 +436,7 @@ public class CameraPreview
         int computedHeight = height != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, height, metrics) : getBridge().getWebView().getHeight();
         computedHeight -= (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, paddingBottom, metrics);
 
-        CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f);
+        CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f, aspectRatio);
         config.setTargetZoom(finalTargetZoom);
         
         bridge.saveCall(call);
@@ -475,12 +484,23 @@ public class CameraPreview
   }
 
   @Override
-  public void onCameraStarted() {
-    PluginCall pluginCall = bridge.getSavedCall(cameraStartCallbackId);
-    if (pluginCall != null) {
-      pluginCall.resolve();
-      bridge.releaseCall(pluginCall);
+  public void onCameraStarted(int width, int height, int x, int y) {
+    PluginCall call = bridge.getSavedCall(cameraStartCallbackId);
+    if (call != null) {
+        JSObject result = new JSObject();
+        result.put("width", width);
+        result.put("height", height);
+        result.put("x", x);
+        result.put("y", y);
+        call.resolve(result);
+        bridge.releaseCall(call);
+        cameraStartCallbackId = null; // Prevent re-use
     }
+  }
+
+  @Override
+  public void onCameraStopped() {
+    // This method is no longer needed as onCameraStarted handles the promise resolution.
   }
 
   @Override
@@ -492,4 +512,26 @@ public class CameraPreview
     }
   }
 
+  @PluginMethod
+  public void setAspectRatio(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    String aspectRatio = call.getString("aspectRatio", "fill");
+    cameraXView.setAspectRatio(aspectRatio);
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void getAspectRatio(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    String aspectRatio = cameraXView.getAspectRatio();
+    JSObject ret = new JSObject();
+    ret.put("aspectRatio", aspectRatio);
+    call.resolve(ret);
+  }
 }

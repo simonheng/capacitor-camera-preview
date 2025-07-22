@@ -98,7 +98,16 @@ export interface CameraPreviewOptions {
    * @platform android, ios
    */
   y?: number;
-  /** 
+  /**
+   * The aspect ratio of the preview.
+   *
+   * If provided, the preview will be sized to this aspect ratio, respecting `width` or `height` as a constraint.
+   * If `aspectRatio` is 'fill', the preview will fill the container.
+   * @platform android, ios, web
+   * @default "fill"
+   */
+  aspectRatio?: '4:3' | '16:9' | 'fill';
+  /**
    * Adjusts the y-position to account for safe areas (e.g., notches).
    * @platform ios
    * @default false
@@ -277,10 +286,19 @@ export interface CameraPreviewPlugin {
    * Starts the camera preview.
    *
    * @param {CameraPreviewOptions} options - The configuration for the camera preview.
-   * @returns {Promise<void>} A promise that resolves when the camera preview is started.
+   * @returns {Promise<{ width: number; height: number; x: number; y: number }>} A promise that resolves with the preview dimensions.
    * @since 0.0.1
    */
-  start(options: CameraPreviewOptions): Promise<void>;
+  start(options: CameraPreviewOptions): Promise<{
+    /** The width of the preview in pixels. */
+    width: number;
+    /** The height of the preview in pixels. */
+    height: number;
+    /** The horizontal origin of the preview, in pixels. */
+    x: number;
+    /** The vertical origin of the preview, in pixels. */
+    y: number;
+  }>;
 
   /**
    * Stops the camera preview.
@@ -320,6 +338,23 @@ export interface CameraPreviewPlugin {
   getSupportedFlashModes(): Promise<{
     result: CameraPreviewFlashMode[];
   }>;
+
+  /**
+   * Set the aspect ratio of the camera preview.
+   *
+   * @param {{ aspectRatio: '4:3' | '16:9' | 'fill' }} options - The desired aspect ratio.
+   * @returns {Promise<void>} A promise that resolves when the aspect ratio is set.
+   * @since 7.4.0
+   */
+  setAspectRatio(options: { aspectRatio: '4:3' | '16:9' | 'fill' }): Promise<void>;
+
+  /**
+   * Gets the current aspect ratio of the camera preview.
+   *
+   * @returns {Promise<{ aspectRatio: '4:3' | '16:9' | 'fill' }>} A promise that resolves with the current aspect ratio.
+   * @since 7.4.0
+   */
+  getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' | 'fill' }>;
 
   /**
    * Gets the horizontal field of view (FoV) for the active camera.

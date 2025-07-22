@@ -19,11 +19,12 @@ public class CameraSessionConfiguration {
     private final boolean disableAudio;
     private final float zoomFactor;
     private float targetZoom = 1.0f;
+    private final String aspectRatio;
 
-    public CameraSessionConfiguration(String deviceId, String position, int x, int y, int width, int height, 
-                                    int paddingBottom, boolean toBack, boolean storeToFile, boolean enableOpacity, 
-                                    boolean enableZoom, boolean disableExifHeaderStripping, boolean disableAudio, 
-                                    float zoomFactor) {
+    public CameraSessionConfiguration(String deviceId, String position, int x, int y, int width, int height,
+                                    int paddingBottom, boolean toBack, boolean storeToFile, boolean enableOpacity,
+                                    boolean enableZoom, boolean disableExifHeaderStripping, boolean disableAudio,
+                                    float zoomFactor, String aspectRatio) {
         this.deviceId = deviceId;
         this.position = position;
         this.x = x;
@@ -38,6 +39,7 @@ public class CameraSessionConfiguration {
         this.disableExifHeaderStripping = disableExifHeaderStripping;
         this.disableAudio = disableAudio;
         this.zoomFactor = zoomFactor;
+        this.aspectRatio = aspectRatio;
     }
 
     public void setTargetZoom(float zoom) {
@@ -62,4 +64,5 @@ public class CameraSessionConfiguration {
     public boolean isDisableExifHeaderStripping() { return disableExifHeaderStripping; }
     public boolean isDisableAudio() { return disableAudio; }
     public float getZoomFactor() { return zoomFactor; }
+    public String getAspectRatio() { return aspectRatio; }
 } 

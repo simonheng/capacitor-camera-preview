@@ -69,6 +69,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly quality = input<number>(85);
   public readonly useTripleCameraIfAvailable = input<boolean>(false);
   public readonly initialZoomFactor = input<number>(1.0);
+  public readonly x = input<number>(0);
+  public readonly y = input<number>(0);
+  public readonly width = input<number>(0);
+  public readonly height = input<number>(0);
+  public readonly aspectRatio = input<'4:3' | '16:9' | 'fill'>('fill');
 
   // Picture settings inputs
   public readonly pictureFormat = input<PictureFormat>('jpeg');
@@ -151,6 +156,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     const startOptions = {
       deviceId: this.deviceId(),
       position: this.position(),
+      x: this.x(),
+      y: this.y(),
+      width: this.width(),
+      height: this.height(),
+      aspectRatio: this.aspectRatio(),
       enableZoom: this.enableZoom(),
       disableAudio: this.disableAudio(),
       enableHighResolution: this.enableHighResolution(),
@@ -212,6 +222,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       }
 
       const { value, exif } = await this.#cameraViewService.capture(quality, captureOptions);
+      await this.#cameraViewService.stop();
 
       await this.#modalController.dismiss({
         photo: value,
@@ -284,6 +295,14 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.currentZoomFactor.set(level);
     } catch (error) {
       console.error('Failed to set zoom', error);
+    }
+  }
+
+  protected async setAspectRatio(aspectRatio: '4:3' | '16:9' | 'fill'): Promise<void> {
+    try {
+      await this.#cameraViewService.setAspectRatio(aspectRatio);
+    } catch (error) {
+      console.error('Failed to set aspect ratio', error);
     }
   }
 
@@ -479,8 +498,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.maxZoom.set(zoomData.max);
       // Do not set currentZoomFactor from here, as it's managed locally
       this.currentLens.set(zoomData.lens);
-    } catch (error) {
-      console.warn('Failed to get zoom limits', error);
+    } catch {
+      console.warn('Failed to get zoom limits');
     }
   }
 
@@ -491,8 +510,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
       const currentFlashMode = await this.#cameraViewService.getFlashMode();
       this.flashMode.set(currentFlashMode);
-    } catch (error) {
-      console.warn('Failed to get flash modes', error);
+    } catch {
+      console.warn('Failed to get flash modes');
     }
   }
 
@@ -500,8 +519,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     try {
       const deviceId = await this.#cameraViewService.getDeviceId();
       this.currentDeviceId.set(deviceId);
-    } catch (error) {
-      console.warn('Failed to get current device ID', error);
+    } catch {
+      console.warn('Failed to get current device ID');
     }
   }
 

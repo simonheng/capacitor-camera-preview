@@ -13,6 +13,7 @@ import type {
 } from "./definitions";
 import { DeviceType } from "./definitions";
 
+const DEFAULT_VIDEO_ID = "capgo_video";
 export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   /**
    *  track which camera is used based on start options
@@ -20,6 +21,8 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
    */
   private isBackCamera = false;
   private currentDeviceId: string | null = null;
+  private videoElement: HTMLVideoElement | null = null;
+  private isStarted = false;
 
   constructor() {
     super();
@@ -31,94 +34,93 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     );
   }
 
-  async start(options: CameraPreviewOptions): Promise<void> {
-    await navigator.mediaDevices
-      .getUserMedia({
-        audio: !options.disableAudio,
-        video: true,
-      })
-      .then((stream: MediaStream) => {
-        // Stop any existing stream so we can request media with different constraints based on user input
-        stream.getTracks().forEach((track) => track.stop());
-      })
-      .catch((error) => {
-        Promise.reject(error);
-      });
+  async start(options: CameraPreviewOptions): Promise<{ width: number; height: number; x: number; y: number }> {
+    if (this.isStarted) {
+      throw new Error("camera already started");
+    }
 
-    const video = document.getElementById("video");
-    const parent = document.getElementById(options?.parent || "");
+    this.isBackCamera = true;
+    this.isStarted = false;
 
-    if (!video) {
-      const videoElement = document.createElement("video");
-      videoElement.id = "video";
-      videoElement.setAttribute("class", options?.className || "");
+    if (options.position) {
+      this.isBackCamera = options.position === "rear";
+    }
 
-      // Don't flip video feed if camera is rear facing
-      if (options.position !== "rear") {
-        videoElement.setAttribute(
-          "style",
-          "-webkit-transform: scaleX(-1); transform: scaleX(-1);",
-        );
-      }
+    const video = document.getElementById(DEFAULT_VIDEO_ID);
+    if (video) {
+      video.remove();
+    }
+    const container = options.parent ? document.getElementById(options.parent) : document.body;
+    if (!container) {
+      throw new Error("container not found");
+    }
+    this.videoElement = document.createElement("video");
+    this.videoElement.id = DEFAULT_VIDEO_ID;
+    this.videoElement.className = options.className || "";
+    this.videoElement.playsInline = true;
+    this.videoElement.muted = true;
+    this.videoElement.autoplay = true;
 
-      const userAgent = navigator.userAgent.toLowerCase();
-      const isSafari =
-        userAgent.includes("safari") && !userAgent.includes("chrome");
+    container.appendChild(this.videoElement);
+    if (options.toBack) {
+      this.videoElement.style.zIndex = "-1";
+    }
 
-      // Safari on iOS needs to have the autoplay, muted and playsinline attributes set for video.play() to be successful
-      // Without these attributes videoElement.play() will throw a NotAllowedError
-      // https://developer.apple.com/documentation/webkit/delivering_video_content_for_safari
-      if (isSafari) {
-        videoElement.setAttribute("autoplay", "true");
-        videoElement.setAttribute("muted", "true");
-        videoElement.setAttribute("playsinline", "true");
-      }
+    if (options.width) {
+      this.videoElement.width = options.width;
+    }
 
-      parent?.appendChild(videoElement);
+    if (options.height) {
+      this.videoElement.height = options.height;
+    }
 
-      if (navigator?.mediaDevices?.getUserMedia) {
-        const constraints: MediaStreamConstraints = {
-          video: {
-            width: { ideal: options.width },
-            height: { ideal: options.height },
-          },
-        };
+    if (options.x) {
+      this.videoElement.style.left = `${options.x}px`;
+    }
 
-        if (options.deviceId) {
-          (constraints.video as MediaTrackConstraints).deviceId = { exact: options.deviceId };
-          this.currentDeviceId = options.deviceId;
-          // Try to determine camera position from device
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const device = devices.find(d => d.deviceId === options.deviceId);
-          this.isBackCamera = device?.label.toLowerCase().includes('back') || device?.label.toLowerCase().includes('rear') || false;
-        } else if (options.position === "rear") {
-          (constraints.video as MediaTrackConstraints).facingMode = "environment";
-          this.isBackCamera = true;
-        } else {
-          this.isBackCamera = false;
-        }
+    if (options.y) {
+      this.videoElement.style.top = `${options.y}px`;
+    }
 
-        const self = this;
-        await navigator.mediaDevices.getUserMedia(constraints).then(
-          (stream) => {
-            if (document.getElementById("video")) {
-              // video.src = window.URL.createObjectURL(stream);
-              videoElement.srcObject = stream;
-              videoElement.play();
-              Promise.resolve({});
-            } else {
-              self.stopStream(stream);
-              Promise.reject(new Error("camera already stopped"));
-            }
-          },
-          (err) => {
-            Promise.reject(new Error(err));
-          },
-        );
+    if (options.aspectRatio && options.aspectRatio !== 'fill') {
+      const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
+      const ratio = widthRatio / heightRatio;
+
+      if (options.width) {
+        this.videoElement.height = options.width / ratio;
+      } else if (options.height) {
+        this.videoElement.width = options.height * ratio;
       }
     } else {
-      Promise.reject(new Error("camera already started"));
+      this.videoElement.style.objectFit = 'cover';
     }
+
+    const constraints: MediaStreamConstraints = {
+      video: {
+        width: { ideal: this.videoElement.width || 640 },
+        height: { ideal: this.videoElement.height || window.innerHeight },
+        facingMode: this.isBackCamera ? "environment" : "user",
+      },
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (!stream) {
+      throw new Error("could not acquire stream");
+    }
+    if (!this.videoElement) {
+      throw new Error("video element not found");
+    }
+    this.videoElement.srcObject = stream;
+    if (!this.isBackCamera) {
+      this.videoElement.style.transform = "scaleX(-1)";
+    }
+    this.isStarted = true;
+    return {
+      width: this.videoElement.width,
+      height: this.videoElement.height,
+      x: this.videoElement.getBoundingClientRect().x,
+      y: this.videoElement.getBoundingClientRect().y,
+    };
   }
 
   private stopStream(stream: any) {
@@ -129,20 +131,21 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
   }
 
-  async stop(): Promise<any> {
-    const video = document.getElementById("video") as HTMLVideoElement;
+  async stop(): Promise<void> {
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (video) {
       video.pause();
 
       this.stopStream(video.srcObject);
 
       video.remove();
+      this.isStarted = false;
     }
   }
 
   async capture(options: CameraPreviewPictureOptions): Promise<any> {
     return new Promise((resolve, reject) => {
-      const video = document.getElementById("video") as HTMLVideoElement;
+      const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
       if (!video?.srcObject) {
         reject(new Error("camera is not running"));
         return;
@@ -227,7 +230,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async flip(): Promise<void> {
-    const video = document.getElementById("video") as HTMLVideoElement;
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video?.srcObject) {
       throw new Error("camera is not running");
     }
@@ -273,13 +276,13 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async setOpacity(_options: CameraOpacityOptions): Promise<any> {
-    const video = document.getElementById("video") as HTMLVideoElement;
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!!video && !!_options.opacity)
       video.style.setProperty("opacity", _options.opacity.toString());
   }
 
   async isRunning(): Promise<{ isRunning: boolean }> {
-    const video = document.getElementById("video") as HTMLVideoElement;
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     return { isRunning: !!video && !!video.srcObject };
   }
 
@@ -362,7 +365,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async getZoom(): Promise<{ min: number; max: number; current: number; lens: LensInfo }> {
-    const video = document.getElementById("video") as HTMLVideoElement;
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video?.srcObject) {
       throw new Error("camera is not running");
     }
@@ -420,7 +423,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async setZoom(options: { level: number; ramp?: boolean }): Promise<void> {
-    const video = document.getElementById("video") as HTMLVideoElement;
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video?.srcObject) {
       throw new Error("camera is not running");
     }
@@ -461,7 +464,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async setDeviceId(options: { deviceId: string }): Promise<void> {
-    const video = document.getElementById("video") as HTMLVideoElement;
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video?.srcObject) {
       throw new Error("camera is not running");
     }
@@ -502,6 +505,55 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       await video.play();
     } catch (error) {
       throw new Error(`Failed to swap to device ${options.deviceId}: ${error}`);
+    }
+  }
+
+  async getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' | 'fill' }> {
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
+    if (!video) {
+      throw new Error("camera is not running");
+    }
+
+    if (video.style.objectFit === 'cover') {
+      return { aspectRatio: 'fill' };
+    }
+
+    const width = video.offsetWidth;
+    const height = video.offsetHeight;
+
+    if (width && height) {
+      const ratio = width / height;
+      if (Math.abs(ratio - (4 / 3)) < 0.01) {
+        return { aspectRatio: '4:3' };
+      }
+      if (Math.abs(ratio - (16 / 9)) < 0.01) {
+        return { aspectRatio: '16:9' };
+      }
+    }
+
+    // Default to fill if no specific aspect ratio is matched
+    return { aspectRatio: 'fill' };
+  }
+
+  async setAspectRatio(options: { aspectRatio: '4:3' | '16:9' | 'fill' }): Promise<void> {
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
+    if (!video) {
+      throw new Error("camera is not running");
+    }
+
+    if (options.aspectRatio && options.aspectRatio !== 'fill') {
+      const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
+      const ratio = widthRatio / heightRatio;
+      const width = video.offsetWidth;
+      const height = video.offsetHeight;
+
+      if (width) {
+        video.height = width / ratio;
+      } else if (height) {
+        video.width = height * ratio;
+      }
+    } else {
+      video.style.objectFit = 'cover';
     }
   }
 
