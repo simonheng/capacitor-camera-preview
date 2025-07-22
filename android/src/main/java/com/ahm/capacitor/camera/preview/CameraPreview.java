@@ -146,7 +146,7 @@ public class CameraPreview
     final boolean saveToGallery = call.getBoolean("saveToGallery", false);
     Integer width = call.getInt("width");
     Integer height = call.getInt("height");
-    
+
     cameraXView.capturePhoto(quality, saveToGallery, width, height, location);
   }
 
@@ -291,7 +291,7 @@ public class CameraPreview
     }
     rear.put("supportedPictureSizes", rearSizesJs);
     supportedPictureSizesResult.put(rear);
-    
+
     List<Size> frontSizes = CameraXView.getSupportedPictureSizes("front");
     JSObject front = new JSObject();
     front.put("facing", "front");
@@ -304,7 +304,7 @@ public class CameraPreview
     }
     front.put("supportedPictureSizes", frontSizesJs);
     supportedPictureSizesResult.put(front);
-    
+
     JSObject ret = new JSObject();
     ret.put("supportedPictureSizes", supportedPictureSizesResult);
     call.resolve(ret);
@@ -389,7 +389,8 @@ public class CameraPreview
     final boolean disableExifHeaderStripping = Boolean.TRUE.equals(call.getBoolean("disableExifHeaderStripping", false));
     final boolean lockOrientation = Boolean.TRUE.equals(call.getBoolean("lockAndroidOrientation", false));
     final boolean disableAudio = Boolean.TRUE.equals(call.getBoolean("disableAudio", true));
-    
+    final String aspectRatio = call.getString("aspectRatio");
+
     float targetZoom = 1.0f;
     // Check if the selected device is a physical ultra-wide
     if (originalDeviceId != null) {
@@ -401,7 +402,7 @@ public class CameraPreview
                         Log.d("CameraPreview", "Ultra-wide lens selected. Targeting 0.5x zoom on logical camera.");
                         targetZoom = 0.5f;
                         // Force the use of the logical camera by clearing the specific deviceId
-                        deviceId = null; 
+                        deviceId = null;
                         break;
                     }
                 }
@@ -427,9 +428,9 @@ public class CameraPreview
         int computedHeight = height != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, height, metrics) : getBridge().getWebView().getHeight();
         computedHeight -= (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, paddingBottom, metrics);
 
-        CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f);
+        CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f, aspectRatio);
         config.setTargetZoom(finalTargetZoom);
-        
+
         bridge.saveCall(call);
         cameraStartCallbackId = call.getCallbackId();
         cameraXView.startSession(config);

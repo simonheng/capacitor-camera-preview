@@ -18,6 +18,8 @@ import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
+import androidx.camera.core.AspectRatio;
+import androidx.camera.core.resolutionselector.AspectRatioStrategy;
 import androidx.camera.core.resolutionselector.ResolutionSelector;
 import androidx.camera.core.resolutionselector.ResolutionStrategy;
 import androidx.camera.lifecycle.ProcessCameraProvider;
@@ -61,6 +63,7 @@ import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import java.io.ByteArrayOutputStream;
 import android.location.Location;
+import android.util.Rational;
 
 public class CameraXView implements LifecycleOwner {
     private static final String TAG = "CameraPreview CameraXView";
@@ -206,9 +209,22 @@ public class CameraXView implements LifecycleOwner {
             try {
                 Log.d(TAG, "Building camera selector with deviceId: " + sessionConfig.getDeviceId() + " and position: " + sessionConfig.getPosition());
                 currentCameraSelector = buildCameraSelector();
-                ResolutionSelector resolutionSelector = new ResolutionSelector.Builder()
-                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
-                        .build();
+
+                ResolutionSelector.Builder resolutionSelectorBuilder = new ResolutionSelector.Builder()
+                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY);
+
+                if (sessionConfig.getAspectRatio() != null) {
+                    int aspectRatio;
+                    if ("16:9".equals(sessionConfig.getAspectRatio())) {
+                        aspectRatio = AspectRatio.RATIO_16_9;
+                    } else { // "4:3"
+                        aspectRatio = AspectRatio.RATIO_4_3;
+                    }
+                    resolutionSelectorBuilder.setAspectRatioStrategy(new AspectRatioStrategy(aspectRatio, AspectRatioStrategy.FALLBACK_RULE_AUTO));
+                }
+
+                ResolutionSelector resolutionSelector = resolutionSelectorBuilder.build();
+
                 Preview preview = new Preview.Builder().setResolutionSelector(resolutionSelector).build();
                 imageCapture = new ImageCapture.Builder().setResolutionSelector(resolutionSelector).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setFlashMode(currentFlashMode).build();
                 sampleImageCapture = imageCapture;
@@ -349,11 +365,11 @@ public class CameraXView implements LifecycleOwner {
                     try {
                         byte[] bytes = Files.readAllBytes(tempFile.toPath());
                         ExifInterface exifInterface = new ExifInterface(tempFile.getAbsolutePath());
-                        
+
                         if (location != null) {
                             exifInterface.setGpsInfo(location);
                         }
-                        
+
                         JSONObject exifData = getExifData(exifInterface);
 
                         if (width != null && height != null) {
@@ -363,13 +379,13 @@ public class CameraXView implements LifecycleOwner {
                             resizedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream);
                             bytes = stream.toByteArray();
                         }
-                        
+
                         if (saveToGallery) {
                             saveImageToGallery(bytes);
                         }
 
                         String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
-                        
+
                         tempFile.delete();
 
                         if (listener != null) {
@@ -389,7 +405,7 @@ public class CameraXView implements LifecycleOwner {
     private Bitmap resizeBitmap(Bitmap bitmap, int width, int height) {
         return Bitmap.createScaledBitmap(bitmap, width, height, true);
     }
-    
+
     private JSONObject getExifData(ExifInterface exifInterface) {
         JSONObject exifData = new JSONObject();
         try {
@@ -615,7 +631,7 @@ public class CameraXView implements LifecycleOwner {
             for (CameraInfo cameraInfo : cameraProvider.getAvailableCameraInfos()) {
                 String logicalCameraId = Camera2CameraInfo.from(cameraInfo).getCameraId();
                 String position = isBackCamera(cameraInfo) ? "rear" : "front";
-                
+
                 // Add logical camera
                 float minZoom = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMinZoomRatio();
                 float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
@@ -651,7 +667,7 @@ public class CameraXView implements LifecycleOwner {
                                 if (focalLengths[0] < 3.0f) deviceType = "ultraWide";
                                 else if (focalLengths[0] > 5.0f) deviceType = "telephoto";
                             }
-                            
+
                             float physicalMinZoom = 1.0f;
                             float physicalMaxZoom = 1.0f;
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -661,11 +677,11 @@ public class CameraXView implements LifecycleOwner {
                                     physicalMaxZoom = zoomRange.getUpper();
                                 }
                             }
-                            
+
                             String label = "Physical " + deviceType + " (" + position + ")";
                             List<LensInfo> physicalLenses = new ArrayList<>();
                             physicalLenses.add(new LensInfo(focalLengths != null ? focalLengths[0] : 4.25f, deviceType, 1.0f, physicalMaxZoom));
-                            
+
                             devices.add(new com.ahm.capacitor.camera.preview.model.CameraDevice(
                                 physicalId, label, position, physicalLenses, physicalMinZoom, physicalMaxZoom, false
                             ));
@@ -969,7 +985,8 @@ public class CameraXView implements LifecycleOwner {
             sessionConfig.isEnableZoom(), // enableZoom
             sessionConfig.isDisableExifHeaderStripping(), // disableExifHeaderStripping
             sessionConfig.isDisableAudio(), // disableAudio
-            sessionConfig.getZoomFactor() // zoomFactor
+            sessionConfig.getZoomFactor(), // zoomFactor
+            sessionConfig.getAspectRatio()
         );
 
         // Clear current device ID to force position-based selection

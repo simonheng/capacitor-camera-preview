@@ -1,6 +1,6 @@
-<div class="container" 
-     (touchstart)="handleTouchStart($event)" 
-     (touchmove)="handleTouchMove($event)" 
+<div class="container"
+     (touchstart)="handleTouchStart($event)"
+     (touchmove)="handleTouchMove($event)"
      (touchend)="handleTouchEnd()">
   <div id="cameraView">
     @if (!cameraStarted()) {
@@ -115,6 +115,18 @@
         <ion-icon name="remove"></ion-icon>
       </ion-fab-button>
     }
+  </ion-fab>
+
+  <ion-fab
+    class="aspect-ratio-toggle"
+    slot="fixed"
+    horizontal="start"
+    vertical="top"
+  >
+    <ion-fab-button (click)="toggleAspectRatio()" size="small">
+      <ion-icon name="scan-outline"></ion-icon>
+      <span>{{ currentAspectRatio() }}</span>
+    </ion-fab-button>
   </ion-fab>
 
   @if (cameraStarted()) {
