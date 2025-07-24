@@ -77,7 +77,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         void onPictureTakenError(String message);
         void onSampleTaken(String result);
         void onSampleTakenError(String message);
-        void onCameraStarted();
+        void onCameraStarted(int width, int height, int x, int y);
         void onCameraStartError(String message);
     }
 
@@ -194,7 +194,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
         // Create and setup the preview view
         previewView = new PreviewView(context);
-        previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        previewView.setScaleType(PreviewView.ScaleType.FIT_CENTER);
         previewContainer.addView(previewView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
@@ -305,7 +305,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
                 isRunning = true;
                 Log.d(TAG, "bindCameraUseCases: Camera bound successfully");
-                if (listener != null) listener.onCameraStarted();
+                if (listener != null) listener.onCameraStarted(
+                    sessionConfig.getWidth(),
+                    sessionConfig.getHeight(),
+                    sessionConfig.getX(),
+                    sessionConfig.getY()
+                );
             } catch (Exception e) {
                 if (listener != null) listener.onCameraStartError("Error binding camera: " + e.getMessage());
             }
@@ -398,7 +403,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                         java.io.FileInputStream fis = new java.io.FileInputStream(tempFile);
                         fis.read(bytes);
                         fis.close();
-                        
+
                         ExifInterface exifInterface = new ExifInterface(tempFile.getAbsolutePath());
 
                         if (location != null) {
@@ -1051,7 +1056,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         layoutParams.leftMargin = sessionConfig.getX();
         layoutParams.topMargin = sessionConfig.getY();
 
-        if (sessionConfig.getAspectRatio() != null && !sessionConfig.getAspectRatio().equals("fill")) {
+        if (sessionConfig.getAspectRatio() != null) {
             String[] ratios = sessionConfig.getAspectRatio().split(":");
             float ratio = Float.parseFloat(ratios[0]) / Float.parseFloat(ratios[1]);
             if (sessionConfig.getWidth() > 0) {
@@ -1059,14 +1064,17 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             } else if (sessionConfig.getHeight() > 0) {
                 layoutParams.width = (int) (sessionConfig.getHeight() * ratio);
             }
-        } else {
-            previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
         }
 
         previewView.setLayoutParams(layoutParams);
 
         if (listener != null) {
-            listener.onCameraStarted();
+            listener.onCameraStarted(
+                sessionConfig.getWidth(),
+                sessionConfig.getHeight(),
+                sessionConfig.getX(),
+                sessionConfig.getY()
+            );
         }
     }
 
@@ -1074,7 +1082,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         if (sessionConfig != null) {
             return sessionConfig.getAspectRatio();
         }
-        return "fill";
+        return "4:3";
     }
 
     public void setAspectRatio(String aspectRatio) {
@@ -1094,7 +1102,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                     sessionConfig.getDisableExifHeaderStripping(),
                     sessionConfig.getDisableAudio(),
                     sessionConfig.getZoomFactor(),
-                    aspectRatio,
+                    sessionConfig.getAspectRatio(),
                     sessionConfig.getGridMode()
             );
             updateLayoutParams();

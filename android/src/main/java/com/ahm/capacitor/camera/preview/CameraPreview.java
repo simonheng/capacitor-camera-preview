@@ -30,13 +30,6 @@ import org.json.JSONObject;
 import android.location.Location;
 import com.getcapacitor.Logger;
 
-interface CameraPreviewListener {
-  void onPictureTaken(String base64, JSONObject exif);
-  void onPictureTakenError(String message);
-  void onCameraStarted(int width, int height, int x, int y);
-  void onCameraStopped();
-  void onCaptureStarted();
-}
 
 @CapacitorPlugin(
   name = "CameraPreview",
@@ -57,7 +50,7 @@ interface CameraPreviewListener {
 )
 public class CameraPreview
   extends Plugin
-  implements CameraPreviewListener {
+  implements CameraXView.CameraXViewListener {
 
   static final String CAMERA_WITH_AUDIO_PERMISSION_ALIAS = "cameraWithAudio";
   static final String CAMERA_ONLY_PERMISSION_ALIAS = "cameraOnly";
@@ -397,7 +390,7 @@ public class CameraPreview
     final boolean disableExifHeaderStripping = Boolean.TRUE.equals(call.getBoolean("disableExifHeaderStripping", false));
     final boolean lockOrientation = Boolean.TRUE.equals(call.getBoolean("lockAndroidOrientation", false));
     final boolean disableAudio = Boolean.TRUE.equals(call.getBoolean("disableAudio", true));
-    final String aspectRatio = call.getString("aspectRatio", "fill");
+    final String aspectRatio = call.getString("aspectRatio", "4:3");
     final String gridMode = call.getString("gridMode", "none");
 
     float targetZoom = 1.0f;
@@ -422,7 +415,7 @@ public class CameraPreview
 
     previousOrientationRequest = getBridge().getActivity().getRequestedOrientation();
     cameraXView = new CameraXView(getContext(), getBridge().getWebView());
-    cameraXView.setListener((CameraXView.CameraXViewListener) this);
+    cameraXView.setListener(this);
 
     String finalDeviceId = deviceId;
     float finalTargetZoom = targetZoom;
@@ -473,11 +466,6 @@ public class CameraPreview
   }
 
   @Override
-  public void onCaptureStarted() {
-    Log.i("CameraPreview", "Capture started");
-  }
-
-  @Override
   public void onCameraStarted(int width, int height, int x, int y) {
     PluginCall call = bridge.getSavedCall(cameraStartCallbackId);
     if (call != null) {
@@ -493,8 +481,25 @@ public class CameraPreview
   }
 
   @Override
-  public void onCameraStopped() {
-    // This method is no longer needed as onCameraStarted handles the promise resolution.
+  public void onSampleTaken(String result) {
+    // Handle sample taken if needed
+    Log.i("CameraPreview", "Sample taken: " + result);
+  }
+
+  @Override
+  public void onSampleTakenError(String message) {
+    // Handle sample taken error if needed
+    Log.e("CameraPreview", "Sample taken error: " + message);
+  }
+
+  @Override
+  public void onCameraStartError(String message) {
+    PluginCall call = bridge.getSavedCall(cameraStartCallbackId);
+    if (call != null) {
+        call.reject(message);
+        bridge.releaseCall(call);
+        cameraStartCallbackId = null;
+    }
   }
 
   @PluginMethod
@@ -503,7 +508,7 @@ public class CameraPreview
       call.reject("Camera is not running");
       return;
     }
-    String aspectRatio = call.getString("aspectRatio", "fill");
+    String aspectRatio = call.getString("aspectRatio", "4:3");
     cameraXView.setAspectRatio(aspectRatio);
     call.resolve();
   }

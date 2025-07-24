@@ -83,7 +83,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     var locationManager: CLLocationManager?
     var currentLocation: CLLocation?
     private var aspectRatio: String?
-    
+
     // MARK: - Transparency Methods
 
 
@@ -174,7 +174,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             self.makeWebViewTransparent()
         }
     }
-    
+
     @objc func setAspectRatio(_ call: CAPPluginCall) {
         guard self.isInitialized else {
             call.reject("camera not started")
@@ -190,9 +190,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("camera not started")
             return
         }
-        call.resolve(["aspectRatio": self.aspectRatio ?? "fill"])
+        call.resolve(["aspectRatio": self.aspectRatio ?? "4:3"])
     }
-    
+
     @objc func appDidBecomeActive() {
         if self.isInitialized {
             DispatchQueue.main.async {
@@ -349,7 +349,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                             return
                         }
                         self.updateCameraFrame()
-                        
+
                         // Make webview transparent - comprehensive approach
                         self.makeWebViewTransparent()
 
@@ -384,7 +384,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                         self.isInitializing = false
                         self.isInitialized = true
-                        
+
                         var returnedObject = JSObject()
                         returnedObject["width"] = self.previewView.frame.width as any JSValue
                         returnedObject["height"] = self.previewView.frame.height as any JSValue
@@ -425,7 +425,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                         DispatchQueue.main.async {
                             self.cameraController.previewLayer?.frame = self.previewView.bounds
-                            self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+                            self.cameraController.previewLayer?.videoGravity = .resizeAspect
                             self.previewView.isUserInteractionEnabled = true
 
 
@@ -877,7 +877,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                     DispatchQueue.main.async {
                         self.cameraController.previewLayer?.frame = self.previewView.bounds
-                        self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+                        self.cameraController.previewLayer?.videoGravity = .resizeAspect
                         self.previewView.isUserInteractionEnabled = true
 
 
@@ -927,7 +927,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         var frame = CGRect(x: posX, y: posY, width: width, height: height)
 
-        if let aspectRatio = self.aspectRatio, aspectRatio != "fill" {
+        if let aspectRatio = self.aspectRatio {
             let ratioParts = aspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
             let ratio = ratioParts[0] / ratioParts[1]
             let viewWidth = Double(width)
@@ -943,13 +943,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 frame.size.height = newHeight
             }
         }
-        
+
         if self.previewView == nil {
             self.previewView = UIView(frame: frame)
         } else {
             self.previewView.frame = frame
         }
-        
+
         // Update the preview layer frame to match the preview view
         self.cameraController.previewLayer?.frame = frame
     }
