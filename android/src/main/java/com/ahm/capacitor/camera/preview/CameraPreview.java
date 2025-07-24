@@ -524,4 +524,26 @@ public class CameraPreview
     ret.put("aspectRatio", aspectRatio);
     call.resolve(ret);
   }
+
+  @PluginMethod
+  public void setGridMode(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    String gridMode = call.getString("gridMode", "none");
+    cameraXView.setGridMode(gridMode);
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void getGridMode(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    JSObject ret = new JSObject();
+    ret.put("gridMode", cameraXView.getGridMode());
+    call.resolve(ret);
+  }
 }

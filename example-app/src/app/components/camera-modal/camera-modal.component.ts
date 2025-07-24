@@ -34,6 +34,7 @@ import {
   type PictureFormat,
   type CameraLens,
   type CameraPreviewPictureOptions,
+  type GridMode,
 } from '@capgo/camera-preview';
 import { CapacitorCameraViewService } from '../../core/capacitor-camera-preview.service';
 
@@ -76,7 +77,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly y = input<number>(0);
   public readonly width = input<number>(0);
   public readonly height = input<number>(0);
-  public readonly aspectRatio = input<'4:3' | '16:9' | 'fill'>('fill');
+  public readonly aspectRatio = input<'4:3' | '16:9'>('4:3');
 
   // Picture settings inputs
   public readonly pictureFormat = input<PictureFormat>('jpeg');
@@ -121,7 +122,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Camera switching functionality
   protected readonly availableCameras = signal<CameraDevice[]>([]);
   protected readonly selectedCameraIndex = signal<number>(0);
-  protected readonly currentAspectRatio = signal<'4:3' | '16:9' | 'fill'>('4:3');
+  protected readonly currentAspectRatio = signal<'4:3' | '16:9'>('4:3');
+  protected readonly currentGridMode = signal<GridMode>('none');
 
   protected readonly canZoomIn = computed(() => {
     return this.currentZoomFactor() + 0.1 <= this.maxZoom();
@@ -185,6 +187,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     ]);
 
     this.currentZoomFactor.set(this.initialZoomFactor());
+    this.currentGridMode.set(this.gridMode());
 
     // Setup camera switching after devices are loaded
     this.#setupCameraSwitchButtons();
@@ -304,7 +307,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     }
   }
 
-  protected async setAspectRatio(aspectRatio: '4:3' | '16:9' | 'fill'): Promise<void> {
+  protected async setAspectRatio(aspectRatio: '4:3' | '16:9'): Promise<void> {
     try {
       await this.#cameraViewService.setAspectRatio(aspectRatio);
     } catch (error) {
@@ -327,9 +330,35 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async toggleAspectRatio(): Promise<void> {
-    this.currentAspectRatio.set(this.currentAspectRatio() === '4:3' ? '16:9' : this.currentAspectRatio() === '16:9' ? 'fill' : '4:3');
+    this.currentAspectRatio.set(this.currentAspectRatio() === '4:3' ? '16:9' : '4:3');
     await this.stop();
     await this.startCamera();
+  }
+
+  protected async toggleGridMode(): Promise<void> {
+    try {
+      const currentMode = this.currentGridMode();
+      let nextMode: GridMode;
+
+      switch (currentMode) {
+        case 'none':
+          nextMode = '3x3';
+          break;
+        case '3x3':
+          nextMode = '4x4';
+          break;
+        case '4x4':
+          nextMode = 'none';
+          break;
+        default:
+          nextMode = 'none';
+      }
+
+      this.currentGridMode.set(nextMode);
+      await this.#cameraViewService.setGridMode(nextMode);
+    } catch (error) {
+      console.error('Failed to toggle grid mode', error);
+    }
   }
 
   protected async switchToDevice(deviceId: string): Promise<void> {

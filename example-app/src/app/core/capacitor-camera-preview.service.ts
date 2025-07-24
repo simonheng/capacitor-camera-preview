@@ -8,6 +8,7 @@ import {
   FlashMode,
   LensInfo,
   CameraPreviewPlugin,
+  GridMode,
 } from '@capgo/camera-preview';
 import { BehaviorSubject } from 'rxjs';
 
@@ -130,7 +131,7 @@ export class CapacitorCameraViewService {
     return (await this.#cameraView.getSupportedFlashModes()).result;
   }
 
-  async setAspectRatio(aspectRatio: '4:3' | '16:9' | 'fill'): Promise<void> {
+  async setAspectRatio(aspectRatio: '4:3' | '16:9'): Promise<void> {
     return CameraPreview.setAspectRatio({ aspectRatio });
   }
 
@@ -210,6 +211,24 @@ export class CapacitorCameraViewService {
   async removeAllListeners(): Promise<void> {
     return this.#cameraView.removeAllListeners();
   }
+
+  /**
+   * Set the grid mode for the camera preview overlay
+   * @param gridMode The grid mode to set ('none', '3x3', or '4x4')
+   */
+  async setGridMode(gridMode: GridMode): Promise<void> {
+    return (this.#cameraView as any).setGridMode({ gridMode });
+  }
+
+  /**
+   * Get the current grid mode of the camera preview overlay
+   * @returns The current grid mode
+   */
+  async getGridMode(): Promise<GridMode> {
+    const result = await (this.#cameraView as any).getGridMode();
+    return result.gridMode;
+  }
+
   // /**
   //  * Check camera permission status
   //  * @returns The current permission status

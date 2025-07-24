@@ -222,6 +222,8 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`getSupportedFlashModes()`](#getsupportedflashmodes)
 * [`setAspectRatio(...)`](#setaspectratio)
 * [`getAspectRatio()`](#getaspectratio)
+* [`setGridMode(...)`](#setgridmode)
+* [`getGridMode()`](#getgridmode)
 * [`getHorizontalFov()`](#gethorizontalfov)
 * [`getSupportedPictureSizes()`](#getsupportedpicturesizes)
 * [`setFlashMode(...)`](#setflashmode)
@@ -336,14 +338,14 @@ Gets the flash modes supported by the active camera.
 ### setAspectRatio(...)
 
 ```typescript
-setAspectRatio(options: { aspectRatio: '4:3' | '16:9' | 'fill'; }) => Promise<void>
+setAspectRatio(options: { aspectRatio: '4:3' | '16:9'; }) => Promise<void>
 ```
 
 Set the aspect ratio of the camera preview.
 
-| Param         | Type                                                     | Description                 |
-| ------------- | -------------------------------------------------------- | --------------------------- |
-| **`options`** | <code>{ aspectRatio: '4:3' \| '16:9' \| 'fill'; }</code> | - The desired aspect ratio. |
+| Param         | Type                                           | Description                 |
+| ------------- | ---------------------------------------------- | --------------------------- |
+| **`options`** | <code>{ aspectRatio: '4:3' \| '16:9'; }</code> | - The desired aspect ratio. |
 
 **Since:** 7.4.0
 
@@ -353,14 +355,46 @@ Set the aspect ratio of the camera preview.
 ### getAspectRatio()
 
 ```typescript
-getAspectRatio() => Promise<{ aspectRatio: '4:3' | '16:9' | 'fill'; }>
+getAspectRatio() => Promise<{ aspectRatio: '4:3' | '16:9'; }>
 ```
 
 Gets the current aspect ratio of the camera preview.
 
-**Returns:** <code>Promise&lt;{ aspectRatio: '4:3' | '16:9' | 'fill'; }&gt;</code>
+**Returns:** <code>Promise&lt;{ aspectRatio: '4:3' | '16:9'; }&gt;</code>
 
 **Since:** 7.4.0
+
+--------------------
+
+
+### setGridMode(...)
+
+```typescript
+setGridMode(options: { gridMode: GridMode; }) => Promise<void>
+```
+
+Sets the grid mode of the camera preview overlay.
+
+| Param         | Type                                                         | Description                                        |
+| ------------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| **`options`** | <code>{ gridMode: <a href="#gridmode">GridMode</a>; }</code> | - The desired grid mode ('none', '3x3', or '4x4'). |
+
+**Since:** 8.0.0
+
+--------------------
+
+
+### getGridMode()
+
+```typescript
+getGridMode() => Promise<{ gridMode: GridMode; }>
+```
+
+Gets the current grid mode of the camera preview overlay.
+
+**Returns:** <code>Promise&lt;{ gridMode: <a href="#gridmode">GridMode</a>; }&gt;</code>
+
+**Since:** 8.0.0
 
 --------------------
 

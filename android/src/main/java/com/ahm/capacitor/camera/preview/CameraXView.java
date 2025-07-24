@@ -1085,6 +1085,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         return "4:3";
     }
 
+    public String getGridMode() {
+        if (sessionConfig != null) {
+            return sessionConfig.getGridMode();
+        }
+        return "none";
+    }
+
     public void setAspectRatio(String aspectRatio) {
         if (sessionConfig != null) {
             sessionConfig = new CameraSessionConfiguration(
@@ -1102,10 +1109,40 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                     sessionConfig.getDisableExifHeaderStripping(),
                     sessionConfig.getDisableAudio(),
                     sessionConfig.getZoomFactor(),
-                    sessionConfig.getAspectRatio(),
+                    aspectRatio,
                     sessionConfig.getGridMode()
             );
             updateLayoutParams();
+        }
+    }
+
+    public void setGridMode(String gridMode) {
+        if (sessionConfig != null) {
+            sessionConfig = new CameraSessionConfiguration(
+                    sessionConfig.getDeviceId(),
+                    sessionConfig.getPosition(),
+                    sessionConfig.getX(),
+                    sessionConfig.getY(),
+                    sessionConfig.getWidth(),
+                    sessionConfig.getHeight(),
+                    sessionConfig.getPaddingBottom(),
+                    sessionConfig.getToBack(),
+                    sessionConfig.getStoreToFile(),
+                    sessionConfig.getEnableOpacity(),
+                    sessionConfig.getEnableZoom(),
+                    sessionConfig.getDisableExifHeaderStripping(),
+                    sessionConfig.getDisableAudio(),
+                    sessionConfig.getZoomFactor(),
+                    sessionConfig.getAspectRatio(),
+                    gridMode
+            );
+
+            // Update the grid overlay immediately
+            if (gridOverlayView != null) {
+                gridOverlayView.post(() -> {
+                    gridOverlayView.setGridMode(gridMode);
+                });
+            }
         }
     }
 }

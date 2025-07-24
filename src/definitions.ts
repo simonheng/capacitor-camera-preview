@@ -348,19 +348,36 @@ export interface CameraPreviewPlugin {
   /**
    * Set the aspect ratio of the camera preview.
    *
-   * @param {{ aspectRatio: '4:3' | '16:9' | 'fill' }} options - The desired aspect ratio.
+   * @param {{ aspectRatio: '4:3' | '16:9' }} options - The desired aspect ratio.
    * @returns {Promise<void>} A promise that resolves when the aspect ratio is set.
    * @since 7.4.0
    */
-  setAspectRatio(options: { aspectRatio: '4:3' | '16:9' | 'fill' }): Promise<void>;
+  setAspectRatio(options: { aspectRatio: '4:3' | '16:9' }): Promise<void>;
 
   /**
    * Gets the current aspect ratio of the camera preview.
    *
-   * @returns {Promise<{ aspectRatio: '4:3' | '16:9' | 'fill' }>} A promise that resolves with the current aspect ratio.
+   * @returns {Promise<{ aspectRatio: '4:3' | '16:9' }>} A promise that resolves with the current aspect ratio.
    * @since 7.4.0
    */
-  getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' | 'fill' }>;
+  getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' }>;
+
+  /**
+   * Sets the grid mode of the camera preview overlay.
+   *
+   * @param {{ gridMode: GridMode }} options - The desired grid mode ('none', '3x3', or '4x4').
+   * @returns {Promise<void>} A promise that resolves when the grid mode is set.
+   * @since 8.0.0
+   */
+  setGridMode(options: { gridMode: GridMode }): Promise<void>;
+
+  /**
+   * Gets the current grid mode of the camera preview overlay.
+   *
+   * @returns {Promise<{ gridMode: GridMode }>} A promise that resolves with the current grid mode.
+   * @since 8.0.0
+   */
+  getGridMode(): Promise<{ gridMode: GridMode }>;
 
   /**
    * Gets the horizontal field of view (FoV) for the active camera.

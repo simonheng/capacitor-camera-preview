@@ -8,6 +8,7 @@ import type {
   CameraPreviewPictureOptions,
   CameraPreviewPlugin,
   CameraSampleOptions,
+  GridMode,
   FlashMode,
   LensInfo,
 } from "./definitions";
@@ -90,7 +91,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       this.videoElement.style.top = `${options.y}px`;
     }
 
-    if (options.aspectRatio && options.aspectRatio !== 'fill') {
+    if (options.aspectRatio) {
       const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
       const ratio = widthRatio / heightRatio;
 
@@ -520,14 +521,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
   }
 
-  async getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' | 'fill' }> {
+  async getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' }> {
     const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video) {
       throw new Error("camera is not running");
-    }
-
-    if (video.style.objectFit === 'cover') {
-      return { aspectRatio: 'fill' };
     }
 
     const width = video.offsetWidth;
@@ -543,17 +540,17 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       }
     }
 
-    // Default to fill if no specific aspect ratio is matched
-    return { aspectRatio: 'fill' };
+    // Default to 4:3 if no specific aspect ratio is matched
+    return { aspectRatio: '4:3' };
   }
 
-  async setAspectRatio(options: { aspectRatio: '4:3' | '16:9' | 'fill' }): Promise<void> {
+  async setAspectRatio(options: { aspectRatio: '4:3' | '16:9'}): Promise<void> {
     const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video) {
       throw new Error("camera is not running");
     }
 
-    if (options.aspectRatio && options.aspectRatio !== 'fill') {
+    if (options.aspectRatio) {
       const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
       const ratio = widthRatio / heightRatio;
       const width = video.offsetWidth;
@@ -614,6 +611,17 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     overlay.appendChild(svg);
     return overlay;
+  }
+
+  async setGridMode(options: { gridMode: GridMode }): Promise<void> {
+    // Web implementation of grid mode would need to be implemented
+    // For now, just resolve as a no-op
+    console.warn(`Grid mode '${options.gridMode}' is not yet implemented for web platform`);
+  }
+
+  async getGridMode(): Promise<{ gridMode: GridMode }> {
+    // Web implementation - default to none
+    return { gridMode: 'none' };
   }
 
 }

@@ -56,6 +56,10 @@
           <span class="label">Opacity:</span>
           <span class="value">{{ currentOpacity() }}%</span>
         </div>
+        <div class="info-row">
+          <span class="label">Grid:</span>
+          <span class="value">{{ currentGridMode() }}</span>
+        </div>
       </ion-card-content>
     </ion-card>
   </div>
@@ -129,6 +133,29 @@
     </ion-fab-button>
   </ion-fab>
 
+  <ion-fab
+    class="grid-toggle"
+    slot="fixed"
+    horizontal="start"
+    vertical="center"
+  >
+    <ion-fab-button
+      (click)="toggleGridMode()"
+      size="small"
+      [class.grid-active]="currentGridMode() !== 'none'"
+    >
+      @if (currentGridMode() === 'none') {
+        <ion-icon name="grid-outline"></ion-icon>
+      } @else if (currentGridMode() === '3x3') {
+        <ion-icon name="grid"></ion-icon>
+        <span>3×3</span>
+      } @else if (currentGridMode() === '4x4') {
+        <ion-icon name="grid"></ion-icon>
+        <span>4×4</span>
+      }
+    </ion-fab-button>
+  </ion-fab>
+
   @if (cameraStarted()) {
 
     <!-- Video Recording Controls -->
@@ -167,7 +194,6 @@
     <div class="aspect-ratio-buttons">
       <ion-fab-button (click)="setAspectRatio('4:3')" size="small">4:3</ion-fab-button>
       <ion-fab-button (click)="setAspectRatio('16:9')" size="small">16:9</ion-fab-button>
-      <!-- <ion-fab-button (click)="setAspectRatio('fill')" size="small">Fill</ion-fab-button> -->
     </div>
 
     <!-- Sample Capture -->

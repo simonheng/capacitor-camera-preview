@@ -60,7 +60,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         CAPPluginMethod(name: "setDeviceId", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDeviceId", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setAspectRatio", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getAspectRatio", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getAspectRatio", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setGridMode", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getGridMode", returnType: CAPPluginReturnPromise)
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -83,6 +85,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     var locationManager: CLLocationManager?
     var currentLocation: CLLocation?
     private var aspectRatio: String?
+    private var gridMode: String = "none"
 
     // MARK: - Transparency Methods
 
@@ -191,6 +194,39 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
         call.resolve(["aspectRatio": self.aspectRatio ?? "4:3"])
+    }
+
+    @objc func setGridMode(_ call: CAPPluginCall) {
+        guard self.isInitialized else {
+            call.reject("camera not started")
+            return
+        }
+
+        guard let gridMode = call.getString("gridMode") else {
+            call.reject("gridMode parameter is required")
+            return
+        }
+
+        self.gridMode = gridMode
+
+        // Update grid overlay
+        DispatchQueue.main.async {
+            if gridMode == "none" {
+                self.cameraController.removeGridOverlay()
+            } else {
+                self.cameraController.addGridOverlay(to: self.previewView, gridMode: gridMode)
+            }
+        }
+
+        call.resolve()
+    }
+
+    @objc func getGridMode(_ call: CAPPluginCall) {
+        guard self.isInitialized else {
+            call.reject("camera not started")
+            return
+        }
+        call.resolve(["gridMode": self.gridMode])
     }
 
     @objc func appDidBecomeActive() {
@@ -308,18 +344,33 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.highResolutionOutput = call.getBool("enableHighResolution") ?? false
         self.cameraController.highResolutionOutput = self.highResolutionOutput
 
-        if call.getInt("width") != nil {
-            self.width = CGFloat(call.getInt("width")!)
+        // Set width - use screen width if not provided or if 0
+        if let width = call.getInt("width"), width > 0 {
+            self.width = CGFloat(width)
         } else {
             self.width = UIScreen.main.bounds.size.width
         }
-        if call.getInt("height") != nil {
-            self.height = CGFloat(call.getInt("height")!)
+
+        // Set height - use screen height if not provided or if 0
+        if let height = call.getInt("height"), height > 0 {
+            self.height = CGFloat(height)
         } else {
             self.height = UIScreen.main.bounds.size.height
         }
-        self.posX = call.getInt("x") != nil ? CGFloat(call.getInt("x")!)/UIScreen.main.scale: 0
-        self.posY = call.getInt("y") != nil ? CGFloat(call.getInt("y")!) / (call.getBool("includeSafeAreaInsets") ?? false ? 1.0 : UIScreen.main.scale) + (call.getBool("includeSafeAreaInsets") ?? false ? UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0 : 0) : 0
+
+        // Set x position - use 0 if not provided
+        if let x = call.getInt("x"), x > 0 {
+            self.posX = CGFloat(x) / UIScreen.main.scale
+        } else {
+            self.posX = 0
+        }
+
+        // Set y position - use 0 if not provided
+        if let y = call.getInt("y"), y > 0 {
+            self.posY = CGFloat(y) / (call.getBool("includeSafeAreaInsets") ?? false ? 1.0 : UIScreen.main.scale) + (call.getBool("includeSafeAreaInsets") ?? false ? UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0 : 0)
+        } else {
+            self.posY = 0
+        }
         if call.getInt("paddingBottom") != nil {
             self.paddingBottom = CGFloat(call.getInt("paddingBottom")!)
         }
@@ -330,7 +381,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.enableZoom = call.getBool("enableZoom") ?? false
         self.disableAudio = call.getBool("disableAudio") ?? true
         self.aspectRatio = call.getString("aspectRatio")
-        let gridMode = call.getString("gridMode") ?? "none"
+        self.gridMode = call.getString("gridMode") ?? "none"
+
+        print("[CameraPreview] Camera start parameters - aspectRatio: \(String(describing: self.aspectRatio)), gridMode: \(self.gridMode)")
+        print("[CameraPreview] Screen dimensions: \(UIScreen.main.bounds.size)")
+        print("[CameraPreview] Final frame dimensions - width: \(self.width), height: \(self.height), x: \(self.posX), y: \(self.posY)")
 
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
             guard granted else {
@@ -348,29 +403,28 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                             call.reject(error.localizedDescription)
                             return
                         }
+
+                        // Create and configure the preview view first
                         self.updateCameraFrame()
 
                         // Make webview transparent - comprehensive approach
                         self.makeWebViewTransparent()
 
-
+                        // Add the preview view to the webview's superview
                         self.webView?.superview?.addSubview(self.previewView)
                         if self.toBack! {
                             self.webView?.superview?.bringSubviewToFront(self.webView!)
                         }
+
+                        // Display the camera preview on the configured view
                         try? self.cameraController.displayPreview(on: self.previewView)
 
                         let frontView = self.toBack! ? self.webView : self.previewView
                         self.cameraController.setupGestures(target: frontView ?? self.previewView, enableZoom: self.enableZoom!)
 
                         // Add grid overlay if enabled
-                        if gridMode != "none" {
-                            self.cameraController.addGridOverlay(to: self.previewView, gridMode: gridMode)
-                        }
-
-                        // Add grid overlay if enabled
-                        if gridMode != "none" {
-                            self.cameraController.addGridOverlay(to: self.previewView, gridMode: gridMode)
+                        if self.gridMode != "none" {
+                            self.cameraController.addGridOverlay(to: self.previewView, gridMode: self.gridMode)
                         }
 
                         if self.rotateWhenOrientationChanged == true {
@@ -425,7 +479,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                         DispatchQueue.main.async {
                             self.cameraController.previewLayer?.frame = self.previewView.bounds
-                            self.cameraController.previewLayer?.videoGravity = .resizeAspect
+                            self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                             self.previewView.isUserInteractionEnabled = true
 
 
@@ -877,7 +931,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                     DispatchQueue.main.async {
                         self.cameraController.previewLayer?.frame = self.previewView.bounds
-                        self.cameraController.previewLayer?.videoGravity = .resizeAspect
+                        self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                         self.previewView.isUserInteractionEnabled = true
 
 
@@ -921,36 +975,57 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     private func updateCameraFrame() {
-        guard let width = self.width, var height = self.height, let posX = self.posX, let posY = self.posY else { return }
+        print("[CameraPreview] updateCameraFrame called")
+        print("[CameraPreview] width: \(String(describing: self.width)), height: \(String(describing: self.height)), posX: \(String(describing: self.posX)), posY: \(String(describing: self.posY))")
+
+        guard let width = self.width, var height = self.height, let posX = self.posX, let posY = self.posY else {
+            print("[CameraPreview] Missing required frame parameters")
+            return
+        }
+
         let paddingBottom = self.paddingBottom ?? 0
         height -= paddingBottom
 
         var frame = CGRect(x: posX, y: posY, width: width, height: height)
+        print("[CameraPreview] Initial frame: \(frame)")
 
+        // Temporarily disable aspect ratio frame adjustment to debug black preview issue
+        /*
         if let aspectRatio = self.aspectRatio {
             let ratioParts = aspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
             let ratio = ratioParts[0] / ratioParts[1]
             let viewWidth = Double(width)
             let viewHeight = Double(height)
 
+            print("[CameraPreview] Calculating aspect ratio frame: \(aspectRatio), ratio: \(ratio), viewSize: \(viewWidth)x\(viewHeight)")
+
             if viewWidth / ratio > viewHeight {
                 let newWidth = viewHeight * ratio
                 frame.origin.x += (viewWidth - newWidth) / 2
                 frame.size.width = newWidth
+                print("[CameraPreview] Adjusted width: \(newWidth)")
             } else {
                 let newHeight = viewWidth / ratio
                 frame.origin.y += (viewHeight - newHeight) / 2
                 frame.size.height = newHeight
+                print("[CameraPreview] Adjusted height: \(newHeight)")
             }
         }
+        */
+
+        print("[CameraPreview] Final calculated frame: \(frame)")
 
         if self.previewView == nil {
+            print("[CameraPreview] Creating new preview view with frame: \(frame)")
             self.previewView = UIView(frame: frame)
+            self.previewView.backgroundColor = UIColor.black // Add background color for debugging
         } else {
+            print("[CameraPreview] Updating existing preview view frame to: \(frame)")
             self.previewView.frame = frame
         }
 
         // Update the preview layer frame to match the preview view
         self.cameraController.previewLayer?.frame = frame
+        print("[CameraPreview] Set preview layer frame to: \(frame)")
     }
 }
