@@ -40,6 +40,8 @@ class CameraController: NSObject {
     var audioInput: AVCaptureDeviceInput?
 
     var zoomFactor: CGFloat = 1.0
+    private var lastZoomUpdateTime: TimeInterval = 0
+    private let zoomUpdateThrottle: TimeInterval = 1.0 / 60.0 // 60 FPS max
 
     var videoFileURL: URL?
     private let saneMaxZoomFactor: CGFloat = 25.5
@@ -353,6 +355,10 @@ extension CameraController {
     func setupPinchGesture(target: UIView, selector: Selector, delegate: UIGestureRecognizerDelegate?) {
         let pinchGesture = UIPinchGestureRecognizer(target: self, action: selector)
         pinchGesture.delegate = delegate
+        // Optimize gesture recognition for better performance
+        pinchGesture.delaysTouchesBegan = false
+        pinchGesture.delaysTouchesEnded = false
+        pinchGesture.cancelsTouchesInView = false
         target.addGestureRecognizer(pinchGesture)
     }
 
@@ -755,7 +761,8 @@ extension CameraController {
             try device.lockForConfiguration()
 
             if ramp {
-                device.ramp(toVideoZoomFactor: zoomLevel, withRate: 1.0)
+                // Use a very fast ramp rate for immediate response
+                device.ramp(toVideoZoomFactor: zoomLevel, withRate: 8.0)
             } else {
                 device.videoZoomFactor = zoomLevel
             }
@@ -1055,31 +1062,42 @@ extension CameraController: UIGestureRecognizerDelegate {
         }
     }
 
-    @objc
+        @objc
     private func handlePinch(_ pinch: UIPinchGestureRecognizer) {
         guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }
 
         let effectiveMaxZoom = min(device.maxAvailableVideoZoomFactor, self.saneMaxZoomFactor)
         func minMaxZoom(_ factor: CGFloat) -> CGFloat { return max(device.minAvailableVideoZoomFactor, min(factor, effectiveMaxZoom)) }
 
-        func update(scale factor: CGFloat) {
+        switch pinch.state {
+        case .began:
+            // Store the initial zoom factor when pinch begins
+            zoomFactor = device.videoZoomFactor
+
+                case .changed:
+            // Throttle zoom updates to prevent excessive CPU usage
+            let currentTime = CACurrentMediaTime()
+            guard currentTime - lastZoomUpdateTime >= zoomUpdateThrottle else { return }
+            lastZoomUpdateTime = currentTime
+
+            // Calculate new zoom factor based on pinch scale
+            let newScaleFactor = minMaxZoom(pinch.scale * zoomFactor)
+
+            // Use ramping for smooth zoom transitions during pinch
+            // This provides much smoother performance than direct setting
             do {
                 try device.lockForConfiguration()
-                defer { device.unlockForConfiguration() }
-
-                device.videoZoomFactor = factor
+                // Use a very fast ramp rate for immediate response
+                device.ramp(toVideoZoomFactor: newScaleFactor, withRate: 5.0)
+                device.unlockForConfiguration()
             } catch {
-                debugPrint(error)
+                debugPrint("Failed to set zoom: \(error)")
             }
-        }
 
-        switch pinch.state {
-        case .began: fallthrough
-        case .changed:
-            let newScaleFactor = minMaxZoom(pinch.scale * zoomFactor)
-            update(scale: newScaleFactor)
         case .ended:
+            // Update our internal zoom factor tracking
             zoomFactor = device.videoZoomFactor
+
         default: break
         }
     }
