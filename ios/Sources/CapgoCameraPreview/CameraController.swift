@@ -207,14 +207,17 @@ extension CameraController {
         func configurePhotoOutput(cameraMode: Bool) throws {
             guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
 
-            // Configure session preset based on aspect ratio and other settings
-            var targetPreset: AVCaptureSession.Preset = .photo // Default preset
+            // Configure session preset for high-quality preview
+            // Prioritize higher quality presets for better preview resolution
+            var targetPreset: AVCaptureSession.Preset = .high // Default to high quality
 
             if let aspectRatio = aspectRatio {
                 switch aspectRatio {
                 case "16:9":
-                    // Use HD presets for 16:9 aspect ratio
-                    if self.highResolutionOutput && captureSession.canSetSessionPreset(.hd1920x1080) {
+                    // Use highest available HD preset for 16:9 aspect ratio
+                    if captureSession.canSetSessionPreset(.hd4K3840x2160) {
+                        targetPreset = .hd4K3840x2160
+                    } else if captureSession.canSetSessionPreset(.hd1920x1080) {
                         targetPreset = .hd1920x1080
                     } else if captureSession.canSetSessionPreset(.hd1280x720) {
                         targetPreset = .hd1280x720
@@ -222,26 +225,32 @@ extension CameraController {
                         targetPreset = .high
                     }
                 case "4:3":
-                    // Use photo preset for 4:3 aspect ratio (traditional photo format)
-                    if self.highResolutionOutput && captureSession.canSetSessionPreset(.photo) {
+                    // Use photo preset for 4:3 aspect ratio (highest quality)
+                    if captureSession.canSetSessionPreset(.photo) {
                         targetPreset = .photo
+                    } else if captureSession.canSetSessionPreset(.high) {
+                        targetPreset = .high
                     } else {
                         targetPreset = .medium
                     }
                 default:
-                    // Default behavior for unrecognized aspect ratios
-                    if !cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.photo) {
+                    // Default to highest available quality
+                    if captureSession.canSetSessionPreset(.photo) {
                         targetPreset = .photo
-                    } else if cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.high) {
+                    } else if captureSession.canSetSessionPreset(.high) {
                         targetPreset = .high
+                    } else {
+                        targetPreset = .medium
                     }
                 }
             } else {
-                // Original logic when no aspect ratio is specified
-                if !cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.photo) {
+                // Default to highest available quality when no aspect ratio specified
+                if captureSession.canSetSessionPreset(.photo) {
                     targetPreset = .photo
-                } else if cameraMode && self.highResolutionOutput && captureSession.canSetSessionPreset(.high) {
+                } else if captureSession.canSetSessionPreset(.high) {
                     targetPreset = .high
+                } else {
+                    targetPreset = .medium
                 }
             }
 
@@ -250,9 +259,11 @@ extension CameraController {
                 captureSession.sessionPreset = targetPreset
                 print("[CameraPreview] Set session preset to \(targetPreset) for aspect ratio: \(aspectRatio ?? "default")")
             } else {
-                // Fallback to a basic preset if the target preset is not supported
-                print("[CameraPreview] Target preset \(targetPreset) not supported, falling back to .medium")
-                if captureSession.canSetSessionPreset(.medium) {
+                // Fallback to high quality preset if the target preset is not supported
+                print("[CameraPreview] Target preset \(targetPreset) not supported, falling back to .high")
+                if captureSession.canSetSessionPreset(.high) {
+                    captureSession.sessionPreset = .high
+                } else if captureSession.canSetSessionPreset(.medium) {
                     captureSession.sessionPreset = .medium
                 }
             }
@@ -318,10 +329,20 @@ extension CameraController {
         self.previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         self.previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill
 
+        // Optimize preview layer for better quality
+        self.previewLayer?.connection?.videoOrientation = .portrait
+        self.previewLayer?.isOpaque = true
+
+        // Enable high-quality rendering
+        if #available(iOS 13.0, *) {
+            self.previewLayer?.videoGravity = .resizeAspectFill
+        }
+
         view.layer.insertSublayer(self.previewLayer!, at: 0)
         self.previewLayer?.frame = view.frame
 
         print("[CameraPreview] Set preview layer frame to: \(view.frame)")
+        print("[CameraPreview] Session preset: \(captureSession.sessionPreset.rawValue)")
 
         updateVideoOrientation()
     }
