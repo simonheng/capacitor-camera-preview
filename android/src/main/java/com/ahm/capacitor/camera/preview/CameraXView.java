@@ -1112,7 +1112,15 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                     aspectRatio,
                     sessionConfig.getGridMode()
             );
-            updateLayoutParams();
+            // Restart camera session to apply new aspect ratio
+            if (isRunning) {
+                mainExecutor.execute(() -> {
+                    if (cameraProvider != null) {
+                        cameraProvider.unbindAll();
+                    }
+                    setupCamera();
+                });
+            }
         }
     }
 

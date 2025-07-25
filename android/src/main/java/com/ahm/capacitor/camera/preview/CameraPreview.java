@@ -509,8 +509,10 @@ public class CameraPreview
       return;
     }
     String aspectRatio = call.getString("aspectRatio", "4:3");
-    cameraXView.setAspectRatio(aspectRatio);
-    call.resolve();
+    getActivity().runOnUiThread(() -> {
+      cameraXView.setAspectRatio(aspectRatio);
+      call.resolve();
+    });
   }
 
   @PluginMethod
@@ -532,8 +534,10 @@ public class CameraPreview
       return;
     }
     String gridMode = call.getString("gridMode", "none");
-    cameraXView.setGridMode(gridMode);
-    call.resolve();
+    getActivity().runOnUiThread(() -> {
+      cameraXView.setGridMode(gridMode);
+      call.resolve();
+    });
   }
 
   @PluginMethod
