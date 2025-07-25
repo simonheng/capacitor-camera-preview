@@ -10,6 +10,15 @@
     }
   </div>
 
+  @if (showBoundary()) {
+    <div class="boundary-overlay"
+         [style.left.px]="x()"
+         [style.top.px]="y()"
+         [style.width]="width() ? width() + 'px' : '100vw'"
+         [style.height]="height() ? height() + 'px' : '100vh'"
+    ></div>
+  }
+
   <!-- Floating Developer Info Panel -->
   <div class="floating-info-panel">
     <ion-card>

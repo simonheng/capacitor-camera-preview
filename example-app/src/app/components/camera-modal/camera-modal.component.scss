@@ -13,6 +13,14 @@ ion-content::part(background) {
   overflow: hidden;
 }
 
+.boundary-overlay {
+  position: absolute;
+  border: 2px solid red;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 999;
+}
+
 // Camera elements
 #cameraView {
   position: relative;

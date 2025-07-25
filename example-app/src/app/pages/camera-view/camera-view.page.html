@@ -156,6 +156,24 @@
               </ion-select>
             </ion-item>
           </ion-list>
+
+          <ion-item-divider>Preset Positions &amp; Sizes</ion-item-divider>
+          <ion-grid>
+            <ion-row class="ion-justify-content-around">
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setPreset('full')">Full Screen</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setPreset('top-left')">Top Left</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setPreset('bottom-right')">Bottom Right</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setPreset('small-center')">Small Center</ion-button>
+              </ion-col>
+            </ion-row>
+          </ion-grid>
         </ion-card-content>
       </ion-card>
 
@@ -243,6 +261,15 @@
             <ion-select-option value="3x3">3x3 Grid</ion-select-option>
             <ion-select-option value="4x4">4x4 Grid</ion-select-option>
           </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-checkbox
+            [(ngModel)]="showBoundary"
+            color="primary"
+            justify="space-between"
+          >
+            Show Boundary Overlay
+          </ion-checkbox>
         </ion-item>
       </ion-list>
 

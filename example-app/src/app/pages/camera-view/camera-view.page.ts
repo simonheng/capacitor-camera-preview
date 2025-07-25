@@ -21,6 +21,9 @@ import {
   IonTitle,
   IonToolbar,
   ModalController,
+  IonGrid,
+  IonRow,
+  IonCol,
 } from '@ionic/angular/standalone';
 import {
   CameraDevice,
@@ -59,6 +62,9 @@ import { GalleryService } from '../../services/gallery.service';
     IonSelectOption,
     IonTitle,
     IonToolbar,
+    IonGrid,
+    IonRow,
+    IonCol,
   ],
 })
 export class CameraViewPage implements OnInit {
@@ -102,6 +108,8 @@ export class CameraViewPage implements OnInit {
   protected withExifLocation = model<boolean>(false);
   protected gridMode = model<'none' | '3x3' | '4x4'>('none');
 
+  protected showBoundary = model<boolean>(false);
+
   protected toBack = model<boolean>(false);
 
   ngOnInit() {
@@ -110,6 +118,42 @@ export class CameraViewPage implements OnInit {
         this.cameraDevices.set(devices);
       });
     }, 100);
+  }
+
+  protected setPreset(preset: string) {
+    let x = 0, y = 0, w = 0, h = 0;
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+    switch (preset) {
+      case 'full':
+        x = 0;
+        y = 0;
+        w = 0;
+        h = 0;
+        break;
+      case 'top-left':
+        x = 0;
+        y = 0;
+        w = Math.floor(screenWidth / 2);
+        h = Math.floor(screenHeight / 2);
+        break;
+      case 'bottom-right':
+        x = Math.floor(screenWidth / 2);
+        y = Math.floor(screenHeight / 2);
+        w = Math.floor(screenWidth / 2);
+        h = Math.floor(screenHeight / 2);
+        break;
+      case 'small-center':
+        x = Math.floor((screenWidth - 200) / 2);
+        y = Math.floor((screenHeight - 200) / 2);
+        w = 200;
+        h = 200;
+        break;
+    }
+    this.previewX.set(x);
+    this.previewY.set(y);
+    this.previewWidth.set(w);
+    this.previewHeight.set(h);
   }
 
   protected async startCamera(): Promise<void> {
@@ -140,6 +184,7 @@ export class CameraViewPage implements OnInit {
         saveToGallery: this.saveToGallery(),
         withExifLocation: this.withExifLocation(),
         gridMode: this.gridMode(),
+        showBoundary: this.showBoundary(),
       },
     });
 

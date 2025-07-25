@@ -95,6 +95,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly saveToGallery = input<boolean>(false);
   public readonly withExifLocation = input<boolean>(false);
   public readonly gridMode = input<'none' | '3x3' | '4x4'>('none');
+  public readonly showBoundary = input<boolean>(false);
 
   protected readonly cameraStarted = toSignal(
     this.#cameraViewService.cameraStarted,
