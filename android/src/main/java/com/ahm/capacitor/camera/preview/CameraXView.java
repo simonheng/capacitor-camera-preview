@@ -5,6 +5,7 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraManager;
 import android.os.Build;
 import android.util.Base64;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Size;
 import android.view.ViewGroup;
@@ -68,6 +69,7 @@ import android.widget.FrameLayout;
 import androidx.lifecycle.LifecycleObserver;
 import androidx.lifecycle.OnLifecycleEvent;
 import android.util.Rational;
+import android.view.ViewGroup;
 
 public class CameraXView implements LifecycleOwner, LifecycleObserver {
     private static final String TAG = "CameraPreview CameraXView";
@@ -202,19 +204,86 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
         // Create and setup the grid overlay
         gridOverlayView = new GridOverlayView(context);
-        gridOverlayView.setGridMode(sessionConfig.getGridMode());
         previewContainer.addView(gridOverlayView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ));
+        // Set grid mode after adding to container to ensure proper layout
+        gridOverlayView.post(() -> {
+            String currentGridMode = sessionConfig.getGridMode();
+            Log.d(TAG, "setupPreviewView: Setting grid mode to: " + currentGridMode);
+            gridOverlayView.setGridMode(currentGridMode);
+        });
 
         ViewGroup parent = (ViewGroup) webView.getParent();
         if (parent != null) {
-            parent.addView(previewContainer, new ViewGroup.LayoutParams(sessionConfig.getWidth(), sessionConfig.getHeight()));
+            FrameLayout.LayoutParams layoutParams = calculatePreviewLayoutParams();
+            parent.addView(previewContainer, layoutParams);
             if(sessionConfig.isToBack()) webView.bringToFront();
         }
     }
 
+    private FrameLayout.LayoutParams calculatePreviewLayoutParams() {
+        // sessionConfig already contains pixel-converted coordinates with webview offsets applied
+        int x = sessionConfig.getX();
+        int y = sessionConfig.getY();
+        int width = sessionConfig.getWidth();
+        int height = sessionConfig.getHeight();
+        String aspectRatio = sessionConfig.getAspectRatio();
+        
+        Log.d(TAG, "calculatePreviewLayoutParams: Using sessionConfig values - x:" + x + " y:" + y + " width:" + width + " height:" + height + " aspectRatio:" + aspectRatio);
+        
+        // Apply aspect ratio if specified and no explicit size was given
+        if (aspectRatio != null && !aspectRatio.isEmpty()) {
+            String[] ratios = aspectRatio.split(":");
+            if (ratios.length == 2) {
+                try {
+                    // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+                    float ratio = Float.parseFloat(ratios[1]) / Float.parseFloat(ratios[0]);
+                    
+                    // Calculate optimal size while maintaining aspect ratio
+                    int optimalWidth = width;
+                    int optimalHeight = (int) (width / ratio);
+                    
+                    if (optimalHeight > height) {
+                        // Height constraint is tighter, fit by height
+                        optimalHeight = height;
+                        optimalWidth = (int) (height * ratio);
+                    }
+                    
+                    width = optimalWidth;
+                    height = optimalHeight;
+                    Log.d(TAG, "calculatePreviewLayoutParams: Applied aspect ratio " + aspectRatio + " - new size: " + width + "x" + height);
+                } catch (NumberFormatException e) {
+                    Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
+                }
+            }
+        }
+        
+        FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(width, height);
+        
+        // Only add insets for positioning coordinates, not for full-screen sizes
+        int webViewTopInset = getWebViewTopInset();
+        int webViewLeftInset = getWebViewLeftInset();
+        
+        // Don't add insets if this looks like a calculated full-screen coordinate (x=0, y=0)
+        if (x == 0 && y == 0) {
+            layoutParams.leftMargin = x;
+            layoutParams.topMargin = y;
+            Log.d(TAG, "calculatePreviewLayoutParams: Full-screen mode - keeping position (0,0) without insets");
+        } else {
+            layoutParams.leftMargin = x + webViewLeftInset;
+            layoutParams.topMargin = y + webViewTopInset;
+            Log.d(TAG, "calculatePreviewLayoutParams: Positioned mode - applying insets");
+        }
+        
+        Log.d(TAG, "calculatePreviewLayoutParams: Applied insets - x:" + x + "+" + webViewLeftInset + "=" + layoutParams.leftMargin + 
+              ", y:" + y + "+" + webViewTopInset + "=" + layoutParams.topMargin);
+        
+        Log.d(TAG, "calculatePreviewLayoutParams: Final layout - x:" + x + " y:" + y + " width:" + width + " height:" + height);
+        return layoutParams;
+    }
+    
     private void removePreviewView() {
         if (previewContainer != null) {
             ViewGroup parent = (ViewGroup) previewContainer.getParent();
@@ -305,12 +374,17 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
                 isRunning = true;
                 Log.d(TAG, "bindCameraUseCases: Camera bound successfully");
-                if (listener != null) listener.onCameraStarted(
-                    sessionConfig.getWidth(),
-                    sessionConfig.getHeight(),
-                    sessionConfig.getX(),
-                    sessionConfig.getY()
-                );
+                if (listener != null) {
+                    // Post the callback to ensure layout is complete
+                    previewContainer.post(() -> {
+                        // Return actual preview container dimensions instead of requested dimensions
+                        int actualWidth = previewContainer != null ? previewContainer.getWidth() : sessionConfig.getWidth();
+                        int actualHeight = previewContainer != null ? previewContainer.getHeight() : sessionConfig.getHeight();
+                        int actualX = previewContainer != null ? previewContainer.getLeft() : sessionConfig.getX();
+                        int actualY = previewContainer != null ? previewContainer.getTop() : sessionConfig.getY();
+                        listener.onCameraStarted(actualWidth, actualHeight, actualX, actualY);
+                    });
+                }
             } catch (Exception e) {
                 if (listener != null) listener.onCameraStartError("Error binding camera: " + e.getMessage());
             }
@@ -1058,7 +1132,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
         if (sessionConfig.getAspectRatio() != null) {
             String[] ratios = sessionConfig.getAspectRatio().split(":");
-            float ratio = Float.parseFloat(ratios[0]) / Float.parseFloat(ratios[1]);
+            // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+            float ratio = Float.parseFloat(ratios[1]) / Float.parseFloat(ratios[0]);
             if (sessionConfig.getWidth() > 0) {
                 layoutParams.height = (int) (sessionConfig.getWidth() / ratio);
             } else if (sessionConfig.getHeight() > 0) {
@@ -1093,39 +1168,88 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     }
 
     public void setAspectRatio(String aspectRatio) {
-        if (sessionConfig != null) {
-            sessionConfig = new CameraSessionConfiguration(
-                    sessionConfig.getDeviceId(),
-                    sessionConfig.getPosition(),
-                    sessionConfig.getX(),
-                    sessionConfig.getY(),
-                    sessionConfig.getWidth(),
-                    sessionConfig.getHeight(),
-                    sessionConfig.getPaddingBottom(),
-                    sessionConfig.getToBack(),
-                    sessionConfig.getStoreToFile(),
-                    sessionConfig.getEnableOpacity(),
-                    sessionConfig.getEnableZoom(),
-                    sessionConfig.getDisableExifHeaderStripping(),
-                    sessionConfig.getDisableAudio(),
-                    sessionConfig.getZoomFactor(),
-                    aspectRatio,
-                    sessionConfig.getGridMode()
-            );
-            // Restart camera session to apply new aspect ratio
-            if (isRunning) {
-                mainExecutor.execute(() -> {
-                    if (cameraProvider != null) {
-                        cameraProvider.unbindAll();
+        setAspectRatio(aspectRatio, null, null);
+    }
+    
+    public void setAspectRatio(String aspectRatio, Float x, Float y) {
+        setAspectRatio(aspectRatio, x, y, null);
+    }
+
+    public void setAspectRatio(String aspectRatio, Float x, Float y, Runnable callback) {
+        if (sessionConfig == null) {
+            if (callback != null) callback.run();
+            return;
+        }
+        
+        String currentAspectRatio = sessionConfig.getAspectRatio();
+        
+        // Don't restart camera if aspect ratio hasn't changed and no position specified
+        if (aspectRatio != null && aspectRatio.equals(currentAspectRatio) && x == null && y == null) {
+            Log.d(TAG, "setAspectRatio: Aspect ratio " + aspectRatio + " is already set and no position specified, skipping");
+            if (callback != null) callback.run();
+            return;
+        }
+        
+        String currentGridMode = sessionConfig.getGridMode();
+        Log.d(TAG, "setAspectRatio: Changing from " + currentAspectRatio + " to " + aspectRatio + 
+              (x != null && y != null ? " at position (" + x + ", " + y + ")" : " with auto-centering") +
+              ", preserving grid mode: " + currentGridMode);
+        
+        sessionConfig = new CameraSessionConfiguration(
+                sessionConfig.getDeviceId(),
+                sessionConfig.getPosition(),
+                sessionConfig.getX(),
+                sessionConfig.getY(),
+                sessionConfig.getWidth(),
+                sessionConfig.getHeight(),
+                sessionConfig.getPaddingBottom(),
+                sessionConfig.getToBack(),
+                sessionConfig.getStoreToFile(),
+                sessionConfig.getEnableOpacity(),
+                sessionConfig.getEnableZoom(),
+                sessionConfig.getDisableExifHeaderStripping(),
+                sessionConfig.getDisableAudio(),
+                sessionConfig.getZoomFactor(),
+                aspectRatio,
+                currentGridMode
+        );
+        
+        // Update layout and rebind camera with new aspect ratio
+        if (isRunning && previewContainer != null) {
+            mainExecutor.execute(() -> {
+                // First update the UI layout
+                updatePreviewLayoutForAspectRatio(aspectRatio, x, y);
+                
+                // Then rebind the camera with new aspect ratio configuration
+                Log.d(TAG, "setAspectRatio: Rebinding camera with new aspect ratio: " + aspectRatio);
+                bindCameraUseCases();
+                
+                // Preserve grid mode and wait for completion
+                if (gridOverlayView != null) {
+                    gridOverlayView.post(() -> {
+                        Log.d(TAG, "setAspectRatio: Re-applying grid mode: " + currentGridMode);
+                        gridOverlayView.setGridMode(currentGridMode);
+                        
+                        // Wait one more frame for grid to be applied, then call callback
+                        if (callback != null) {
+                            gridOverlayView.post(callback);
+                        }
+                    });
+                } else {
+                    // No grid overlay, wait one frame for layout completion then call callback
+                    if (callback != null) {
+                        previewContainer.post(callback);
                     }
-                    setupCamera();
-                });
-            }
+                }
+            });
+        } else {
+            if (callback != null) callback.run();
         }
     }
 
     public void setGridMode(String gridMode) {
         if (sessionConfig != null) {
+            Log.d(TAG, "setGridMode: Changing grid mode to: " + gridMode);
             sessionConfig = new CameraSessionConfiguration(
                     sessionConfig.getDeviceId(),
                     sessionConfig.getPosition(),
@@ -1148,9 +1272,327 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             // Update the grid overlay immediately
             if (gridOverlayView != null) {
                 gridOverlayView.post(() -> {
+                    Log.d(TAG, "setGridMode: Applying grid mode to overlay: " + gridMode);
                     gridOverlayView.setGridMode(gridMode);
                 });
             }
         }
+    }
+
+    public int getPreviewX() {
+      if (previewContainer == null) return 0;
+      ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+      if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+        // Return position relative to WebView content (subtract insets)
+        int margin = ((ViewGroup.MarginLayoutParams) layoutParams).leftMargin;
+        int leftInset = getWebViewLeftInset();
+        int result = margin - leftInset;
+        Log.d(TAG, "getPreviewX: leftMargin=" + margin + ", leftInset=" + leftInset + ", result=" + result);
+        return result;
+      }
+      return previewContainer.getLeft();
+    }
+    public int getPreviewY() {
+      if (previewContainer == null) return 0;
+      ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+      if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+        // Return position relative to WebView content (subtract insets)
+        int margin = ((ViewGroup.MarginLayoutParams) layoutParams).topMargin;
+        int topInset = getWebViewTopInset();
+        int result = margin - topInset;
+        Log.d(TAG, "getPreviewY: topMargin=" + margin + ", topInset=" + topInset + ", result=" + result);
+        return result;
+      }
+      return previewContainer.getTop();
+    }
+    public int getPreviewWidth() {
+      return previewContainer != null ? previewContainer.getWidth() : 0;
+    }
+    public int getPreviewHeight() {
+      return previewContainer != null ? previewContainer.getHeight() : 0;
+    }
+    public void setPreviewSize(int x, int y, int width, int height) {
+        setPreviewSize(x, y, width, height, null);
+    }
+
+    public void setPreviewSize(int x, int y, int width, int height, Runnable callback) {
+        if (previewContainer == null) {
+            if (callback != null) callback.run();
+            return;
+        }
+        
+        // Ensure this runs on the main UI thread
+        mainExecutor.execute(() -> {
+            ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+            if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
+                
+                // Only add insets for positioning coordinates, not for full-screen sizes
+                int webViewTopInset = getWebViewTopInset();
+                int webViewLeftInset = getWebViewLeftInset();
+                
+                // Handle positioning - preserve current values if new values are not specified (negative)
+                if (x >= 0) {
+                    // Don't add insets if this looks like a calculated full-screen coordinate (x=0, y=0)
+                    if (x == 0 && y == 0) {
+                        params.leftMargin = x;
+                        Log.d(TAG, "setPreviewSize: Full-screen mode - keeping x=0 without insets");
+                    } else {
+                        params.leftMargin = x + webViewLeftInset;
+                        Log.d(TAG, "setPreviewSize: Positioned mode - x=" + x + " + inset=" + webViewLeftInset + " = " + (x + webViewLeftInset));
+                    }
+                }
+                if (y >= 0) {
+                    // Don't add insets if this looks like a calculated full-screen coordinate (x=0, y=0)
+                    if (x == 0 && y == 0) {
+                        params.topMargin = y;
+                        Log.d(TAG, "setPreviewSize: Full-screen mode - keeping y=0 without insets");
+                    } else {
+                        params.topMargin = y + webViewTopInset;
+                        Log.d(TAG, "setPreviewSize: Positioned mode - y=" + y + " + inset=" + webViewTopInset + " = " + (y + webViewTopInset));
+                    }
+                } 
+                if (width > 0) params.width = width;
+                if (height > 0) params.height = height;
+                
+                previewContainer.setLayoutParams(params);
+                previewContainer.requestLayout();
+                
+                Log.d(TAG, "setPreviewSize: Updated to " + params.width + "x" + params.height + " at (" + params.leftMargin + "," + params.topMargin + ")");
+                
+                // Update session config to reflect actual layout
+                if (sessionConfig != null) {
+                    String currentAspectRatio = sessionConfig.getAspectRatio();
+                    
+                    // Calculate aspect ratio from actual dimensions if both width and height are provided
+                    String calculatedAspectRatio = currentAspectRatio;
+                    if (params.width > 0 && params.height > 0) {
+                        // Always use larger dimension / smaller dimension for consistent comparison
+                        float ratio = Math.max(params.width, params.height) / (float) Math.min(params.width, params.height);
+                        // Standard ratios: 16:9 ≈ 1.778, 4:3 ≈ 1.333
+                        float ratio16_9 = 16f / 9f; // 1.778
+                        float ratio4_3 = 4f / 3f;   // 1.333
+                        
+                        // Determine closest standard aspect ratio
+                        if (Math.abs(ratio - ratio16_9) < Math.abs(ratio - ratio4_3)) {
+                            calculatedAspectRatio = "16:9";
+                        } else {
+                            calculatedAspectRatio = "4:3";
+                        }
+                        Log.d(TAG, "setPreviewSize: Calculated aspect ratio from " + params.width + "x" + params.height + " = " + calculatedAspectRatio + " (normalized ratio=" + ratio + ")");
+                    }
+                    
+                    sessionConfig = new CameraSessionConfiguration(
+                            sessionConfig.getDeviceId(),
+                            sessionConfig.getPosition(),
+                            params.leftMargin,
+                            params.topMargin,
+                            params.width,
+                            params.height,
+                            sessionConfig.getPaddingBottom(),
+                            sessionConfig.getToBack(),
+                            sessionConfig.getStoreToFile(),
+                            sessionConfig.getEnableOpacity(),
+                            sessionConfig.getEnableZoom(),
+                            sessionConfig.getDisableExifHeaderStripping(),
+                            sessionConfig.getDisableAudio(),
+                            sessionConfig.getZoomFactor(),
+                            calculatedAspectRatio,
+                            sessionConfig.getGridMode()
+                    );
+                    
+                    // If aspect ratio changed due to size update, rebind camera
+                    if (isRunning && !Objects.equals(currentAspectRatio, calculatedAspectRatio)) {
+                        Log.d(TAG, "setPreviewSize: Aspect ratio changed from " + currentAspectRatio + " to " + calculatedAspectRatio + ", rebinding camera");
+                        bindCameraUseCases();
+                        
+                        // Wait for camera rebinding to complete, then call callback
+                        if (callback != null) {
+                            previewContainer.post(() -> previewContainer.post(callback));
+                        }
+                    } else {
+                        // No camera rebinding needed, wait for layout to complete then call callback
+                        if (callback != null) {
+                            previewContainer.post(callback);
+                        }
+                    }
+                } else {
+                    // No sessionConfig, just wait for layout then call callback
+                    if (callback != null) {
+                        previewContainer.post(callback);
+                    }
+                }
+            } else {
+                Log.w(TAG, "setPreviewSize: Cannot set margins on layout params of type " + layoutParams.getClass().getSimpleName());
+                // Fallback: just set width and height if specified
+                if (width > 0) layoutParams.width = width;
+                if (height > 0) layoutParams.height = height;
+                previewContainer.setLayoutParams(layoutParams);
+                previewContainer.requestLayout();
+                
+                // Wait for layout then call callback
+                if (callback != null) {
+                    previewContainer.post(callback);
+                }
+            }
+        });
+    }
+    
+    private void updatePreviewLayoutForAspectRatio(String aspectRatio) {
+        updatePreviewLayoutForAspectRatio(aspectRatio, null, null);
+    }
+    
+    private void updatePreviewLayoutForAspectRatio(String aspectRatio, Float x, Float y) {
+        if (previewContainer == null || aspectRatio == null) return;
+        
+        // Parse aspect ratio
+        String[] ratios = aspectRatio.split(":");
+        if (ratios.length != 2) return;
+        
+        try {
+            // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+            float ratio = Float.parseFloat(ratios[1]) / Float.parseFloat(ratios[0]);
+            
+            // Get available space from webview dimensions
+            int availableWidth = webView.getWidth();
+            int availableHeight = webView.getHeight();
+            
+            // Calculate position and size
+            int finalX, finalY, finalWidth, finalHeight;
+            
+            if (x != null && y != null) {
+                // Account for WebView insets from edge-to-edge support
+                int webViewTopInset = getWebViewTopInset();
+                int webViewLeftInset = getWebViewLeftInset();
+                
+                // Use provided coordinates with boundary checking, adjusted for insets
+                finalX = Math.max(0, Math.min(x.intValue() + webViewLeftInset, availableWidth));
+                finalY = Math.max(0, Math.min(y.intValue() + webViewTopInset, availableHeight));
+                
+                // Calculate maximum available space from the given position
+                int maxWidth = availableWidth - finalX;
+                int maxHeight = availableHeight - finalY;
+                
+                // Calculate optimal size while maintaining aspect ratio within available space
+                finalWidth = maxWidth;
+                finalHeight = (int) (maxWidth / ratio);
+                
+                if (finalHeight > maxHeight) {
+                    // Height constraint is tighter, fit by height
+                    finalHeight = maxHeight;
+                    finalWidth = (int) (maxHeight * ratio);
+                }
+                
+                // Ensure final position stays within bounds
+                finalX = Math.max(0, Math.min(finalX, availableWidth - finalWidth));
+                finalY = Math.max(0, Math.min(finalY, availableHeight - finalHeight));
+            } else {
+                // Auto-center the view
+                // Calculate size based on aspect ratio, using a reasonable base size
+                // Use 80% of available space to ensure aspect ratio differences are visible
+                int maxAvailableWidth = (int) (availableWidth * 0.8);
+                int maxAvailableHeight = (int) (availableHeight * 0.8);
+                
+                // Start with width-based calculation
+                finalWidth = maxAvailableWidth;
+                finalHeight = (int) (finalWidth / ratio);
+                
+                // If height exceeds available space, use height-based calculation
+                if (finalHeight > maxAvailableHeight) {
+                    finalHeight = maxAvailableHeight;
+                    finalWidth = (int) (finalHeight * ratio);
+                }
+                
+                // Center the view
+                finalX = (availableWidth - finalWidth) / 2;
+                finalY = (availableHeight - finalHeight) / 2;
+                
+                Log.d(TAG, "updatePreviewLayoutForAspectRatio: Auto-center mode - ratio=" + ratio + 
+                      ", calculated size=" + finalWidth + "x" + finalHeight + 
+                      ", available=" + availableWidth + "x" + availableHeight);
+            }
+            
+            // Update layout params
+            ViewGroup.LayoutParams currentParams = previewContainer.getLayoutParams();
+            if (currentParams instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) currentParams;
+                params.width = finalWidth;
+                params.height = finalHeight;
+                params.leftMargin = finalX;
+                params.topMargin = finalY;
+                previewContainer.setLayoutParams(params);
+                previewContainer.requestLayout();
+                Log.d(TAG, "updatePreviewLayoutForAspectRatio: Updated to " + finalWidth + "x" + finalHeight + " at (" + finalX + "," + finalY + ")");
+            }
+        } catch (NumberFormatException e) {
+            Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
+        }
+    }
+    
+    private void updatePreviewLayout() {
+        if (previewContainer == null || sessionConfig == null) return;
+        
+        String aspectRatio = sessionConfig.getAspectRatio();
+        if (aspectRatio == null) return;
+        
+        updatePreviewLayoutForAspectRatio(aspectRatio);
+    }
+
+    private int getWebViewTopInset() {
+        try {
+            if (webView != null) {
+                ViewGroup.LayoutParams layoutParams = webView.getLayoutParams();
+                if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+                    return ((ViewGroup.MarginLayoutParams) layoutParams).topMargin;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to get WebView top inset", e);
+        }
+        return 0;
+    }
+
+    private int getWebViewLeftInset() {
+        try {
+            if (webView != null) {
+                ViewGroup.LayoutParams layoutParams = webView.getLayoutParams();
+                if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+                    return ((ViewGroup.MarginLayoutParams) layoutParams).leftMargin;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to get WebView left inset", e);
+        }
+        return 0;
+    }
+
+    /**
+     * Get the current preview position and size in DP units (without insets)
+     */
+    public int[] getCurrentPreviewBounds() {
+        if (previewContainer == null) {
+            return new int[]{0, 0, 0, 0}; // x, y, width, height
+        }
+        
+        ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+        int x = 0, y = 0, width = 0, height = 0;
+        
+        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
+            
+            // Remove insets to get original coordinates in DP
+            DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+            float pixelRatio = metrics.density;
+            
+            int webViewTopInset = getWebViewTopInset();
+            int webViewLeftInset = getWebViewLeftInset();
+            
+            x = Math.max(0, (int) ((params.leftMargin - webViewLeftInset) / pixelRatio));
+            y = Math.max(0, (int) ((params.topMargin - webViewTopInset) / pixelRatio));
+            width = (int) (params.width / pixelRatio);
+            height = (int) (params.height / pixelRatio);
+        }
+        
+        return new int[]{x, y, width, height};
     }
 }

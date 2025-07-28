@@ -6,7 +6,6 @@ import static android.Manifest.permission.RECORD_AUDIO;
 import android.Manifest;
 import android.content.pm.ActivityInfo;
 import android.util.DisplayMetrics;
-import android.util.TypedValue;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -28,6 +27,8 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import org.json.JSONObject;
 import android.location.Location;
+import android.view.ViewGroup;
+
 import com.getcapacitor.Logger;
 
 
@@ -392,6 +393,12 @@ public class CameraPreview
     final boolean disableAudio = Boolean.TRUE.equals(call.getBoolean("disableAudio", true));
     final String aspectRatio = call.getString("aspectRatio", "4:3");
     final String gridMode = call.getString("gridMode", "none");
+    
+    // Check for conflict between aspectRatio and size
+    if (call.getData().has("aspectRatio") && (call.getData().has("width") || call.getData().has("height"))) {
+      call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.");
+      return;
+    }
 
     float targetZoom = 1.0f;
     // Check if the selected device is a physical ultra-wide
@@ -424,11 +431,46 @@ public class CameraPreview
         if (lockOrientation) {
           getBridge().getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED);
         }
-        int computedX = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, x, metrics);
-        int computedY = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, y, metrics);
-        int computedWidth = width != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, width, metrics) : getBridge().getWebView().getWidth();
-        int computedHeight = height != 0 ? (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, height, metrics) : getBridge().getWebView().getHeight();
-        computedHeight -= (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, paddingBottom, metrics);
+        
+        // Debug: Let's check all the positioning information
+        ViewGroup webViewParent = (ViewGroup) getBridge().getWebView().getParent();
+        
+        // Get webview position in different coordinate systems
+        int[] webViewLocationInWindow = new int[2];
+        int[] webViewLocationOnScreen = new int[2];
+        getBridge().getWebView().getLocationInWindow(webViewLocationInWindow);
+        getBridge().getWebView().getLocationOnScreen(webViewLocationOnScreen);
+        
+        int webViewLeft = getBridge().getWebView().getLeft();
+        int webViewTop = getBridge().getWebView().getTop();
+        
+        // Check parent position too
+        int[] parentLocationInWindow = new int[2];
+        int[] parentLocationOnScreen = new int[2];
+        webViewParent.getLocationInWindow(parentLocationInWindow);
+        webViewParent.getLocationOnScreen(parentLocationOnScreen);
+        
+        // Calculate pixel ratio
+        float pixelRatio = metrics.density;
+        
+        // Try using just the pixel ratio without any webview offset for now
+        int computedX = (int) (x * pixelRatio);
+        int computedY = (int) (y * pixelRatio);
+        
+        Log.d("CameraPreview", "=== COORDINATE DEBUG ===");
+        Log.d("CameraPreview", "WebView getLeft/getTop: (" + webViewLeft + ", " + webViewTop + ")");
+        Log.d("CameraPreview", "WebView locationInWindow: (" + webViewLocationInWindow[0] + ", " + webViewLocationInWindow[1] + ")");
+        Log.d("CameraPreview", "WebView locationOnScreen: (" + webViewLocationOnScreen[0] + ", " + webViewLocationOnScreen[1] + ")");
+        Log.d("CameraPreview", "Parent locationInWindow: (" + parentLocationInWindow[0] + ", " + parentLocationInWindow[1] + ")");
+        Log.d("CameraPreview", "Parent locationOnScreen: (" + parentLocationOnScreen[0] + ", " + parentLocationOnScreen[1] + ")");
+        Log.d("CameraPreview", "Parent class: " + webViewParent.getClass().getSimpleName());
+        Log.d("CameraPreview", "Requested position (logical): (" + x + ", " + y + ")");
+        Log.d("CameraPreview", "Pixel ratio: " + pixelRatio);
+        Log.d("CameraPreview", "Final computed position (no offset): (" + computedX + ", " + computedY + ")");
+        Log.d("CameraPreview", "========================");
+        int computedWidth = width != 0 ? (int) (width * pixelRatio) : getBridge().getWebView().getWidth();
+        int computedHeight = height != 0 ? (int) (height * pixelRatio) : getBridge().getWebView().getHeight();
+        computedHeight -= (int) (paddingBottom * pixelRatio);
 
         CameraSessionConfiguration config = new CameraSessionConfiguration(finalDeviceId, position, computedX, computedY, computedWidth, computedHeight, paddingBottom, toBack, storeToFile, enableOpacity, enableZoom, disableExifHeaderStripping, disableAudio, 1.0f, aspectRatio, gridMode);
         config.setTargetZoom(finalTargetZoom);
@@ -469,11 +511,15 @@ public class CameraPreview
   public void onCameraStarted(int width, int height, int x, int y) {
     PluginCall call = bridge.getSavedCall(cameraStartCallbackId);
     if (call != null) {
+        // Convert pixel values back to logical units
+        DisplayMetrics metrics = getBridge().getActivity().getResources().getDisplayMetrics();
+        float pixelRatio = metrics.density;
+        
         JSObject result = new JSObject();
-        result.put("width", width);
-        result.put("height", height);
-        result.put("x", x);
-        result.put("y", y);
+        result.put("width", width / pixelRatio);
+        result.put("height", height / pixelRatio);
+        result.put("x", x / pixelRatio);
+        result.put("y", y / pixelRatio);
         call.resolve(result);
         bridge.releaseCall(call);
         cameraStartCallbackId = null; // Prevent re-use
@@ -509,9 +555,20 @@ public class CameraPreview
       return;
     }
     String aspectRatio = call.getString("aspectRatio", "4:3");
+    Float x = call.getFloat("x");
+    Float y = call.getFloat("y");
+    
     getActivity().runOnUiThread(() -> {
-      cameraXView.setAspectRatio(aspectRatio);
-      call.resolve();
+      cameraXView.setAspectRatio(aspectRatio, x, y, () -> {
+        // Return the actual preview bounds after layout and camera operations are complete
+        int[] bounds = cameraXView.getCurrentPreviewBounds();
+        JSObject ret = new JSObject();
+        ret.put("x", bounds[0]);
+        ret.put("y", bounds[1]);
+        ret.put("width", bounds[2]);
+        ret.put("height", bounds[3]);
+        call.resolve(ret);
+      });
     });
   }
 
@@ -549,5 +606,57 @@ public class CameraPreview
     JSObject ret = new JSObject();
     ret.put("gridMode", cameraXView.getGridMode());
     call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void getPreviewSize(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    
+    // Convert pixel values back to logical units
+    DisplayMetrics metrics = getBridge().getActivity().getResources().getDisplayMetrics();
+    float pixelRatio = metrics.density;
+    
+    JSObject ret = new JSObject();
+    ret.put("x", cameraXView.getPreviewX() / pixelRatio);
+    ret.put("y", cameraXView.getPreviewY() / pixelRatio);
+    ret.put("width", cameraXView.getPreviewWidth() / pixelRatio);
+    ret.put("height", cameraXView.getPreviewHeight() / pixelRatio);
+    call.resolve(ret);
+  }
+  @PluginMethod
+  public void setPreviewSize(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    
+    // Get values from call - null values will become 0
+    Integer xParam = call.getInt("x");
+    Integer yParam = call.getInt("y");
+    Integer widthParam = call.getInt("width");
+    Integer heightParam = call.getInt("height");
+    
+    // Apply pixel ratio conversion to non-null values
+    DisplayMetrics metrics = getBridge().getActivity().getResources().getDisplayMetrics();
+    float pixelRatio = metrics.density;
+    
+    int x = (xParam != null && xParam > 0) ? (int) (xParam * pixelRatio) : 0;
+    int y = (yParam != null && yParam > 0) ? (int) (yParam * pixelRatio) : 0;
+    int width = (widthParam != null && widthParam > 0) ? (int) (widthParam * pixelRatio) : 0;
+    int height = (heightParam != null && heightParam > 0) ? (int) (heightParam * pixelRatio) : 0;
+    
+    cameraXView.setPreviewSize(x, y, width, height, () -> {
+      // Return the actual preview bounds after layout operations are complete
+      int[] bounds = cameraXView.getCurrentPreviewBounds();
+      JSObject ret = new JSObject();
+      ret.put("x", bounds[0]);
+      ret.put("y", bounds[1]);
+      ret.put("width", bounds[2]);
+      ret.put("height", bounds[3]);
+      call.resolve(ret);
+    });
   }
 }

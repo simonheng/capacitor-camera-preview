@@ -34,8 +34,10 @@ public class GridOverlayView extends View {
     }
 
     public void setGridMode(String mode) {
+        String previousMode = this.gridMode;
         this.gridMode = mode != null ? mode : "none";
         setVisibility("none".equals(this.gridMode) ? View.GONE : View.VISIBLE);
+        android.util.Log.d("GridOverlayView", "setGridMode: Changed from '" + previousMode + "' to '" + this.gridMode + "', visibility: " + ("none".equals(this.gridMode) ? "GONE" : "VISIBLE"));
         invalidate();
     }
 

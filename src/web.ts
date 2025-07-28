@@ -36,6 +36,9 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async start(options: CameraPreviewOptions): Promise<{ width: number; height: number; x: number; y: number }> {
+    if (options.aspectRatio && (options.width || options.height)) {
+      throw new Error("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.");
+    }
     if (this.isStarted) {
       throw new Error("camera already started");
     }
@@ -532,10 +535,11 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     if (width && height) {
       const ratio = width / height;
-      if (Math.abs(ratio - (4 / 3)) < 0.01) {
+      // Check for portrait camera ratios: 4:3 -> 3:4, 16:9 -> 9:16
+      if (Math.abs(ratio - (3 / 4)) < 0.01) {
         return { aspectRatio: '4:3' };
       }
-      if (Math.abs(ratio - (16 / 9)) < 0.01) {
+      if (Math.abs(ratio - (9 / 16)) < 0.01) {
         return { aspectRatio: '16:9' };
       }
     }
@@ -544,7 +548,12 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     return { aspectRatio: '4:3' };
   }
 
-  async setAspectRatio(options: { aspectRatio: '4:3' | '16:9'}): Promise<void> {
+  async setAspectRatio(options: { aspectRatio: '4:3' | '16:9'; x?: number; y?: number }): Promise<{
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  }> {
     const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video) {
       throw new Error("camera is not running");
@@ -552,17 +561,61 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     if (options.aspectRatio) {
       const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
-      const ratio = widthRatio / heightRatio;
-      const width = video.offsetWidth;
-      const height = video.offsetHeight;
-
-      if (width) {
-        video.height = width / ratio;
-      } else if (height) {
-        video.width = height * ratio;
+      // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+      const ratio = heightRatio / widthRatio;
+      
+      // Get current position and size
+      const rect = video.getBoundingClientRect();
+      const currentWidth = rect.width;
+      const currentHeight = rect.height;
+      const currentRatio = currentWidth / currentHeight;
+      
+      let newWidth: number;
+      let newHeight: number;
+      
+      if (currentRatio > ratio) {
+        // Width is larger, fit by height and center horizontally
+        newWidth = currentHeight * ratio;
+        newHeight = currentHeight;
+      } else {
+        // Height is larger, fit by width and center vertically
+        newWidth = currentWidth;
+        newHeight = currentWidth / ratio;
       }
+      
+      // Calculate position
+      let x: number, y: number;
+      if (options.x !== undefined && options.y !== undefined) {
+        // Use provided coordinates, ensuring they stay within screen boundaries
+        x = Math.max(0, Math.min(options.x, window.innerWidth - newWidth));
+        y = Math.max(0, Math.min(options.y, window.innerHeight - newHeight));
+      } else {
+        // Auto-center the view
+        x = (window.innerWidth - newWidth) / 2;
+        y = (window.innerHeight - newHeight) / 2;
+      }
+      
+      video.style.width = `${newWidth}px`;
+      video.style.height = `${newHeight}px`;
+      video.style.left = `${x}px`;
+      video.style.top = `${y}px`;
+      video.style.position = 'absolute';
+
+      return {
+        width: Math.round(newWidth),
+        height: Math.round(newHeight),
+        x: Math.round(x),
+        y: Math.round(y)
+      };
     } else {
       video.style.objectFit = 'cover';
+      const rect = video.getBoundingClientRect();
+      return {
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        x: Math.round(rect.left),
+        y: Math.round(rect.top)
+      };
     }
   }
 
@@ -622,6 +675,41 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   async getGridMode(): Promise<{ gridMode: GridMode }> {
     // Web implementation - default to none
     return { gridMode: 'none' };
+  }
+
+  async getPreviewSize(): Promise<{x: number, y: number, width: number, height: number}> {
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
+    if (!video) {
+      throw new Error("camera is not running");
+    }
+    return {
+      x: video.offsetLeft,
+      y: video.offsetTop,
+      width: video.width,
+      height: video.height
+    };
+  }
+  async setPreviewSize(options: {x: number, y: number, width: number, height: number}): Promise<{
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  }> {
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
+    if (!video) {
+      throw new Error("camera is not running");
+    }
+    video.style.left = `${options.x}px`;
+    video.style.top = `${options.y}px`;
+    video.width = options.width;
+    video.height = options.height;
+
+    return {
+      width: options.width,
+      height: options.height,
+      x: options.x,
+      y: options.y
+    };
   }
 
 }

@@ -89,7 +89,7 @@ export class CameraViewPage implements OnInit {
   protected previewY = model<number>(0);
   protected previewWidth = model<number>(0);
   protected previewHeight = model<number>(0);
-  protected aspectRatio = model<'4:3' | '16:9' | 'fill'>('fill');
+  protected aspectRatio = model<'4:3' | '16:9' | 'custom'>('custom');
 
   // Picture settings
   protected pictureFormat = model<PictureFormat>('jpeg');
@@ -108,7 +108,7 @@ export class CameraViewPage implements OnInit {
   protected withExifLocation = model<boolean>(false);
   protected gridMode = model<'none' | '3x3' | '4x4'>('none');
 
-  protected showBoundary = model<boolean>(false);
+  protected showBoundary = model<boolean>(true);
 
   protected toBack = model<boolean>(false);
 
@@ -154,6 +154,7 @@ export class CameraViewPage implements OnInit {
     this.previewY.set(y);
     this.previewWidth.set(w);
     this.previewHeight.set(h);
+    this.aspectRatio.set('custom');
   }
 
   protected async startCamera(): Promise<void> {
@@ -168,7 +169,7 @@ export class CameraViewPage implements OnInit {
         y: this.previewY(),
         width: this.previewWidth(),
         height: this.previewHeight(),
-        aspectRatio: this.aspectRatio(),
+        aspectRatio: this.aspectRatio() === 'custom' ? undefined : this.aspectRatio(),
         useTripleCameraIfAvailable: this.useTripleCameraIfAvailable(),
         initialZoomFactor: this.initialZoomFactor(),
         pictureFormat: this.pictureFormat(),
@@ -195,7 +196,15 @@ export class CameraViewPage implements OnInit {
       exif: ExifData;
       options?: any;
       type?: string;
+      error?: string;
     }>();
+
+    if (data?.error) {
+      // Show error in test results
+      const results = this.testResults() + `\n✗ Camera start failed: ${data.error}`;
+      this.testResults.set(results);
+      return;
+    }
 
     if (data?.photo) {
       this.#galleryService.addPhoto(data?.photo);

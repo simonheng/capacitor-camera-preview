@@ -12,66 +12,76 @@
 
   @if (showBoundary()) {
     <div class="boundary-overlay"
-         [style.left.px]="x()"
-         [style.top.px]="y()"
-         [style.width]="width() ? width() + 'px' : '100vw'"
-         [style.height]="height() ? height() + 'px' : '100vh'"
+         [style.left.px]="currentPreviewX()"
+         [style.top.px]="currentPreviewY()"
+         [style.width]="currentPreviewWidth() ? currentPreviewWidth() + 'px' : '100vw'"
+         [style.height]="currentPreviewHeight() ? currentPreviewHeight() + 'px' : '100vh'"
+    ></div>
+    
+    <!-- Blue boundary showing native-returned position from start() -->
+    <div class="native-boundary-overlay"
+         [style.left.px]="nativePreviewX()"
+         [style.top.px]="nativePreviewY()"
+         [style.width]="nativePreviewWidth() ? nativePreviewWidth() + 'px' : '100vw'"
+         [style.height]="nativePreviewHeight() ? nativePreviewHeight() + 'px' : '100vh'"
     ></div>
   }
 
   <!-- Floating Developer Info Panel -->
-  <div class="floating-info-panel">
-    <ion-card>
-      <ion-card-content>
-        <div class="info-row">
-          <span class="label">Status:</span>
-          <span class="value">{{ isRunning() ? 'Running' : 'Stopped' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Device:</span>
-          <span class="value">{{ currentDeviceId() || 'Unknown' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Zoom:</span>
-          <span class="value">{{ currentZoomFactor() }}x ({{ minZoom() }}-{{ maxZoom() }})</span>
-        </div>
-        @if (currentLens()) {
+  @if (showOverlay()) {
+    <div class="floating-info-panel">
+      <ion-card>
+        <ion-card-content>
           <div class="info-row">
-            <span class="label">Lens Type:</span>
-            <span class="value">{{ currentLens()!.deviceType }}</span>
+            <span class="label">Status:</span>
+            <span class="value">{{ isRunning() ? 'Running' : 'Stopped' }}</span>
           </div>
           <div class="info-row">
-            <span class="label">Base Zoom:</span>
-            <span class="value">{{ currentLens()!.baseZoomRatio }}x</span>
+            <span class="label">Device:</span>
+            <span class="value">{{ currentDeviceId() || 'Unknown' }}</span>
           </div>
           <div class="info-row">
-            <span class="label">Digital Zoom:</span>
-            <span class="value">{{ currentLens()!.digitalZoom }}x</span>
+            <span class="label">Zoom:</span>
+            <span class="value">{{ currentZoomFactor() }}x ({{ minZoom() }}-{{ maxZoom() }})</span>
+          </div>
+          @if (currentLens()) {
+            <div class="info-row">
+              <span class="label">Lens Type:</span>
+              <span class="value">{{ currentLens()!.deviceType }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Base Zoom:</span>
+              <span class="value">{{ currentLens()!.baseZoomRatio }}x</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Digital Zoom:</span>
+              <span class="value">{{ currentLens()!.digitalZoom }}x</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Focal Length:</span>
+              <span class="value">{{ currentLens()!.focalLength }}mm</span>
+            </div>
+          }
+          <div class="info-row">
+            <span class="label">Flash:</span>
+            <span class="value">{{ flashMode() }}</span>
           </div>
           <div class="info-row">
-            <span class="label">Focal Length:</span>
-            <span class="value">{{ currentLens()!.focalLength }}mm</span>
+            <span class="label">Recording:</span>
+            <span class="value">{{ isRecording() ? 'Yes' : 'No' }}</span>
           </div>
-        }
-        <div class="info-row">
-          <span class="label">Flash:</span>
-          <span class="value">{{ flashMode() }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Recording:</span>
-          <span class="value">{{ isRecording() ? 'Yes' : 'No' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Opacity:</span>
-          <span class="value">{{ currentOpacity() }}%</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Grid:</span>
-          <span class="value">{{ currentGridMode() }}</span>
-        </div>
-      </ion-card-content>
-    </ion-card>
-  </div>
+          <div class="info-row">
+            <span class="label">Opacity:</span>
+            <span class="value">{{ currentOpacity() }}%</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Grid:</span>
+            <span class="value">{{ currentGridMode() }}</span>
+          </div>
+        </ion-card-content>
+      </ion-card>
+    </div>
+  }
 
   <ion-fab
     class="camera-actions"
@@ -127,6 +137,14 @@
       >
         <ion-icon name="remove"></ion-icon>
       </ion-fab-button>
+
+      <ion-fab-button size="small" (click)="toggleOverlay()">
+        @if (showOverlay()) {
+          <ion-icon name="eye-off-outline"></ion-icon>
+        } @else {
+          <ion-icon name="eye-outline"></ion-icon>
+        }
+      </ion-fab-button>
     }
   </ion-fab>
 
@@ -138,7 +156,7 @@
   >
     <ion-fab-button (click)="toggleAspectRatio()" size="small">
       <ion-icon name="scan-outline"></ion-icon>
-      <span>{{ currentAspectRatio() }}</span>
+      <span>{{ displayAspectRatio() }}</span>
     </ion-fab-button>
   </ion-fab>
 
@@ -200,11 +218,6 @@
       </ion-fab-button>
     </ion-fab>
 
-    <div class="aspect-ratio-buttons">
-      <ion-fab-button (click)="setAspectRatio('4:3')" size="small">4:3</ion-fab-button>
-      <ion-fab-button (click)="setAspectRatio('16:9')" size="small">16:9</ion-fab-button>
-    </div>
-
     <!-- Sample Capture -->
     <!-- <ion-fab
       class="capture-options"
@@ -231,4 +244,12 @@
       </div>
     }
   }
+
+<ion-fab class="resize-toggle" slot="fixed" horizontal="start" vertical="bottom">
+  <ion-fab-button (click)="togglePreviewSize()" size="small">
+    <ion-icon name="resize-outline"></ion-icon>
+    <span>{{ isHalfSize() ? 'Extend' : 'Small' }}</span>
+  </ion-fab-button>
+</ion-fab>
+
 </div>

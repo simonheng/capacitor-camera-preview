@@ -140,19 +140,22 @@
               <ion-label>Y</ion-label>
               <ion-input [(ngModel)]="previewY" type="number" placeholder="0"></ion-input>
             </ion-item>
-            <ion-item>
-              <ion-label>Width</ion-label>
-              <ion-input [(ngModel)]="previewWidth" type="number" placeholder="auto"></ion-input>
-            </ion-item>
-            <ion-item>
-              <ion-label>Height</ion-label>
-              <ion-input [(ngModel)]="previewHeight" type="number" placeholder="auto"></ion-input>
-            </ion-item>
+            @if (aspectRatio() === 'custom') {
+              <ion-item>
+                <ion-label>Width</ion-label>
+                <ion-input [(ngModel)]="previewWidth" type="number" placeholder="auto"></ion-input>
+              </ion-item>
+              <ion-item>
+                <ion-label>Height</ion-label>
+                <ion-input [(ngModel)]="previewHeight" type="number" placeholder="auto"></ion-input>
+              </ion-item>
+            }
             <ion-item>
               <ion-label>Aspect Ratio</ion-label>
               <ion-select [(ngModel)]="aspectRatio" interface="popover">
                 <ion-select-option value="4:3">4:3</ion-select-option>
                 <ion-select-option value="16:9">16:9</ion-select-option>
+                <ion-select-option value="custom">Custom</ion-select-option>
               </ion-select>
             </ion-item>
           </ion-list>

@@ -54,12 +54,59 @@ class CameraController: NSObject {
 }
 
 extension CameraController {
+    func prepareBasicSession() {
+        // Only prepare if we don't already have a session
+        guard self.captureSession == nil else { return }
+        
+        print("[CameraPreview] Preparing basic camera session in background")
+        
+        // Create basic capture session
+        self.captureSession = AVCaptureSession()
+        
+        // Configure basic devices without full preparation
+        let deviceTypes: [AVCaptureDevice.DeviceType] = [
+            .builtInWideAngleCamera,
+            .builtInUltraWideCamera,
+            .builtInTelephotoCamera,
+            .builtInDualCamera,
+            .builtInDualWideCamera,
+            .builtInTripleCamera,
+            .builtInTrueDepthCamera
+        ]
+
+        let session = AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: AVMediaType.video, position: .unspecified)
+        let cameras = session.devices.compactMap { $0 }
+        
+        // Find best cameras
+        let rearVirtualDevices = cameras.filter { $0.position == .back && $0.isVirtualDevice }
+        let bestRearVirtualDevice = rearVirtualDevices.max { $0.constituentDevices.count < $1.constituentDevices.count }
+        
+        self.frontCamera = cameras.first(where: { $0.position == .front })
+        
+        if let bestCamera = bestRearVirtualDevice {
+            self.rearCamera = bestCamera
+        } else if let firstRearCamera = cameras.first(where: { $0.position == .back }) {
+            self.rearCamera = firstRearCamera
+        }
+        
+        print("[CameraPreview] Basic session prepared with \(cameras.count) devices")
+    }
+
     func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, completionHandler: @escaping (Error?) -> Void) {
         func createCaptureSession() {
-            self.captureSession = AVCaptureSession()
+            // Use existing session if available from background preparation
+            if self.captureSession == nil {
+                self.captureSession = AVCaptureSession()
+            }
         }
 
         func configureCaptureDevices() throws {
+            // Skip device discovery if cameras are already found during background preparation
+            if self.frontCamera != nil || self.rearCamera != nil {
+                print("[CameraPreview] Using pre-discovered cameras")
+                return
+            }
+            
             // Expanded device types to support more camera configurations
             let deviceTypes: [AVCaptureDevice.DeviceType] = [
                 .builtInWideAngleCamera,
@@ -339,9 +386,14 @@ extension CameraController {
         }
 
         view.layer.insertSublayer(self.previewLayer!, at: 0)
-        self.previewLayer?.frame = view.frame
+        
+        // Disable animation for frame update
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.previewLayer?.frame = view.bounds
+        CATransaction.commit()
 
-        print("[CameraPreview] Set preview layer frame to: \(view.frame)")
+        print("[CameraPreview] Set preview layer frame to view bounds: \(view.bounds)")
         print("[CameraPreview] Session preset: \(captureSession.sessionPreset.rawValue)")
 
         updateVideoOrientation()
@@ -350,9 +402,13 @@ extension CameraController {
     func addGridOverlay(to view: UIView, gridMode: String) {
         removeGridOverlay()
 
+        // Disable animation for grid overlay creation and positioning
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         gridOverlayView = GridOverlayView(frame: view.bounds)
         gridOverlayView?.gridMode = gridMode
         view.addSubview(gridOverlayView!)
+        CATransaction.commit()
     }
 
     func removeGridOverlay() {

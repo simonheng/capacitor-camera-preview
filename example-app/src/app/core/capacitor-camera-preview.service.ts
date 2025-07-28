@@ -41,9 +41,15 @@ export class CapacitorCameraViewService {
    * Start the camera view
    * @param options Configuration options for the camera session
    */
-  async start(options: CameraPreviewOptions = {}): Promise<void> {
-    await this.#cameraView.start(options);
+  async start(options: CameraPreviewOptions = {}): Promise<{
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  }> {
+    const result = await this.#cameraView.start(options);
     this.#cameraStarted.next(true);
+    return result;
   }
 
   /**
@@ -131,11 +137,21 @@ export class CapacitorCameraViewService {
     return (await this.#cameraView.getSupportedFlashModes()).result;
   }
 
-  async setAspectRatio(aspectRatio: '4:3' | '16:9'): Promise<void> {
-    return CameraPreview.setAspectRatio({ aspectRatio });
+  async setAspectRatio(aspectRatio: '4:3' | '16:9', x?: number, y?: number): Promise<{
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  }> {
+    const options: any = { aspectRatio };
+    if (x !== undefined && y !== undefined) {
+      options.x = x;
+      options.y = y;
+    }
+    return CameraPreview.setAspectRatio(options);
   }
 
-  async getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' | 'fill' }> {
+  async getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' }> {
     return CameraPreview.getAspectRatio();
   }
 
@@ -203,7 +219,17 @@ export class CapacitorCameraViewService {
     return this.#cameraView.stopRecordVideo();
   }
 
-
+  async getPreviewSize(): Promise<{x: number, y: number, width: number, height: number}> {
+    return this.#cameraView.getPreviewSize();
+  }
+  async setPreviewSize(options: {x: number, y: number, width: number, height: number}): Promise<{
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  }> {
+    return this.#cameraView.setPreviewSize(options);
+  }
 
   /**
    * Remove all event listeners

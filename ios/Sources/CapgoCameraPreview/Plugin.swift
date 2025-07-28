@@ -62,11 +62,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         CAPPluginMethod(name: "setAspectRatio", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getAspectRatio", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setGridMode", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getGridMode", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getGridMode", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getPreviewSize", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setPreviewSize", returnType: CAPPluginReturnPromise)
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
     private var isInitialized: Bool = false
+    private var backgroundSession: AVCaptureSession?
 
     var previewView: UIView!
     var cameraPosition = String()
@@ -138,14 +141,26 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         let paddingBottom = self.paddingBottom ?? 0
         let height = heightValue - paddingBottom
 
-        if UIWindow.isLandscape {
-            previewView.frame = CGRect(x: posY, y: posX, width: max(height, width), height: min(height, width))
-            self.cameraController.previewLayer?.frame = previewView.frame
-        }
+        // Handle auto-centering during rotation
+        if posX == -1 || posY == -1 {
+            // Trigger full recalculation for auto-centered views
+            self.updateCameraFrame()
+        } else {
+            // Manual positioning - use original rotation logic with no animation
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            
+            if UIWindow.isLandscape {
+                previewView.frame = CGRect(x: posY, y: posX, width: max(height, width), height: min(height, width))
+                self.cameraController.previewLayer?.frame = previewView.bounds
+            }
 
-        if UIWindow.isPortrait {
-            previewView.frame = CGRect(x: posX, y: posY, width: min(height, width), height: max(height, width))
-            self.cameraController.previewLayer?.frame = previewView.frame
+            if UIWindow.isPortrait {
+                previewView.frame = CGRect(x: posX, y: posY, width: min(height, width), height: max(height, width))
+                self.cameraController.previewLayer?.frame = previewView.bounds
+            }
+            
+            CATransaction.commit()
         }
 
         if let connection = self.cameraController.fileVideoOutput?.connection(with: .video) {
@@ -165,11 +180,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         cameraController.updateVideoOrientation()
 
-                cameraController.updateVideoOrientation()
+        cameraController.updateVideoOrientation()
 
-        // Update grid overlay frame if it exists
+        // Update grid overlay frame if it exists - no animation
         if let gridOverlay = self.cameraController.gridOverlayView {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             gridOverlay.frame = previewView.bounds
+            CATransaction.commit()
         }
 
         // Ensure webview remains transparent after rotation
@@ -183,9 +201,65 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("camera not started")
             return
         }
-        self.aspectRatio = call.getString("aspectRatio")
+        
+        guard let newAspectRatio = call.getString("aspectRatio") else {
+            call.reject("aspectRatio parameter is required")
+            return
+        }
+        
+        self.aspectRatio = newAspectRatio
+        
+        // When aspect ratio changes, calculate maximum size possible from current position
+        if let posX = self.posX, let posY = self.posY {
+            let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
+            let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
+            let paddingBottom = self.paddingBottom ?? 0
+            
+            // Calculate available space from current position
+            let availableWidth: CGFloat
+            let availableHeight: CGFloat
+            
+            if posX == -1 || posY == -1 {
+                // Auto-centering mode - use full dimensions
+                availableWidth = webViewWidth
+                availableHeight = webViewHeight - paddingBottom
+            } else {
+                // Manual positioning - calculate remaining space
+                availableWidth = webViewWidth - posX
+                availableHeight = webViewHeight - posY - paddingBottom
+            }
+            
+            // Parse aspect ratio - convert to portrait orientation for camera use
+            let ratioParts = newAspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
+            // For camera, we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+            let ratio = ratioParts[1] / ratioParts[0]
+            
+            // Calculate maximum size that fits the aspect ratio in available space
+            let maxWidthByHeight = availableHeight * CGFloat(ratio)
+            let maxHeightByWidth = availableWidth / CGFloat(ratio)
+            
+            if maxWidthByHeight <= availableWidth {
+                // Height is the limiting factor
+                self.width = maxWidthByHeight
+                self.height = availableHeight
+            } else {
+                // Width is the limiting factor
+                self.width = availableWidth
+                self.height = maxHeightByWidth
+            }
+            
+            print("[CameraPreview] Aspect ratio changed to \(newAspectRatio), new size: \(self.width!)x\(self.height!)")
+        }
+        
         self.updateCameraFrame()
-        call.resolve()
+        
+        // Return the actual preview bounds
+        var result = JSObject()
+        result["x"] = Double(self.previewView.frame.origin.x)
+        result["y"] = Double(self.previewView.frame.origin.y)
+        result["width"] = Double(self.previewView.frame.width)
+        result["height"] = Double(self.previewView.frame.height)
+        call.resolve(result)
     }
 
     @objc func getAspectRatio(_ call: CAPPluginCall) {
@@ -358,18 +432,18 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             self.height = UIScreen.main.bounds.size.height
         }
 
-        // Set x position - use 0 if not provided
-        if let x = call.getInt("x"), x > 0 {
-            self.posX = CGFloat(x) / UIScreen.main.scale
+        // Set x position - use exact CSS pixel value from web view, or mark for centering
+        if let x = call.getInt("x") {
+            self.posX = CGFloat(x)
         } else {
-            self.posX = 0
+            self.posX = -1 // Use -1 to indicate auto-centering
         }
 
-        // Set y position - use 0 if not provided
-        if let y = call.getInt("y"), y > 0 {
-            self.posY = CGFloat(y) / (call.getBool("includeSafeAreaInsets") ?? false ? 1.0 : UIScreen.main.scale) + (call.getBool("includeSafeAreaInsets") ?? false ? UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0 : 0)
+        // Set y position - use exact CSS pixel value from web view, or mark for centering
+        if let y = call.getInt("y") {
+            self.posY = CGFloat(y)
         } else {
-            self.posY = 0
+            self.posY = -1 // Use -1 to indicate auto-centering
         }
         if call.getInt("paddingBottom") != nil {
             self.paddingBottom = CGFloat(call.getInt("paddingBottom")!)
@@ -382,6 +456,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.disableAudio = call.getBool("disableAudio") ?? true
         self.aspectRatio = call.getString("aspectRatio")
         self.gridMode = call.getString("gridMode") ?? "none"
+        if self.aspectRatio != nil && (call.getInt("width") != nil || call.getInt("height") != nil) {
+            call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
+            return
+        }
 
         print("[CameraPreview] Camera start parameters - aspectRatio: \(String(describing: self.aspectRatio)), gridMode: \(self.gridMode)")
         print("[CameraPreview] Screen dimensions: \(UIScreen.main.bounds.size)")
@@ -403,54 +481,73 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                             call.reject(error.localizedDescription)
                             return
                         }
-
-                        // Create and configure the preview view first
-                        self.updateCameraFrame()
-
-                        // Make webview transparent - comprehensive approach
-                        self.makeWebViewTransparent()
-
-                        // Add the preview view to the webview's superview
-                        self.webView?.superview?.addSubview(self.previewView)
-                        if self.toBack! {
-                            self.webView?.superview?.bringSubviewToFront(self.webView!)
-                        }
-
-                        // Display the camera preview on the configured view
-                        try? self.cameraController.displayPreview(on: self.previewView)
-
-                        let frontView = self.toBack! ? self.webView : self.previewView
-                        self.cameraController.setupGestures(target: frontView ?? self.previewView, enableZoom: self.enableZoom!)
-
-                        // Add grid overlay if enabled
-                        if self.gridMode != "none" {
-                            self.cameraController.addGridOverlay(to: self.previewView, gridMode: self.gridMode)
-                        }
-
-                        if self.rotateWhenOrientationChanged == true {
-                            NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.rotated), name: UIDevice.orientationDidChangeNotification, object: nil)
-                        }
-
-
-                        // Add observers for app state changes to maintain transparency
-                        NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
-                        NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
-
-                        self.isInitializing = false
-                        self.isInitialized = true
-
-                        var returnedObject = JSObject()
-                        returnedObject["width"] = self.previewView.frame.width as any JSValue
-                        returnedObject["height"] = self.previewView.frame.height as any JSValue
-                        returnedObject["x"] = self.previewView.frame.origin.x as any JSValue
-                        returnedObject["y"] = self.previewView.frame.origin.y as any JSValue
-                        call.resolve(returnedObject)
-
+                        self.completeStartCamera(call: call)
                     }
                 }
             }
         })
+    }
 
+    override public func load() {
+        super.load()
+        // Initialize camera session in background for faster startup
+        prepareBackgroundCamera()
+    }
+
+    private func prepareBackgroundCamera() {
+        DispatchQueue.global(qos: .background).async {
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                guard granted else { return }
+                
+                // Pre-initialize camera controller for faster startup
+                DispatchQueue.main.async {
+                    self.cameraController.prepareBasicSession()
+                }
+            }
+        }
+    }
+
+    private func completeStartCamera(call: CAPPluginCall) {
+        // Create and configure the preview view first
+        self.updateCameraFrame()
+
+        // Make webview transparent - comprehensive approach
+        self.makeWebViewTransparent()
+
+        // Add the preview view to the webview itself to use same coordinate system
+        self.webView?.addSubview(self.previewView)
+        if self.toBack! {
+            self.webView?.sendSubviewToBack(self.previewView)
+        }
+
+        // Display the camera preview on the configured view
+        try? self.cameraController.displayPreview(on: self.previewView)
+
+        let frontView = self.toBack! ? self.webView : self.previewView
+        self.cameraController.setupGestures(target: frontView ?? self.previewView, enableZoom: self.enableZoom!)
+
+        // Add grid overlay if enabled
+        if self.gridMode != "none" {
+            self.cameraController.addGridOverlay(to: self.previewView, gridMode: self.gridMode)
+        }
+
+        if self.rotateWhenOrientationChanged == true {
+            NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.rotated), name: UIDevice.orientationDidChangeNotification, object: nil)
+        }
+
+        // Add observers for app state changes to maintain transparency
+        NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+
+        self.isInitializing = false
+        self.isInitialized = true
+
+        var returnedObject = JSObject()
+        returnedObject["width"] = self.previewView.frame.width as any JSValue
+        returnedObject["height"] = self.previewView.frame.height as any JSValue
+        returnedObject["x"] = self.previewView.frame.origin.x as any JSValue
+        returnedObject["y"] = self.previewView.frame.origin.y as any JSValue
+        call.resolve(returnedObject)
     }
 
     @objc func flip(_ call: CAPPluginCall) {
@@ -478,8 +575,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                         try self.cameraController.switchCameras()
 
                         DispatchQueue.main.async {
+                            // Update preview layer frame without animation
+                            CATransaction.begin()
+                            CATransaction.setDisableActions(true)
                             self.cameraController.previewLayer?.frame = self.previewView.bounds
                             self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+                            CATransaction.commit()
+                            
                             self.previewView.isUserInteractionEnabled = true
 
 
@@ -930,8 +1032,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     try self.cameraController.swapToDevice(deviceId: deviceId)
 
                     DispatchQueue.main.async {
+                        // Update preview layer frame without animation
+                        CATransaction.begin()
+                        CATransaction.setDisableActions(true)
                         self.cameraController.previewLayer?.frame = self.previewView.bounds
                         self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+                        CATransaction.commit()
+                        
                         self.previewView.isUserInteractionEnabled = true
 
 
@@ -975,57 +1082,130 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     private func updateCameraFrame() {
-        print("[CameraPreview] updateCameraFrame called")
-        print("[CameraPreview] width: \(String(describing: self.width)), height: \(String(describing: self.height)), posX: \(String(describing: self.posX)), posY: \(String(describing: self.posY))")
-
         guard let width = self.width, var height = self.height, let posX = self.posX, let posY = self.posY else {
-            print("[CameraPreview] Missing required frame parameters")
             return
         }
 
         let paddingBottom = self.paddingBottom ?? 0
         height -= paddingBottom
 
-        var frame = CGRect(x: posX, y: posY, width: width, height: height)
-        print("[CameraPreview] Initial frame: \(frame)")
+        // Cache webView dimensions for performance
+        let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
+        let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
 
-        // Temporarily disable aspect ratio frame adjustment to debug black preview issue
-        /*
-        if let aspectRatio = self.aspectRatio {
-            let ratioParts = aspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
-            let ratio = ratioParts[0] / ratioParts[1]
-            let viewWidth = Double(width)
-            let viewHeight = Double(height)
+        var finalX = posX
+        var finalY = posY
+        var finalWidth = width
+        var finalHeight = height
 
-            print("[CameraPreview] Calculating aspect ratio frame: \(aspectRatio), ratio: \(ratio), viewSize: \(viewWidth)x\(viewHeight)")
-
-            if viewWidth / ratio > viewHeight {
-                let newWidth = viewHeight * ratio
-                frame.origin.x += (viewWidth - newWidth) / 2
-                frame.size.width = newWidth
-                print("[CameraPreview] Adjusted width: \(newWidth)")
-            } else {
-                let newHeight = viewWidth / ratio
-                frame.origin.y += (viewHeight - newHeight) / 2
-                frame.size.height = newHeight
-                print("[CameraPreview] Adjusted height: \(newHeight)")
+        // Handle auto-centering when position is -1
+        if posX == -1 || posY == -1 {
+            finalWidth = webViewWidth
+            
+            // Calculate height based on aspect ratio or use provided height
+            if let aspectRatio = self.aspectRatio {
+                let ratioParts = aspectRatio.split(separator: ":").compactMap { Double($0) }
+                if ratioParts.count == 2 {
+                    // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+                    let ratio = ratioParts[1] / ratioParts[0]
+                    finalHeight = finalWidth / CGFloat(ratio)
+                }
+            }
+            
+            finalX = posX == -1 ? 0 : posX
+            
+            if posY == -1 {
+                let availableHeight = webViewHeight - paddingBottom
+                finalY = finalHeight < availableHeight ? (availableHeight - finalHeight) / 2 : 0
             }
         }
-        */
 
-        print("[CameraPreview] Final calculated frame: \(frame)")
+        var frame = CGRect(x: finalX, y: finalY, width: finalWidth, height: finalHeight)
 
+        // Apply aspect ratio adjustments only if not auto-centering
+        if posX != -1 && posY != -1, let aspectRatio = self.aspectRatio {
+            let ratioParts = aspectRatio.split(separator: ":").compactMap { Double($0) }
+            if ratioParts.count == 2 {
+                // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+                let ratio = ratioParts[1] / ratioParts[0]
+                let currentRatio = Double(finalWidth) / Double(finalHeight)
+                
+                if currentRatio > ratio {
+                    let newWidth = Double(finalHeight) * ratio
+                    frame.origin.x = finalX + (Double(finalWidth) - newWidth) / 2
+                    frame.size.width = CGFloat(newWidth)
+                } else {
+                    let newHeight = Double(finalWidth) / ratio
+                    frame.origin.y = finalY + (Double(finalHeight) - newHeight) / 2
+                    frame.size.height = CGFloat(newHeight)
+                }
+            }
+        }
+
+        // Disable ALL animations for frame updates - we want instant positioning
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        
+        // Batch UI updates for better performance
         if self.previewView == nil {
-            print("[CameraPreview] Creating new preview view with frame: \(frame)")
             self.previewView = UIView(frame: frame)
-            self.previewView.backgroundColor = UIColor.black // Add background color for debugging
+            self.previewView.backgroundColor = UIColor.clear
         } else {
-            print("[CameraPreview] Updating existing preview view frame to: \(frame)")
             self.previewView.frame = frame
         }
 
-        // Update the preview layer frame to match the preview view
-        self.cameraController.previewLayer?.frame = frame
-        print("[CameraPreview] Set preview layer frame to: \(frame)")
+        // Update preview layer frame efficiently
+        if let previewLayer = self.cameraController.previewLayer {
+            previewLayer.frame = self.previewView.bounds
+        }
+        
+        // Update grid overlay frame if it exists
+        if let gridOverlay = self.cameraController.gridOverlayView {
+            gridOverlay.frame = self.previewView.bounds
+        }
+        
+        CATransaction.commit()
+    }
+
+    @objc func getPreviewSize(_ call: CAPPluginCall) {
+        guard self.isInitialized else {
+            call.reject("camera not started")
+            return
+        }
+        var result = JSObject()
+        result["x"] = Double(self.previewView.frame.origin.x)
+        result["y"] = Double(self.previewView.frame.origin.y)
+        result["width"] = Double(self.previewView.frame.width)
+        result["height"] = Double(self.previewView.frame.height)
+        call.resolve(result)
+    }
+
+    @objc func setPreviewSize(_ call: CAPPluginCall) {
+        guard self.isInitialized else {
+            call.reject("camera not started")
+            return
+        }
+        
+        // Only update position if explicitly provided, otherwise keep auto-centering
+        if let x = call.getInt("x") { 
+            self.posX = CGFloat(x) 
+        }
+        if let y = call.getInt("y") { 
+            self.posY = CGFloat(y) 
+        }
+        if let width = call.getInt("width") { self.width = CGFloat(width) }
+        if let height = call.getInt("height") { self.height = CGFloat(height) }
+        
+        // Direct update without animation for better performance
+        self.updateCameraFrame()
+        self.makeWebViewTransparent()
+        
+        // Return the actual preview bounds
+        var result = JSObject()
+        result["x"] = Double(self.previewView.frame.origin.x)
+        result["y"] = Double(self.previewView.frame.origin.y)
+        result["width"] = Double(self.previewView.frame.width)
+        result["height"] = Double(self.previewView.frame.height)
+        call.resolve(result)
     }
 }

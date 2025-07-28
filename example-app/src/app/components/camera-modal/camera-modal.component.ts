@@ -8,7 +8,6 @@ import {
   OnDestroy,
   OnInit,
   signal,
-  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Capacitor } from '@capacitor/core';
@@ -20,15 +19,12 @@ import {
   IonFab,
   IonFabButton,
   IonIcon,
-  IonSelect,
-  IonSelectOption,
   IonSpinner,
   ModalController,
 } from '@ionic/angular/standalone';
 import {
   type CameraDevice,
   type CameraPosition,
-  type ExifData,
   type FlashMode,
   type LensInfo,
   type PictureFormat,
@@ -77,7 +73,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly y = input<number>(0);
   public readonly width = input<number>(0);
   public readonly height = input<number>(0);
-  public readonly aspectRatio = input<'4:3' | '16:9'>('4:3');
+  public readonly aspectRatio = input<'4:3' | '16:9' | 'custom' | undefined>(undefined);
 
   // Picture settings inputs
   public readonly pictureFormat = input<PictureFormat>('jpeg');
@@ -123,8 +119,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Camera switching functionality
   protected readonly availableCameras = signal<CameraDevice[]>([]);
   protected readonly selectedCameraIndex = signal<number>(0);
-  protected readonly currentAspectRatio = signal<'4:3' | '16:9'>('4:3');
+  protected readonly currentAspectRatio = signal<'4:3' | '16:9' | 'custom'>('custom');
   protected readonly currentGridMode = signal<GridMode>('none');
+  protected readonly showOverlay = signal<boolean>(true);
 
   protected readonly canZoomIn = computed(() => {
     return this.currentZoomFactor() + 0.1 <= this.maxZoom();
@@ -136,11 +133,79 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected readonly isWeb = Capacitor.getPlatform() === 'web';
 
+  protected readonly isUsingCustomSize = computed(() => {
+    return this.width() > 0 && this.height() > 0;
+  });
+
+  protected readonly displayAspectRatio = computed(() => {
+    // Always show the current aspect ratio (which can be toggled)
+    return this.currentAspectRatio();
+  });
+
   #supportedFlashModes = signal<Array<FlashMode>>(['off']);
   #touchStartDistance = 0;
   #initialZoomFactorOnPinch = 1.0;
   #lastZoomCall = 0;
   #zoomThrottleMs = 100; // Throttle zoom calls to max 20fps
+
+
+  protected isHalfSize = signal(false);
+
+  // Track current preview position and size for boundary overlay
+  protected currentPreviewX = signal(0);
+  protected currentPreviewY = signal(0);
+  protected currentPreviewWidth = signal(0);
+  protected currentPreviewHeight = signal(0);
+
+  // Native-returned position from start() method
+  protected nativePreviewX = signal(0);
+  protected nativePreviewY = signal(0);
+  protected nativePreviewWidth = signal(0);
+  protected nativePreviewHeight = signal(0);
+
+  protected async togglePreviewSize(): Promise<void> {
+    try {
+      if (this.isHalfSize()) {
+        // Go to full screen (full device size)
+        const newSize = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+        const nativeResult = await this.#cameraViewService.setPreviewSize(newSize);
+        this.isHalfSize.set(false);
+        
+        // Update red boundary overlay signals (requested)
+        this.currentPreviewX.set(newSize.x);
+        this.currentPreviewY.set(newSize.y);
+        this.currentPreviewWidth.set(newSize.width);
+        this.currentPreviewHeight.set(newSize.height);
+
+        // Update blue boundary overlay signals (native returned)
+        this.nativePreviewX.set(nativeResult.x);
+        this.nativePreviewY.set(nativeResult.y);
+        this.nativePreviewWidth.set(nativeResult.width);
+        this.nativePreviewHeight.set(nativeResult.height);
+      } else {
+        // Go to small centered preview (200x200 in center)
+        const centerX = Math.floor((window.innerWidth - 200) / 2);
+        const centerY = Math.floor((window.innerHeight - 200) / 2);
+        const newSize = { x: centerX, y: centerY, width: 200, height: 200 };
+        const nativeResult = await this.#cameraViewService.setPreviewSize(newSize);
+        this.isHalfSize.set(true);
+        
+        // Update red boundary overlay signals (requested)
+        this.currentPreviewX.set(newSize.x);
+        this.currentPreviewY.set(newSize.y);
+        this.currentPreviewWidth.set(newSize.width);
+        this.currentPreviewHeight.set(newSize.height);
+
+        // Update blue boundary overlay signals (native returned)
+        this.nativePreviewX.set(nativeResult.x);
+        this.nativePreviewY.set(nativeResult.y);
+        this.nativePreviewWidth.set(nativeResult.width);
+        this.nativePreviewHeight.set(nativeResult.height);
+      }
+    } catch (error) {
+      console.error('Failed to toggle preview size', error);
+    }
+  }
 
   constructor() {
     effect(() => {
@@ -161,37 +226,65 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async startCamera(): Promise<void> {
-    const startOptions = {
+    const startOptions: any = {
       deviceId: this.deviceId(),
       position: this.position(),
       x: this.x(),
       y: this.y(),
-      width: this.width(),
-      height: this.height(),
       enableZoom: this.enableZoom(),
       disableAudio: this.disableAudio(),
       enableHighResolution: this.enableHighResolution(),
       lockAndroidOrientation: this.lockAndroidOrientation(),
       toBack: true,
-      aspectRatio: this.currentAspectRatio(),
       gridMode: this.gridMode(),
     };
 
-    await this.#cameraViewService.start(startOptions);
+    // Initialize aspect ratio based on input or custom size usage
+    if (this.aspectRatio()) {
+      this.currentAspectRatio.set(this.aspectRatio()!);
+    } else if (this.isUsingCustomSize()) {
+      this.currentAspectRatio.set('custom');
+    }
 
-    await Promise.all([
-      this.#initializeZoomLimits(),
-      this.#initializeFlashModes(),
-      this.#initializeDevices(),
-      this.#updateRunningStatus(),
-      this.#updateCurrentDeviceId(),
-    ]);
+    // Only set width/height if provided, otherwise use aspectRatio
+    if (this.width() > 0 || this.height() > 0) {
+      startOptions.width = this.width();
+      startOptions.height = this.height();
+    } else if (this.currentAspectRatio() !== 'custom') {
+      startOptions.aspectRatio = this.currentAspectRatio();
+    }
 
-    this.currentZoomFactor.set(this.initialZoomFactor());
-    this.currentGridMode.set(this.gridMode());
+    try {
+      const nativeResult = await this.#cameraViewService.start(startOptions);
 
-    // Setup camera switching after devices are loaded
-    this.#setupCameraSwitchButtons();
+      // Store native-returned position
+      this.nativePreviewX.set(nativeResult.x);
+      this.nativePreviewY.set(nativeResult.y);
+      this.nativePreviewWidth.set(nativeResult.width);
+      this.nativePreviewHeight.set(nativeResult.height);
+
+      await Promise.all([
+        this.#initializeZoomLimits(),
+        this.#initializeFlashModes(),
+        this.#initializeDevices(),
+        this.#updateRunningStatus(),
+        this.#updateCurrentDeviceId(),
+        this.#initializeCurrentPreviewSize(),
+      ]);
+
+      this.currentZoomFactor.set(this.initialZoomFactor());
+      this.currentGridMode.set(this.gridMode());
+
+      // Setup camera switching after devices are loaded
+      this.#setupCameraSwitchButtons();
+    } catch (error) {
+      console.error('Failed to start camera:', error);
+      // Close modal and show error
+      await this.#modalController.dismiss({
+        error: error instanceof Error ? error.message : String(error),
+        type: 'error'
+      });
+    }
   }
 
   protected async stop(): Promise<void> {
@@ -308,13 +401,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     }
   }
 
-  protected async setAspectRatio(aspectRatio: '4:3' | '16:9'): Promise<void> {
-    try {
-      await this.#cameraViewService.setAspectRatio(aspectRatio);
-    } catch (error) {
-      console.error('Failed to set aspect ratio', error);
-    }
-  }
 
   protected async nextFlashMode(): Promise<void> {
     try {
@@ -331,9 +417,46 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async toggleAspectRatio(): Promise<void> {
-    this.currentAspectRatio.set(this.currentAspectRatio() === '4:3' ? '16:9' : '4:3');
-    await this.stop();
-    await this.startCamera();
+    try {
+      const current = this.currentAspectRatio();
+      let next: '4:3' | '16:9' | 'custom';
+
+      switch (current) {
+        case '4:3':
+          next = '16:9';
+          break;
+        case '16:9':
+          next = 'custom';
+          break;
+        case 'custom':
+        default:
+          next = '4:3';
+          break;
+      }
+
+      this.currentAspectRatio.set(next);
+      
+      // Instead of restarting camera, just apply the new aspect ratio
+      if (next !== 'custom') {
+        const nativeResult = await this.#cameraViewService.setAspectRatio(next);
+        
+        // Update red boundary overlay with new preview size after aspect ratio change
+        const newSize = await this.#cameraViewService.getPreviewSize();
+        this.currentPreviewX.set(newSize.x);
+        this.currentPreviewY.set(newSize.y);
+        this.currentPreviewWidth.set(newSize.width);
+        this.currentPreviewHeight.set(newSize.height);
+
+        // Update blue boundary overlay signals (native returned)
+        this.nativePreviewX.set(nativeResult.x);
+        this.nativePreviewY.set(nativeResult.y);
+        this.nativePreviewWidth.set(nativeResult.width);
+        this.nativePreviewHeight.set(nativeResult.height);
+      }
+      // For custom, we don't change anything - keep current size as is
+    } catch (error) {
+      console.error('Failed to toggle aspect ratio', error);
+    }
   }
 
   protected async toggleGridMode(): Promise<void> {
@@ -360,6 +483,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('Failed to toggle grid mode', error);
     }
+  }
+
+  protected toggleOverlay(): void {
+    this.showOverlay.set(!this.showOverlay());
   }
 
   protected async switchToDevice(deviceId: string): Promise<void> {
@@ -648,5 +775,31 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected getDisplayLenses(device: CameraDevice): CameraLens[] {
     return device.lenses;
+  }
+
+  async #initializeGridMode(): Promise<void> {
+    try {
+      const gridMode = await this.#cameraViewService.getGridMode();
+      this.currentGridMode.set(gridMode);
+    } catch (error) {
+      console.warn('Failed to get grid mode', error);
+    }
+  }
+
+  async #initializeCurrentPreviewSize(): Promise<void> {
+    try {
+      const currentSize = await this.#cameraViewService.getPreviewSize();
+      this.currentPreviewX.set(currentSize.x);
+      this.currentPreviewY.set(currentSize.y);
+      this.currentPreviewWidth.set(currentSize.width);
+      this.currentPreviewHeight.set(currentSize.height);
+    } catch (error) {
+      console.warn('Failed to get current preview size', error);
+      // Fallback to input values
+      this.currentPreviewX.set(this.x());
+      this.currentPreviewY.set(this.y());
+      this.currentPreviewWidth.set(this.width());
+      this.currentPreviewHeight.set(this.height());
+    }
   }
 }
