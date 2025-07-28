@@ -157,6 +157,58 @@ export class CameraViewPage implements OnInit {
     this.aspectRatio.set('custom');
   }
 
+  protected setCapturePreset(preset: string) {
+    let width: number, height: number;
+    
+    switch (preset) {
+      case 'vga':
+        width = 640;
+        height = 480;
+        break;
+      case 'hd':
+        width = 1280;
+        height = 720;
+        break;
+      case 'fullhd':
+        width = 1920;
+        height = 1080;
+        break;
+      case '4k':
+        width = 3840;
+        height = 2160;
+        break;
+      case 'square':
+        width = 1080;
+        height = 1080;
+        break;
+      case 'portrait':
+        width = 1080;
+        height = 1920;
+        break;
+      case 'small':
+        width = 480;
+        height = 320;
+        break;
+      case 'large':
+        width = 4096;
+        height = 3072;
+        break;
+      case 'disable':
+        this.useCustomSize.set(false);
+        return;
+      default:
+        return;
+    }
+    
+    this.pictureWidth.set(width);
+    this.pictureHeight.set(height);
+    this.useCustomSize.set(true);
+    
+    // Add to test results to show what was selected
+    const results = this.testResults() + `\n📐 Capture size set to: ${width}x${height} (${preset.toUpperCase()})`;
+    this.testResults.set(results);
+  }
+
   protected async startCamera(): Promise<void> {
     const cameraModal = await this.#modalController.create({
       component: CameraModalComponent,
@@ -359,6 +411,25 @@ export class CameraViewPage implements OnInit {
     this.enableZoom.set(true);
     this.opacity.set(100);
     await this.startCamera();
+  }
+
+  protected async quickTestCaptureSize(preset: string): Promise<void> {
+    this.setCapturePreset(preset);
+    this.pictureFormat.set('jpeg');
+    this.pictureQuality.set(85);
+    await this.startCamera();
+  }
+
+  protected async quickTestHDCapture(): Promise<void> {
+    await this.quickTestCaptureSize('hd');
+  }
+
+  protected async quickTest4KCapture(): Promise<void> {
+    await this.quickTestCaptureSize('4k');
+  }
+
+  protected async quickTestSquareCapture(): Promise<void> {
+    await this.quickTestCaptureSize('square');
   }
 
   // Legacy methods for compatibility

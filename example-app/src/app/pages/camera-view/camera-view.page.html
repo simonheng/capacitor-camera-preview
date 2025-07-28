@@ -180,6 +180,101 @@
         </ion-card-content>
       </ion-card>
 
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Picture Settings</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-list>
+            <ion-item>
+              <ion-select
+                [(ngModel)]="pictureFormat"
+                label="Picture Format"
+                label-placement="floating"
+              >
+                <ion-select-option value="jpeg">JPEG</ion-select-option>
+                <ion-select-option value="png">PNG</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item>
+              <ion-range
+                [(ngModel)]="pictureQuality"
+                min="0"
+                max="100"
+                step="1"
+                [label]="'Picture Quality (' + pictureQuality() + ')'"
+                labelPlacement="stacked"
+              >
+                <ion-icon size="small" slot="start" name="sad-outline"></ion-icon>
+                <ion-icon slot="end" name="happy"></ion-icon>
+              </ion-range>
+            </ion-item>
+            <ion-item>
+              <ion-checkbox
+                [(ngModel)]="useCustomSize"
+                color="primary"
+                justify="space-between"
+              >
+                Use Custom Size
+              </ion-checkbox>
+            </ion-item>
+            @if (useCustomSize()) {
+              <ion-item>
+                <ion-label>Width</ion-label>
+                <ion-input [(ngModel)]="pictureWidth" type="number" placeholder="1920"></ion-input>
+              </ion-item>
+              <ion-item>
+                <ion-label>Height</ion-label>
+                <ion-input [(ngModel)]="pictureHeight" type="number" placeholder="1080"></ion-input>
+              </ion-item>
+            }
+          </ion-list>
+
+          <ion-item-divider>Capture Size Presets</ion-item-divider>
+          <ion-grid>
+            <ion-row class="ion-justify-content-around">
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setCapturePreset('vga')">VGA</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setCapturePreset('hd')">HD</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setCapturePreset('fullhd')">Full HD</ion-button>
+              </ion-col>
+            </ion-row>
+            <ion-row class="ion-justify-content-around ion-margin-top">
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setCapturePreset('4k')">4K UHD</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setCapturePreset('square')">Square</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setCapturePreset('portrait')">Portrait</ion-button>
+              </ion-col>
+            </ion-row>
+            <ion-row class="ion-justify-content-around ion-margin-top">
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setCapturePreset('small')">Small</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" (click)="setCapturePreset('large')">Large</ion-button>
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button fill="outline" size="small" color="danger" (click)="setCapturePreset('disable')">Disable Custom</ion-button>
+              </ion-col>
+            </ion-row>
+          </ion-grid>
+          
+          @if (useCustomSize()) {
+            <div class="ion-margin-top">
+              <p><strong>Current Size:</strong> {{ pictureWidth() }} x {{ pictureHeight() }} px</p>
+            </div>
+          }
+        </ion-card-content>
+      </ion-card>
+
       <h3>Camera Behavior</h3>
       <ion-list lines="full" class="ion-margin-bottom">
         <ion-item>
@@ -295,6 +390,24 @@
         <ion-button (click)="quickTestVideo()" fill="outline" size="small">
           <ion-icon name="videocam" slot="start"></ion-icon>
           Video Test
+        </ion-button>
+      </div>
+
+      <div class="capture-size-tests ion-margin-top">
+        <h4>Capture Size Tests</h4>
+        <ion-button (click)="quickTestHDCapture()" fill="outline" size="small" color="secondary">
+          <ion-icon name="camera" slot="start"></ion-icon>
+          HD Capture Test
+        </ion-button>
+
+        <ion-button (click)="quickTest4KCapture()" fill="outline" size="small" color="secondary">
+          <ion-icon name="camera" slot="start"></ion-icon>
+          4K Capture Test
+        </ion-button>
+
+        <ion-button (click)="quickTestSquareCapture()" fill="outline" size="small" color="secondary">
+          <ion-icon name="camera" slot="start"></ion-icon>
+          Square Capture Test
         </ion-button>
       </div>
 

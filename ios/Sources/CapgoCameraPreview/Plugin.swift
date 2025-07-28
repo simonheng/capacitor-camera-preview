@@ -4,6 +4,7 @@ import AVFoundation
 import Photos
 import CoreImage
 import CoreLocation
+import MobileCoreServices
 
 
 extension UIWindow {
@@ -676,30 +677,53 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     return
                 }
 
-                if saveToGallery {
-                    PHPhotoLibrary.shared().performChanges({
-                        PHAssetChangeRequest.creationRequestForAsset(from: image!)
-                    }, completionHandler: { (success, error) in
-                        if !success {
-                            print("CameraPreview: Error saving image to gallery: \(error?.localizedDescription ?? "Unknown error")")
-                        }
-                    })
-                }
-
-                guard let imageData = image?.jpegData(compressionQuality: CGFloat(quality / 100.0)) else {
-                    call.reject("Failed to get JPEG data from image")
+                        var gallerySuccess = true
+            var galleryError: String?
+            
+            let group = DispatchGroup()
+            
+            group.notify(queue: .main) {
+                guard let imageDataWithExif = self.createImageDataWithExif(from: image!, quality: Int(quality), location: withExifLocation ? self.currentLocation : nil) else {
+                    call.reject("Failed to create image data with EXIF")
                     return
                 }
 
+                if saveToGallery {
+                    group.enter()
+                    self.saveImageDataToGallery(imageData: imageDataWithExif) { success, error in
+                        gallerySuccess = success
+                        if !success {
+                            galleryError = error?.localizedDescription ?? "Unknown error"
+                            print("CameraPreview: Error saving image to gallery: \(galleryError!)")
+                        }
+                        group.leave()
+                    }
+                    
+                    group.notify(queue: .main) {
+                        let exifData = self.getExifData(from: imageDataWithExif)
+                        let base64Image = imageDataWithExif.base64EncodedString()
 
-                let exifData = self.getExifData(from: imageData)
-                let base64Image = imageData.base64EncodedString()
+                        var result = JSObject()
+                        result["value"] = base64Image
+                        result["exif"] = exifData
+                        result["gallerySaved"] = gallerySuccess
+                        if !gallerySuccess, let error = galleryError {
+                            result["galleryError"] = error
+                        }
+                        
+                        call.resolve(result)
+                    }
+                } else {
+                    let exifData = self.getExifData(from: imageDataWithExif)
+                    let base64Image = imageDataWithExif.base64EncodedString()
 
-
-                var result = JSObject()
-                result["value"] = base64Image
-                result["exif"] = exifData
-                call.resolve(result)
+                    var result = JSObject()
+                    result["value"] = base64Image
+                    result["exif"] = exifData
+                    
+                    call.resolve(result)
+                }
+            }
             }
         }
     }
@@ -733,6 +757,82 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
 
         return exifData
+    }
+
+    private func createImageDataWithExif(from image: UIImage, quality: Int, location: CLLocation?) -> Data? {
+        guard let originalImageData = image.jpegData(compressionQuality: CGFloat(Double(quality) / 100.0)) else {
+            return nil
+        }
+        
+        guard let imageSource = CGImageSourceCreateWithData(originalImageData as CFData, nil),
+              let imageProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
+              let cgImage = image.cgImage else {
+            return originalImageData
+        }
+        
+        let mutableData = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(mutableData, kUTTypeJPEG, 1, nil) else {
+            return originalImageData
+        }
+        
+        var finalProperties = imageProperties
+        
+        // Add GPS location if available
+        if let location = location {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+            formatter.timeZone = TimeZone(abbreviation: "UTC")
+            
+            let gpsDict: [String: Any] = [
+                kCGImagePropertyGPSLatitude as String: abs(location.coordinate.latitude),
+                kCGImagePropertyGPSLatitudeRef as String: location.coordinate.latitude >= 0 ? "N" : "S",
+                kCGImagePropertyGPSLongitude as String: abs(location.coordinate.longitude),
+                kCGImagePropertyGPSLongitudeRef as String: location.coordinate.longitude >= 0 ? "E" : "W",
+                kCGImagePropertyGPSTimeStamp as String: formatter.string(from: location.timestamp),
+                kCGImagePropertyGPSAltitude as String: location.altitude,
+                kCGImagePropertyGPSAltitudeRef as String: location.altitude >= 0 ? 0 : 1
+            ]
+            
+            finalProperties[kCGImagePropertyGPSDictionary as String] = gpsDict
+        }
+        
+        // Add lens information
+        do {
+            let currentZoom = try self.cameraController.getZoom()
+            let lensInfo = try self.cameraController.getCurrentLensInfo()
+            
+            // Create or update EXIF dictionary
+            var exifDict = finalProperties[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? [:]
+            
+            // Add focal length (in mm)
+            exifDict[kCGImagePropertyExifFocalLength as String] = lensInfo.focalLength
+            
+            // Add digital zoom ratio
+            let digitalZoom = Float(currentZoom.current) / lensInfo.baseZoomRatio
+            exifDict[kCGImagePropertyExifDigitalZoomRatio as String] = digitalZoom
+            
+            // Add lens model info
+            exifDict[kCGImagePropertyExifLensModel as String] = lensInfo.deviceType
+            
+            finalProperties[kCGImagePropertyExifDictionary as String] = exifDict
+            
+            // Create or update TIFF dictionary for device info
+            var tiffDict = finalProperties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
+            tiffDict[kCGImagePropertyTIFFMake as String] = "Apple"
+            tiffDict[kCGImagePropertyTIFFModel as String] = UIDevice.current.model
+            finalProperties[kCGImagePropertyTIFFDictionary as String] = tiffDict
+            
+        } catch {
+            print("CameraPreview: Failed to get lens information: \(error)")
+        }
+        
+        CGImageDestinationAddImage(destination, cgImage, finalProperties as CFDictionary)
+        
+        if CGImageDestinationFinalize(destination) {
+            return mutableData as Data
+        }
+        
+        return originalImageData
     }
 
     @objc func captureSample(_ call: CAPPluginCall) {
@@ -1079,6 +1179,64 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
     public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("CameraPreview: Failed to get location: \(error.localizedDescription)")
+    }
+
+    private func saveImageDataToGallery(imageData: Data, completion: @escaping (Bool, Error?) -> Void) {
+        // Check if NSPhotoLibraryUsageDescription is present in Info.plist
+        guard Bundle.main.object(forInfoDictionaryKey: "NSPhotoLibraryUsageDescription") != nil else {
+            let error = NSError(domain: "CameraPreview", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "NSPhotoLibraryUsageDescription key missing from Info.plist. Add this key with a description of how your app uses photo library access."
+            ])
+            completion(false, error)
+            return
+        }
+        
+        let status = PHPhotoLibrary.authorizationStatus()
+        
+        switch status {
+        case .authorized:
+            performSaveDataToGallery(imageData: imageData, completion: completion)
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization { newStatus in
+                DispatchQueue.main.async {
+                    if newStatus == .authorized {
+                        self.performSaveDataToGallery(imageData: imageData, completion: completion)
+                    } else {
+                        completion(false, NSError(domain: "CameraPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Photo library access denied"]))
+                    }
+                }
+            }
+        case .denied, .restricted:
+            completion(false, NSError(domain: "CameraPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Photo library access denied"]))
+        case .limited:
+            performSaveDataToGallery(imageData: imageData, completion: completion)
+        @unknown default:
+            completion(false, NSError(domain: "CameraPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown photo library authorization status"]))
+        }
+    }
+    
+    private func performSaveDataToGallery(imageData: Data, completion: @escaping (Bool, Error?) -> Void) {
+        // Create a temporary file to write the JPEG data with EXIF
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+        
+        do {
+            try imageData.write(to: tempURL)
+            
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: tempURL)
+            }, completionHandler: { success, error in
+                // Clean up temporary file
+                try? FileManager.default.removeItem(at: tempURL)
+                
+                DispatchQueue.main.async {
+                    completion(success, error)
+                }
+            })
+        } catch {
+            DispatchQueue.main.async {
+                completion(false, error)
+            }
+        }
     }
 
     private func updateCameraFrame() {

@@ -128,7 +128,7 @@ In your `ios/App/App/Info.plist`, you must provide descriptions for the permissi
 
 - **Saving to Gallery** (`saveToGallery: true`):
   ```xml
-  <key>NSPhotoLibraryAddUsageDescription</key>
+  <key>NSPhotoLibraryUsageDescription</key>
   <string>To save photos to your gallery</string>
   ```
 

@@ -492,6 +492,16 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                             ByteArrayOutputStream stream = new ByteArrayOutputStream();
                             resizedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream);
                             bytes = stream.toByteArray();
+                            
+                            // Write EXIF data back to resized image
+                            bytes = writeExifToImageBytes(bytes, exifInterface);
+                        } else {
+                            // For non-resized images, ensure EXIF is saved
+                            exifInterface.saveAttributes();
+                            bytes = new byte[(int) tempFile.length()];
+                            java.io.FileInputStream fis2 = new java.io.FileInputStream(tempFile);
+                            fis2.read(bytes);
+                            fis2.close();
                         }
 
                         if (saveToGallery) {
@@ -679,6 +689,46 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         {ExifInterface.TAG_Y_CB_CR_SUB_SAMPLING, "YCbCrSubSampling"},
         {ExifInterface.TAG_Y_RESOLUTION, "YResolution"}
     };
+
+    private byte[] writeExifToImageBytes(byte[] imageBytes, ExifInterface sourceExif) {
+        try {
+            // Create a temporary file to write the image with EXIF
+            File tempExifFile = File.createTempFile("temp_exif", ".jpg", context.getCacheDir());
+            
+            // Write the image bytes to temp file
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(tempExifFile);
+            fos.write(imageBytes);
+            fos.close();
+            
+            // Create new ExifInterface for the temp file and copy all EXIF data
+            ExifInterface newExif = new ExifInterface(tempExifFile.getAbsolutePath());
+            
+            // Copy all EXIF attributes from source to new
+            for (String[] tag : EXIF_TAGS) {
+                String value = sourceExif.getAttribute(tag[0]);
+                if (value != null) {
+                    newExif.setAttribute(tag[0], value);
+                }
+            }
+            
+            // Save the EXIF data
+            newExif.saveAttributes();
+            
+            // Read the file back with EXIF embedded
+            byte[] result = new byte[(int) tempExifFile.length()];
+            java.io.FileInputStream fis = new java.io.FileInputStream(tempExifFile);
+            fis.read(result);
+            fis.close();
+            
+            // Clean up temp file
+            tempExifFile.delete();
+            
+            return result;
+        } catch (Exception e) {
+            Log.e(TAG, "writeExifToImageBytes: Error writing EXIF data", e);
+            return imageBytes; // Return original bytes if error
+        }
+    }
 
     public void captureSample(int quality) {
         Log.d(TAG, "captureSample: Starting sample capture with quality: " + quality);

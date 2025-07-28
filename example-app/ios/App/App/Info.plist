@@ -49,5 +49,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>To be able to save images to the photo library</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>To be able to save images with GPS location</string>
 </dict>
 </plist>
