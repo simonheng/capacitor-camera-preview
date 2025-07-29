@@ -66,8 +66,8 @@ extension CameraController {
         self.captureSession = AVCaptureSession()
 
         // 2. Pre-configure session preset (can be changed later)
-        if captureSession!.canSetSessionPreset(.medium) {
-            captureSession!.sessionPreset = .medium
+        if captureSession!.canSetSessionPreset(.high) {
+            captureSession!.sessionPreset = .high
         }
 
         // 3. Discover and configure all cameras
@@ -258,8 +258,9 @@ extension CameraController {
         guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
 
         // Update session preset based on aspect ratio if needed
+        var targetPreset: AVCaptureSession.Preset = .high // Default to high quality
+        
         if let aspectRatio = aspectRatio {
-            var targetPreset: AVCaptureSession.Preset
             switch aspectRatio {
             case "16:9":
                 targetPreset = captureSession.canSetSessionPreset(.hd1920x1080) ? .hd1920x1080 : .high
@@ -268,11 +269,16 @@ extension CameraController {
             default:
                 targetPreset = .high
             }
-
-            if captureSession.canSetSessionPreset(targetPreset) {
-                captureSession.sessionPreset = targetPreset
-                print("[CameraPreview] Updated preset to \(targetPreset) for aspect ratio: \(aspectRatio)")
-            }
+        }
+        
+        // Always try to set the best preset available
+        if captureSession.canSetSessionPreset(targetPreset) {
+            captureSession.sessionPreset = targetPreset
+            print("[CameraPreview] Updated preset to \(targetPreset) for aspect ratio: \(aspectRatio ?? "default")")
+        } else if captureSession.canSetSessionPreset(.high) {
+            // Fallback to high if target preset not available
+            captureSession.sessionPreset = .high
+            print("[CameraPreview] Fallback to high preset")
         }
 
         // Add photo output (already created in prepareOutputs)
@@ -306,6 +312,9 @@ extension CameraController {
         // Optimize preview layer for better quality
         self.previewLayer?.connection?.videoOrientation = .portrait
         self.previewLayer?.isOpaque = true
+        
+        // Set contentsScale for retina display quality
+        self.previewLayer?.contentsScale = UIScreen.main.scale
 
         // Enable high-quality rendering
         if #available(iOS 13.0, *) {
