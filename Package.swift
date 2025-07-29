@@ -23,6 +23,6 @@ let package = Package(
         .testTarget(
             name: "CapgoCameraPreviewTests",
             dependencies: ["CapgoCameraPreview"],
-            path: "ios/Tests/CameraViewPluginTests")
+            path: "ios/Tests/CameraPreviewPluginTests")
     ]
 )

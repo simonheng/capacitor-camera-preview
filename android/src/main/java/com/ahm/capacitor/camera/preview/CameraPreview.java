@@ -286,6 +286,33 @@ public class CameraPreview
   }
 
   @PluginMethod
+  public void setFocus(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    Float x = call.getFloat("x");
+    Float y = call.getFloat("y");
+    if (x == null || y == null) {
+      call.reject("x and y parameters are required");
+      return;
+    }
+    // Ensure values are between 0 and 1
+    float normalizedX = Math.max(0f, Math.min(1f, x));
+    float normalizedY = Math.max(0f, Math.min(1f, y));
+
+    getActivity()
+      .runOnUiThread(() -> {
+        try {
+          cameraXView.setFocus(normalizedX, normalizedY);
+          call.resolve();
+        } catch (Exception e) {
+          call.reject("Failed to set focus: " + e.getMessage());
+        }
+      });
+  }
+
+  @PluginMethod
   public void setDeviceId(PluginCall call) {
     String deviceId = call.getString("deviceId");
     if (deviceId == null || deviceId.isEmpty()) {

@@ -550,4 +550,15 @@ export interface CameraPreviewPlugin {
     x: number;
     y: number;
   }>;
+
+  /**
+   * Sets the camera focus to a specific point in the preview.
+   *
+   * @param {Object} options - The focus options.
+   * @param {number} options.x - The x coordinate in the preview view to focus on (0-1 normalized).
+   * @param {number} options.y - The y coordinate in the preview view to focus on (0-1 normalized).
+   * @returns {Promise<void>} A promise that resolves when the focus is set.
+   * @since 8.1.0
+   */
+  setFocus(options: { x: number; y: number }): Promise<void>;
 }

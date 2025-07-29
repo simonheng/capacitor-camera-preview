@@ -773,4 +773,44 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       y: options.y,
     };
   }
+
+  async setFocus(options: { x: number; y: number }): Promise<void> {
+    const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
+    if (!video?.srcObject) {
+      throw new Error("camera is not running");
+    }
+
+    const stream = video.srcObject as MediaStream;
+    const videoTrack = stream.getVideoTracks()[0];
+
+    if (!videoTrack) {
+      throw new Error("no video track found");
+    }
+
+    const capabilities = videoTrack.getCapabilities() as any;
+
+    // Check if focusing is supported
+    if (capabilities.focusMode) {
+      try {
+        // Web API supports focus mode settings but not coordinate-based focus
+        // Setting to manual mode allows for coordinate focus if supported
+        await videoTrack.applyConstraints({
+          advanced: [
+            {
+              focusMode: "manual",
+              focusDistance: 0.5, // Mid-range focus as fallback
+            } as any,
+          ],
+        });
+      } catch (error) {
+        console.warn(
+          `setFocus is not fully supported on this device: ${error}. Focus coordinates (${options.x}, ${options.y}) were provided but cannot be applied.`,
+        );
+      }
+    } else {
+      console.warn(
+        "Focus control is not supported on this device. Focus coordinates were provided but cannot be applied.",
+      );
+    }
+  }
 }

@@ -64,7 +64,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         CAPPluginMethod(name: "setGridMode", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getGridMode", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPreviewSize", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setPreviewSize", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "setPreviewSize", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setFocus", returnType: CAPPluginReturnPromise)
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -1441,6 +1442,43 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             result["width"] = Double(self.previewView.frame.width)
             result["height"] = Double(self.previewView.frame.height)
             call.resolve(result)
+        }
+    }
+
+    @objc func setFocus(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+
+        guard let x = call.getFloat("x"), let y = call.getFloat("y") else {
+            call.reject("x and y parameters are required")
+            return
+        }
+
+        // Ensure values are between 0 and 1
+        let normalizedX = max(0, min(1, x))
+        let normalizedY = max(0, min(1, y))
+
+        DispatchQueue.main.async {
+            do {
+                // Convert normalized coordinates to view coordinates
+                let viewX = CGFloat(normalizedX) * self.previewView.bounds.width
+                let viewY = CGFloat(normalizedY) * self.previewView.bounds.height
+                let focusPoint = CGPoint(x: viewX, y: viewY)
+
+                // Convert view coordinates to device coordinates
+                guard let previewLayer = self.cameraController.previewLayer else {
+                    call.reject("Preview layer not available")
+                    return
+                }
+                let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: focusPoint)
+
+                try self.cameraController.setFocus(at: devicePoint)
+                call.resolve()
+            } catch {
+                call.reject("Failed to set focus: \(error.localizedDescription)")
+            }
         }
     }
 }

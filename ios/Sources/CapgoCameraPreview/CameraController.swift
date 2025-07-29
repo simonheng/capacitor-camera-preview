@@ -259,7 +259,7 @@ extension CameraController {
 
         // Update session preset based on aspect ratio if needed
         var targetPreset: AVCaptureSession.Preset = .high // Default to high quality
-        
+
         if let aspectRatio = aspectRatio {
             switch aspectRatio {
             case "16:9":
@@ -270,7 +270,7 @@ extension CameraController {
                 targetPreset = .high
             }
         }
-        
+
         // Always try to set the best preset available
         if captureSession.canSetSessionPreset(targetPreset) {
             captureSession.sessionPreset = targetPreset
@@ -312,7 +312,7 @@ extension CameraController {
         // Optimize preview layer for better quality
         self.previewLayer?.connection?.videoOrientation = .portrait
         self.previewLayer?.isOpaque = true
-        
+
         // Set contentsScale for retina display quality
         self.previewLayer?.contentsScale = UIScreen.main.scale
 
@@ -782,6 +782,50 @@ extension CameraController {
             self.zoomFactor = zoomLevel
         } catch {
             throw CameraControllerError.invalidOperation
+        }
+    }
+
+    func setFocus(at point: CGPoint) throws {
+        var currentCamera: AVCaptureDevice?
+        switch currentCameraPosition {
+        case .front:
+            currentCamera = self.frontCamera
+        case .rear:
+            currentCamera = self.rearCamera
+        default: break
+        }
+
+        guard let device = currentCamera else {
+            throw CameraControllerError.noCamerasAvailable
+        }
+
+        guard device.isFocusPointOfInterestSupported else {
+            // Device doesn't support focus point of interest
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+
+            // Set focus mode to auto if supported
+            if device.isFocusModeSupported(.autoFocus) {
+                device.focusMode = .autoFocus
+            } else if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+
+            // Set the focus point
+            device.focusPointOfInterest = point
+
+            // Also set exposure point if supported
+            if device.isExposurePointOfInterestSupported && device.isExposureModeSupported(.autoExpose) {
+                device.exposureMode = .autoExpose
+                device.exposurePointOfInterest = point
+            }
+
+            device.unlockForConfiguration()
+        } catch {
+            throw CameraControllerError.unknown
         }
     }
 

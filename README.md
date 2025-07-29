@@ -241,6 +241,7 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`getDeviceId()`](#getdeviceid)
 * [`getPreviewSize()`](#getpreviewsize)
 * [`setPreviewSize(...)`](#setpreviewsize)
+* [`setFocus(...)`](#setfocus)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 * [Enums](#enums)
@@ -661,6 +662,23 @@ Sets the preview size and position.
 | **`options`** | <code>{ x: number; y: number; width: number; height: number; }</code> | The new position and dimensions. |
 
 **Returns:** <code>Promise&lt;{ width: number; height: number; x: number; y: number; }&gt;</code>
+
+--------------------
+
+
+### setFocus(...)
+
+```typescript
+setFocus(options: { x: number; y: number; }) => Promise<void>
+```
+
+Sets the camera focus to a specific point in the preview.
+
+| Param         | Type                                   | Description          |
+| ------------- | -------------------------------------- | -------------------- |
+| **`options`** | <code>{ x: number; y: number; }</code> | - The focus options. |
+
+**Since:** 8.1.0
 
 --------------------
 

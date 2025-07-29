@@ -30,9 +30,17 @@ import androidx.camera.core.AspectRatio;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.FocusMeteringAction;
+import androidx.camera.core.FocusMeteringAction;
+import androidx.camera.core.FocusMeteringResult;
+import androidx.camera.core.FocusMeteringResult;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
+import androidx.camera.core.MeteringPoint;
+import androidx.camera.core.MeteringPoint;
+import androidx.camera.core.MeteringPointFactory;
+import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
 import androidx.camera.core.ResolutionInfo;
 import androidx.camera.core.ZoomState;
@@ -69,6 +77,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 
 public class CameraXView implements LifecycleOwner, LifecycleObserver {
@@ -1270,36 +1279,61 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       zoomFuture.addListener(
         () -> {
           try {
-            float actualZoom = Objects.requireNonNull(
-              camera.getCameraInfo().getZoomState().getValue()
-            ).getZoomRatio();
-            Log.d(
-              TAG,
-              "setZoom: CameraX set zoom to " +
-              actualZoom +
-              " (requested: " +
-              zoomRatio +
-              ")"
-            );
-            if (Math.abs(actualZoom - zoomRatio) > 0.1f) {
-              Log.w(
-                TAG,
-                "setZoom: CameraX clamped zoom from " +
-                zoomRatio +
-                " to " +
-                actualZoom
-              );
-            } else {
-              Log.d(TAG, "setZoom: CameraX successfully set requested zoom");
-            }
+            zoomFuture.get();
+            Log.d(TAG, "Zoom successfully set to " + zoomRatio);
           } catch (Exception e) {
-            Log.e(TAG, "setZoom: Error checking final zoom", e);
+            Log.e(TAG, "Error setting zoom: " + e.getMessage());
           }
         },
-        mainExecutor
+        ContextCompat.getMainExecutor(context)
       );
     } catch (Exception e) {
-      Log.e(TAG, "setZoom: Failed to set zoom to " + zoomRatio, e);
+      Log.e(TAG, "Failed to set zoom: " + e.getMessage());
+      throw e;
+    }
+  }
+
+  public void setFocus(float x, float y) throws Exception {
+    if (camera == null) {
+      throw new Exception("Camera not initialized");
+    }
+
+    Log.d(TAG, "setFocus: Setting focus at (" + x + ", " + y + ")");
+
+    // Convert normalized coordinates (0-1) to view coordinates
+    int viewWidth = previewView.getWidth();
+    int viewHeight = previewView.getHeight();
+
+    // Create MeteringPoint using the preview view
+    MeteringPointFactory factory = previewView.getMeteringPointFactory();
+    MeteringPoint point = factory.createPoint(x * viewWidth, y * viewHeight);
+
+    // Create focus and metering action
+    FocusMeteringAction action = new FocusMeteringAction.Builder(
+      point,
+      FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
+    )
+      .setAutoCancelDuration(3, TimeUnit.SECONDS) // Auto-cancel after 3 seconds
+      .build();
+
+    try {
+      ListenableFuture<FocusMeteringResult> focusFuture = camera
+        .getCameraControl()
+        .startFocusAndMetering(action);
+
+      focusFuture.addListener(
+        () -> {
+          try {
+            FocusMeteringResult result = focusFuture.get();
+            Log.d(TAG, "Focus result: " + result.isFocusSuccessful());
+          } catch (Exception e) {
+            Log.e(TAG, "Error during focus: " + e.getMessage());
+          }
+        },
+        ContextCompat.getMainExecutor(context)
+      );
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to set focus: " + e.getMessage());
       throw e;
     }
   }
