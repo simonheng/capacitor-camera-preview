@@ -297,14 +297,16 @@ public class CameraPreview
       call.reject("x and y parameters are required");
       return;
     }
-    // Ensure values are between 0 and 1
-    float normalizedX = Math.max(0f, Math.min(1f, x));
-    float normalizedY = Math.max(0f, Math.min(1f, y));
+    // Reject if values are outside 0-1 range
+    if (x < 0f || x > 1f || y < 0f || y > 1f) {
+      call.reject("Focus coordinates must be between 0 and 1");
+      return;
+    }
 
     getActivity()
       .runOnUiThread(() -> {
         try {
-          cameraXView.setFocus(normalizedX, normalizedY);
+          cameraXView.setFocus(x, y);
           call.resolve();
         } catch (Exception e) {
           call.reject("Failed to set focus: " + e.getMessage());

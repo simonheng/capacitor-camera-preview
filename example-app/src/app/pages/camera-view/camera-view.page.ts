@@ -113,7 +113,6 @@ export class CameraViewPage implements OnInit {
   protected opacity = model<number>(100);
   protected enableZoom = model<boolean>(false);
   protected disableAudio = model<boolean>(true);
-  protected enableHighResolution = model<boolean>(false);
   protected lockAndroidOrientation = model<boolean>(false);
   protected saveToGallery = model<boolean>(false);
   protected withExifLocation = model<boolean>(false);
@@ -249,7 +248,6 @@ export class CameraViewPage implements OnInit {
         opacity: this.opacity(),
         enableZoom: this.enableZoom(),
         disableAudio: this.disableAudio(),
-        enableHighResolution: this.enableHighResolution(),
         lockAndroidOrientation: this.lockAndroidOrientation(),
         saveToGallery: this.saveToGallery(),
         withExifLocation: this.withExifLocation(),

@@ -88,7 +88,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly opacity = input<number>(100);
   public readonly enableZoom = input<boolean>(false);
   public readonly disableAudio = input<boolean>(true);
-  public readonly enableHighResolution = input<boolean>(true);
   public readonly lockAndroidOrientation = input<boolean>(true);
   public readonly saveToGallery = input<boolean>(false);
   public readonly withExifLocation = input<boolean>(false);
@@ -243,7 +242,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       y: this.y(),
       enableZoom: this.enableZoom(),
       disableAudio: this.disableAudio(),
-      enableHighResolution: this.enableHighResolution(),
       lockAndroidOrientation: this.lockAndroidOrientation(),
       toBack: true,
       gridMode: this.gridMode(),

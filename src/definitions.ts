@@ -155,12 +155,6 @@ export interface CameraPreviewOptions {
    */
   disableExifHeaderStripping?: boolean;
   /**
-   * If true, enables high-resolution image capture.
-   * @platform ios
-   * @default false
-   */
-  enableHighResolution?: boolean;
-  /**
    * If true, disables the audio stream, preventing audio permission requests.
    * @default true
    */

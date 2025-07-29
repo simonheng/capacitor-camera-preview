@@ -84,7 +84,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     var toBack: Bool?
     var storeToFile: Bool?
     var enableZoom: Bool?
-    var highResolutionOutput: Bool = false
     var disableAudio: Bool = false
     var locationManager: CLLocationManager?
     var currentLocation: CLLocation?
@@ -412,8 +411,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.cameraPosition = call.getString("position") ?? "rear"
         let deviceId = call.getString("deviceId")
         let cameraMode = call.getBool("cameraMode") ?? false
-        self.highResolutionOutput = call.getBool("enableHighResolution") ?? false
-        self.cameraController.highResolutionOutput = self.highResolutionOutput
 
         // Set width - use screen width if not provided or if 0
         if let width = call.getInt("width"), width > 0 {
@@ -1462,15 +1459,17 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        // Ensure values are between 0 and 1
-        let normalizedX = max(0, min(1, x))
-        let normalizedY = max(0, min(1, y))
+        // Reject if values are outside 0-1 range
+        if x < 0 || x > 1 || y < 0 || y > 1 {
+            call.reject("Focus coordinates must be between 0 and 1")
+            return
+        }
 
         DispatchQueue.main.async {
             do {
                 // Convert normalized coordinates to view coordinates
-                let viewX = CGFloat(normalizedX) * self.previewView.bounds.width
-                let viewY = CGFloat(normalizedY) * self.previewView.bounds.height
+                let viewX = CGFloat(x) * self.previewView.bounds.width
+                let viewY = CGFloat(y) * self.previewView.bounds.height
                 let focusPoint = CGPoint(x: viewX, y: viewY)
 
                 // Convert view coordinates to device coordinates

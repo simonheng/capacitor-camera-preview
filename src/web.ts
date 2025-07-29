@@ -775,6 +775,11 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async setFocus(options: { x: number; y: number }): Promise<void> {
+    // Reject if values are outside 0-1 range
+    if (options.x < 0 || options.x > 1 || options.y < 0 || options.y > 1) {
+      throw new Error("Focus coordinates must be between 0 and 1");
+    }
+
     const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video?.srcObject) {
       throw new Error("camera is not running");

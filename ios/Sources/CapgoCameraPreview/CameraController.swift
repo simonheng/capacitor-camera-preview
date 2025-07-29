@@ -36,8 +36,6 @@ class CameraController: NSObject {
 
     var sampleBufferCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
 
-    var highResolutionOutput: Bool = false
-
     var audioDevice: AVCaptureDevice?
     var audioInput: AVCaptureDeviceInput?
 
@@ -283,7 +281,7 @@ extension CameraController {
 
         // Add photo output (already created in prepareOutputs)
         if let photoOutput = self.photoOutput, captureSession.canAddOutput(photoOutput) {
-            photoOutput.isHighResolutionCaptureEnabled = self.highResolutionOutput
+            photoOutput.isHighResolutionCaptureEnabled = true
             captureSession.addOutput(photoOutput)
         }
 
