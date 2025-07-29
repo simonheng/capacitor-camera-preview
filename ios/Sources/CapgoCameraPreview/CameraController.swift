@@ -24,6 +24,8 @@ class CameraController: NSObject {
     var rearCamera: AVCaptureDevice?
     var rearCameraInput: AVCaptureDeviceInput?
 
+    var allDiscoveredDevices: [AVCaptureDevice] = []
+
     var fileVideoOutput: AVCaptureMovieFileOutput?
 
     var previewLayer: AVCaptureVideoPreviewLayer?
@@ -54,16 +56,30 @@ class CameraController: NSObject {
 }
 
 extension CameraController {
-    func prepareBasicSession() {
+    func prepareFullSession() {
         // Only prepare if we don't already have a session
         guard self.captureSession == nil else { return }
-        
-        print("[CameraPreview] Preparing basic camera session in background")
-        
-        // Create basic capture session
+
+        print("[CameraPreview] Preparing full camera session in background")
+
+        // 1. Create and configure session
         self.captureSession = AVCaptureSession()
-        
-        // Configure basic devices without full preparation
+
+        // 2. Pre-configure session preset (can be changed later)
+        if captureSession!.canSetSessionPreset(.medium) {
+            captureSession!.sessionPreset = .medium
+        }
+
+        // 3. Discover and configure all cameras
+        discoverAndConfigureCameras()
+
+        // 4. Pre-create outputs (don't add to session yet)
+        prepareOutputs()
+
+        print("[CameraPreview] Full session preparation complete")
+    }
+
+    private func discoverAndConfigureCameras() {
         let deviceTypes: [AVCaptureDevice.DeviceType] = [
             .builtInWideAngleCamera,
             .builtInUltraWideCamera,
@@ -76,295 +92,206 @@ extension CameraController {
 
         let session = AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: AVMediaType.video, position: .unspecified)
         let cameras = session.devices.compactMap { $0 }
-        
+
+        // Store all discovered devices for fast lookup later
+        self.allDiscoveredDevices = cameras
+
+        // Log all found devices for debugging
+        print("[CameraPreview] Found \(cameras.count) devices:")
+        for camera in cameras {
+            let constituentCount = camera.isVirtualDevice ? camera.constituentDevices.count : 1
+            print("[CameraPreview] - \(camera.localizedName) (Position: \(camera.position.rawValue), Virtual: \(camera.isVirtualDevice), Lenses: \(constituentCount))")
+        }
+
         // Find best cameras
         let rearVirtualDevices = cameras.filter { $0.position == .back && $0.isVirtualDevice }
         let bestRearVirtualDevice = rearVirtualDevices.max { $0.constituentDevices.count < $1.constituentDevices.count }
-        
+
         self.frontCamera = cameras.first(where: { $0.position == .front })
-        
+
         if let bestCamera = bestRearVirtualDevice {
             self.rearCamera = bestCamera
+            print("[CameraPreview] Selected best virtual rear camera: \(bestCamera.localizedName) with \(bestCamera.constituentDevices.count) physical cameras.")
         } else if let firstRearCamera = cameras.first(where: { $0.position == .back }) {
             self.rearCamera = firstRearCamera
+            print("[CameraPreview] WARN: No virtual rear camera found. Selected first available: \(firstRearCamera.localizedName)")
         }
-        
-        print("[CameraPreview] Basic session prepared with \(cameras.count) devices")
+
+        // Pre-configure focus modes
+        configureCameraFocus(camera: self.rearCamera)
+        configureCameraFocus(camera: self.frontCamera)
+    }
+
+    private func configureCameraFocus(camera: AVCaptureDevice?) {
+        guard let camera = camera else { return }
+
+        do {
+            try camera.lockForConfiguration()
+            if camera.isFocusModeSupported(.continuousAutoFocus) {
+                camera.focusMode = .continuousAutoFocus
+            }
+            camera.unlockForConfiguration()
+        } catch {
+            print("[CameraPreview] Could not configure focus for \(camera.localizedName): \(error)")
+        }
+    }
+
+    private func prepareOutputs() {
+        // Pre-create photo output
+        self.photoOutput = AVCapturePhotoOutput()
+        self.photoOutput?.isHighResolutionCaptureEnabled = false // Default, can be changed
+
+        // Pre-create video output
+        self.fileVideoOutput = AVCaptureMovieFileOutput()
+
+        // Pre-create data output
+        self.dataOutput = AVCaptureVideoDataOutput()
+        self.dataOutput?.videoSettings = [
+            (kCVPixelBufferPixelFormatTypeKey as String): NSNumber(value: kCVPixelFormatType_32BGRA as UInt32)
+        ]
+        self.dataOutput?.alwaysDiscardsLateVideoFrames = true
+
+        print("[CameraPreview] Outputs pre-created")
     }
 
     func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, completionHandler: @escaping (Error?) -> Void) {
-        func createCaptureSession() {
-            // Use existing session if available from background preparation
+        do {
+            // Session and outputs already created in load(), just configure user-specific settings
             if self.captureSession == nil {
-                self.captureSession = AVCaptureSession()
+                // Fallback if prepareFullSession() wasn't called
+                self.prepareFullSession()
+            }
+
+            guard let captureSession = self.captureSession else {
+                throw CameraControllerError.captureSessionIsMissing
+            }
+
+            print("[CameraPreview] Fast prepare - using pre-initialized session")
+
+            // Configure device inputs for the requested camera
+            try self.configureDeviceInputs(cameraPosition: cameraPosition, deviceId: deviceId, disableAudio: disableAudio)
+
+            // Add outputs to session and apply user settings
+            try self.addOutputsToSession(cameraMode: cameraMode, aspectRatio: aspectRatio)
+
+            // Start the session
+            captureSession.startRunning()
+            print("[CameraPreview] Session started")
+
+            completionHandler(nil)
+        } catch {
+            completionHandler(error)
+        }
+    }
+
+    private func configureDeviceInputs(cameraPosition: String, deviceId: String?, disableAudio: Bool) throws {
+        guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
+
+        var selectedDevice: AVCaptureDevice?
+
+        // If deviceId is specified, find that specific device from pre-discovered devices
+        if let deviceId = deviceId {
+            selectedDevice = self.allDiscoveredDevices.first(where: { $0.uniqueID == deviceId })
+            guard selectedDevice != nil else {
+                print("[CameraPreview] ERROR: Device with ID \(deviceId) not found in pre-discovered devices")
+                throw CameraControllerError.noCamerasAvailable
+            }
+        } else {
+            // Use position-based selection from pre-discovered cameras
+            if cameraPosition == "rear" {
+                selectedDevice = self.rearCamera
+            } else if cameraPosition == "front" {
+                selectedDevice = self.frontCamera
             }
         }
 
-        func configureCaptureDevices() throws {
-            // Skip device discovery if cameras are already found during background preparation
-            if self.frontCamera != nil || self.rearCamera != nil {
-                print("[CameraPreview] Using pre-discovered cameras")
-                return
-            }
-            
-            // Expanded device types to support more camera configurations
-            let deviceTypes: [AVCaptureDevice.DeviceType] = [
-                .builtInWideAngleCamera,
-                .builtInUltraWideCamera,
-                .builtInTelephotoCamera,
-                .builtInDualCamera,
-                .builtInDualWideCamera,
-                .builtInTripleCamera,
-                .builtInTrueDepthCamera
-            ]
+        guard let finalDevice = selectedDevice else {
+            print("[CameraPreview] ERROR: No camera device selected for position: \(cameraPosition)")
+            throw CameraControllerError.noCamerasAvailable
+        }
 
-            let session = AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: AVMediaType.video, position: .unspecified)
+        print("[CameraPreview] Configuring device: \(finalDevice.localizedName)")
+        let deviceInput = try AVCaptureDeviceInput(device: finalDevice)
 
-            let cameras = session.devices.compactMap { $0 }
+        if captureSession.canAddInput(deviceInput) {
+            captureSession.addInput(deviceInput)
 
-            // Log all found devices for debugging
-            print("[CameraPreview] Found \(cameras.count) devices:")
-            for camera in cameras {
-                let constituentCount = camera.isVirtualDevice ? camera.constituentDevices.count : 1
-                print("[CameraPreview] - \(camera.localizedName) (Position: \(camera.position.rawValue), Virtual: \(camera.isVirtualDevice), Lenses: \(constituentCount), Zoom: \(camera.minAvailableVideoZoomFactor)-\(camera.maxAvailableVideoZoomFactor))")
-            }
+            if finalDevice.position == .front {
+                self.frontCameraInput = deviceInput
+                self.currentCameraPosition = .front
+            } else {
+                self.rearCameraInput = deviceInput
+                self.currentCameraPosition = .rear
 
-            guard !cameras.isEmpty else {
-                print("[CameraPreview] ERROR: No cameras found.")
-                throw CameraControllerError.noCamerasAvailable
-            }
-
-            // --- Corrected Device Selection Logic ---
-            // Find the virtual device with the most constituent cameras (this is the most capable one)
-            let rearVirtualDevices = cameras.filter { $0.position == .back && $0.isVirtualDevice }
-            let bestRearVirtualDevice = rearVirtualDevices.max { $0.constituentDevices.count < $1.constituentDevices.count }
-
-            self.frontCamera = cameras.first(where: { $0.position == .front })
-
-            if let bestCamera = bestRearVirtualDevice {
-                self.rearCamera = bestCamera
-                print("[CameraPreview] Selected best virtual rear camera: \(bestCamera.localizedName) with \(bestCamera.constituentDevices.count) physical cameras.")
-            } else if let firstRearCamera = cameras.first(where: { $0.position == .back }) {
-                // Fallback for devices without a virtual camera system
-                self.rearCamera = firstRearCamera
-                print("[CameraPreview] WARN: No virtual rear camera found. Selected first available: \(firstRearCamera.localizedName)")
-            }
-            // --- End of Correction ---
-
-            if let rearCamera = self.rearCamera {
-                do {
-                    try rearCamera.lockForConfiguration()
-                    if rearCamera.isFocusModeSupported(.continuousAutoFocus) {
-                        rearCamera.focusMode = .continuousAutoFocus
+                // Configure zoom for multi-camera systems
+                try finalDevice.lockForConfiguration()
+                let defaultWideAngleZoom: CGFloat = 2.0
+                if finalDevice.isVirtualDevice && finalDevice.constituentDevices.count > 1 && finalDevice.videoZoomFactor != defaultWideAngleZoom {
+                    if defaultWideAngleZoom >= finalDevice.minAvailableVideoZoomFactor && defaultWideAngleZoom <= finalDevice.maxAvailableVideoZoomFactor {
+                        print("[CameraPreview] Setting initial zoom to \(defaultWideAngleZoom)")
+                        finalDevice.videoZoomFactor = defaultWideAngleZoom
                     }
-                    rearCamera.unlockForConfiguration()
-                } catch {
-                    print("[CameraPreview] WARN: Could not set focus mode on rear camera. \(error)")
                 }
+                finalDevice.unlockForConfiguration()
             }
+        } else {
+            throw CameraControllerError.inputsAreInvalid
+        }
 
-            if disableAudio == false {
+        // Add audio input if needed
+        if !disableAudio {
+            if self.audioDevice == nil {
                 self.audioDevice = AVCaptureDevice.default(for: AVMediaType.audio)
             }
-        }
-
-        func configureDeviceInputs() throws {
-            guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
-
-            var selectedDevice: AVCaptureDevice?
-
-            // If deviceId is specified, use that specific device
-            if let deviceId = deviceId {
-                let allDevices = AVCaptureDevice.DiscoverySession(
-                    deviceTypes: [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera, .builtInDualCamera, .builtInDualWideCamera, .builtInTripleCamera, .builtInTrueDepthCamera],
-                    mediaType: .video,
-                    position: .unspecified
-                ).devices
-
-                selectedDevice = allDevices.first(where: { $0.uniqueID == deviceId })
-                guard selectedDevice != nil else {
-                    throw CameraControllerError.noCamerasAvailable
-                }
-            } else {
-                // Use position-based selection
-                if cameraPosition == "rear" {
-                    selectedDevice = self.rearCamera
-                } else if cameraPosition == "front" {
-                    selectedDevice = self.frontCamera
-                }
-            }
-
-            guard let finalDevice = selectedDevice else {
-                print("[CameraPreview] ERROR: No camera device selected for position: \(cameraPosition)")
-                throw CameraControllerError.noCamerasAvailable
-            }
-
-            print("[CameraPreview] Configuring device: \(finalDevice.localizedName)")
-            let deviceInput = try AVCaptureDeviceInput(device: finalDevice)
-
-            if captureSession.canAddInput(deviceInput) {
-                captureSession.addInput(deviceInput)
-
-                if finalDevice.position == .front {
-                    self.frontCameraInput = deviceInput
-                    self.frontCamera = finalDevice
-                    self.currentCameraPosition = .front
+            if let audioDevice = self.audioDevice {
+                self.audioInput = try AVCaptureDeviceInput(device: audioDevice)
+                if captureSession.canAddInput(self.audioInput!) {
+                    captureSession.addInput(self.audioInput!)
                 } else {
-                    self.rearCameraInput = deviceInput
-                    self.rearCamera = finalDevice
-                    self.currentCameraPosition = .rear
-
-                    // --- Corrected Initial Zoom Logic ---
-                    try finalDevice.lockForConfiguration()
-                    if finalDevice.isFocusModeSupported(.continuousAutoFocus) {
-                        finalDevice.focusMode = .continuousAutoFocus
-                    }
-
-                    // On a multi-camera system, a zoom factor of 2.0 often corresponds to the standard "1x" wide-angle lens.
-                    // We set this as the default to provide a familiar starting point for users.
-                    let defaultWideAngleZoom: CGFloat = 2.0
-                    if finalDevice.isVirtualDevice && finalDevice.constituentDevices.count > 1 && finalDevice.videoZoomFactor != defaultWideAngleZoom {
-                        // Check if 2.0 is a valid zoom factor before setting it.
-                        if defaultWideAngleZoom >= finalDevice.minAvailableVideoZoomFactor && defaultWideAngleZoom <= finalDevice.maxAvailableVideoZoomFactor {
-                             print("[CameraPreview] Multi-camera system detected. Setting initial zoom to \(defaultWideAngleZoom) (standard wide-angle).")
-                             finalDevice.videoZoomFactor = defaultWideAngleZoom
-                        }
-                    }
-                    finalDevice.unlockForConfiguration()
-                    // --- End of Correction ---
-                }
-            } else {
-                print("[CameraPreview] ERROR: Cannot add device input to session.")
-                throw CameraControllerError.inputsAreInvalid
-            }
-
-            // Add audio input
-            if disableAudio == false {
-                if let audioDevice = self.audioDevice {
-                    self.audioInput = try AVCaptureDeviceInput(device: audioDevice)
-                    if captureSession.canAddInput(self.audioInput!) {
-                        captureSession.addInput(self.audioInput!)
-                    } else {
-                        throw CameraControllerError.inputsAreInvalid
-                    }
+                    throw CameraControllerError.inputsAreInvalid
                 }
             }
         }
+    }
 
-        func configurePhotoOutput(cameraMode: Bool) throws {
-            guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
+    private func addOutputsToSession(cameraMode: Bool, aspectRatio: String?) throws {
+        guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
 
-            // Configure session preset for high-quality preview
-            // Prioritize higher quality presets for better preview resolution
-            var targetPreset: AVCaptureSession.Preset = .high // Default to high quality
-
-            if let aspectRatio = aspectRatio {
-                switch aspectRatio {
-                case "16:9":
-                    // Use highest available HD preset for 16:9 aspect ratio
-                    if captureSession.canSetSessionPreset(.hd4K3840x2160) {
-                        targetPreset = .hd4K3840x2160
-                    } else if captureSession.canSetSessionPreset(.hd1920x1080) {
-                        targetPreset = .hd1920x1080
-                    } else if captureSession.canSetSessionPreset(.hd1280x720) {
-                        targetPreset = .hd1280x720
-                    } else {
-                        targetPreset = .high
-                    }
-                case "4:3":
-                    // Use photo preset for 4:3 aspect ratio (highest quality)
-                    if captureSession.canSetSessionPreset(.photo) {
-                        targetPreset = .photo
-                    } else if captureSession.canSetSessionPreset(.high) {
-                        targetPreset = .high
-                    } else {
-                        targetPreset = .medium
-                    }
-                default:
-                    // Default to highest available quality
-                    if captureSession.canSetSessionPreset(.photo) {
-                        targetPreset = .photo
-                    } else if captureSession.canSetSessionPreset(.high) {
-                        targetPreset = .high
-                    } else {
-                        targetPreset = .medium
-                    }
-                }
-            } else {
-                // Default to highest available quality when no aspect ratio specified
-                if captureSession.canSetSessionPreset(.photo) {
-                    targetPreset = .photo
-                } else if captureSession.canSetSessionPreset(.high) {
-                    targetPreset = .high
-                } else {
-                    targetPreset = .medium
-                }
+        // Update session preset based on aspect ratio if needed
+        if let aspectRatio = aspectRatio {
+            var targetPreset: AVCaptureSession.Preset
+            switch aspectRatio {
+            case "16:9":
+                targetPreset = captureSession.canSetSessionPreset(.hd1920x1080) ? .hd1920x1080 : .high
+            case "4:3":
+                targetPreset = captureSession.canSetSessionPreset(.photo) ? .photo : .high
+            default:
+                targetPreset = .high
             }
 
-            // Apply the determined preset
             if captureSession.canSetSessionPreset(targetPreset) {
                 captureSession.sessionPreset = targetPreset
-                print("[CameraPreview] Set session preset to \(targetPreset) for aspect ratio: \(aspectRatio ?? "default")")
-            } else {
-                // Fallback to high quality preset if the target preset is not supported
-                print("[CameraPreview] Target preset \(targetPreset) not supported, falling back to .high")
-                if captureSession.canSetSessionPreset(.high) {
-                    captureSession.sessionPreset = .high
-                } else if captureSession.canSetSessionPreset(.medium) {
-                    captureSession.sessionPreset = .medium
-                }
+                print("[CameraPreview] Updated preset to \(targetPreset) for aspect ratio: \(aspectRatio)")
             }
-
-            self.photoOutput = AVCapturePhotoOutput()
-            self.photoOutput!.setPreparedPhotoSettingsArray([AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])], completionHandler: nil)
-            self.photoOutput?.isHighResolutionCaptureEnabled = self.highResolutionOutput
-            if captureSession.canAddOutput(self.photoOutput!) { captureSession.addOutput(self.photoOutput!) }
-
-            let fileVideoOutput = AVCaptureMovieFileOutput()
-            if captureSession.canAddOutput(fileVideoOutput) {
-                captureSession.addOutput(fileVideoOutput)
-                self.fileVideoOutput = fileVideoOutput
-            }
-            captureSession.startRunning()
         }
 
-        func configureDataOutput() throws {
-            guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
+        // Add photo output (already created in prepareOutputs)
+        if let photoOutput = self.photoOutput, captureSession.canAddOutput(photoOutput) {
+            photoOutput.isHighResolutionCaptureEnabled = self.highResolutionOutput
+            captureSession.addOutput(photoOutput)
+        }
 
-            self.dataOutput = AVCaptureVideoDataOutput()
-            self.dataOutput?.videoSettings = [
-                (kCVPixelBufferPixelFormatTypeKey as String): NSNumber(value: kCVPixelFormatType_32BGRA as UInt32)
-            ]
-            self.dataOutput?.alwaysDiscardsLateVideoFrames = true
-            if captureSession.canAddOutput(self.dataOutput!) {
-                captureSession.addOutput(self.dataOutput!)
-            }
+        // Add video output only if camera mode is enabled
+        if cameraMode, let videoOutput = self.fileVideoOutput, captureSession.canAddOutput(videoOutput) {
+            captureSession.addOutput(videoOutput)
+        }
 
+        // Add data output
+        if let dataOutput = self.dataOutput, captureSession.canAddOutput(dataOutput) {
+            captureSession.addOutput(dataOutput)
             captureSession.commitConfiguration()
 
-            let queue = DispatchQueue(label: "DataOutput", attributes: [])
-            self.dataOutput?.setSampleBufferDelegate(self, queue: queue)
-        }
-
-        DispatchQueue(label: "prepare").async {
-            do {
-                createCaptureSession()
-                try configureCaptureDevices()
-                try configureDeviceInputs()
-                try configurePhotoOutput(cameraMode: cameraMode)
-                try configureDataOutput()
-                // try configureVideoOutput()
-            } catch {
-                DispatchQueue.main.async {
-                    completionHandler(error)
-                }
-
-                return
-            }
-
-            DispatchQueue.main.async {
-                completionHandler(nil)
-            }
+            dataOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
         }
     }
 
@@ -386,7 +313,7 @@ extension CameraController {
         }
 
         view.layer.insertSublayer(self.previewLayer!, at: 0)
-        
+
         // Disable animation for frame update
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -443,8 +370,8 @@ extension CameraController {
         if Thread.isMainThread {
             updateVideoOrientationOnMainThread()
         } else {
-            DispatchQueue.main.async { [weak self] in
-                self?.updateVideoOrientationOnMainThread()
+            DispatchQueue.main.sync {
+                self.updateVideoOrientationOnMainThread()
             }
         }
     }
@@ -485,7 +412,7 @@ extension CameraController {
 
         // Ensure we have the necessary cameras
         guard (currentCameraPosition == .front && rearCamera != nil) ||
-              (currentCameraPosition == .rear && frontCamera != nil) else {
+                (currentCameraPosition == .rear && frontCamera != nil) else {
             throw CameraControllerError.noCamerasAvailable
         }
 
@@ -501,9 +428,7 @@ extension CameraController {
             captureSession.commitConfiguration()
             // Restart the session if it was running before
             if wasRunning {
-                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    self?.captureSession?.startRunning()
-                }
+                captureSession.startRunning()
             }
         }
 
@@ -513,7 +438,7 @@ extension CameraController {
         // Remove only video inputs
         captureSession.inputs.forEach { input in
             if (input as? AVCaptureDeviceInput)?.device.hasMediaType(.video) ?? false {
-            captureSession.removeInput(input)
+                captureSession.removeInput(input)
             }
         }
 
@@ -532,7 +457,7 @@ extension CameraController {
             rearCamera.unlockForConfiguration()
 
             if let newInput = try? AVCaptureDeviceInput(device: rearCamera),
-                captureSession.canAddInput(newInput) {
+               captureSession.canAddInput(newInput) {
                 captureSession.addInput(newInput)
                 rearCameraInput = newInput
                 self.currentCameraPosition = .rear
@@ -552,7 +477,7 @@ extension CameraController {
             frontCamera.unlockForConfiguration()
 
             if let newInput = try? AVCaptureDeviceInput(device: frontCamera),
-                captureSession.canAddInput(newInput) {
+               captureSession.canAddInput(newInput) {
                 captureSession.addInput(newInput)
                 frontCameraInput = newInput
                 self.currentCameraPosition = .front
@@ -567,9 +492,7 @@ extension CameraController {
         }
 
         // Update video orientation
-        DispatchQueue.main.async { [weak self] in
-            self?.updateVideoOrientation()
-        }
+        self.updateVideoOrientation()
     }
 
     func captureImage(width: Int?, height: Int?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
@@ -637,7 +560,7 @@ extension CameraController {
 
     func resizeImage(image: UIImage, to size: CGSize) -> UIImage? {
         let renderer = UIGraphicsImageRenderer(size: size)
-        let resizedImage = renderer.image { (context) in
+        let resizedImage = renderer.image { (_) in
             image.draw(in: CGRect(origin: .zero, size: size))
         }
         return resizedImage
@@ -963,9 +886,7 @@ extension CameraController {
             captureSession.commitConfiguration()
             // Restart the session if it was running before
             if wasRunning {
-                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    self?.captureSession?.startRunning()
-                }
+                captureSession.startRunning()
             }
         }
 
@@ -1012,12 +933,8 @@ extension CameraController {
         }
 
         // Update video orientation
-        DispatchQueue.main.async { [weak self] in
-            self?.updateVideoOrientation()
-        }
+        self.updateVideoOrientation()
     }
-
-
 
     func cleanup() {
         if let captureSession = self.captureSession {
@@ -1139,7 +1056,7 @@ extension CameraController: UIGestureRecognizerDelegate {
         }
     }
 
-        @objc
+    @objc
     private func handlePinch(_ pinch: UIPinchGestureRecognizer) {
         guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }
 
@@ -1151,7 +1068,7 @@ extension CameraController: UIGestureRecognizerDelegate {
             // Store the initial zoom factor when pinch begins
             zoomFactor = device.videoZoomFactor
 
-                case .changed:
+        case .changed:
             // Throttle zoom updates to prevent excessive CPU usage
             let currentTime = CACurrentMediaTime()
             guard currentTime - lastZoomUpdateTime >= zoomUpdateThrottle else { return }
@@ -1181,16 +1098,24 @@ extension CameraController: UIGestureRecognizerDelegate {
 }
 
 extension CameraController: AVCapturePhotoCaptureDelegate {
-    public func photoOutput(_ captureOutput: AVCapturePhotoOutput, didFinishProcessingPhoto photoSampleBuffer: CMSampleBuffer?, previewPhoto previewPhotoSampleBuffer: CMSampleBuffer?,
-                            resolvedSettings: AVCaptureResolvedPhotoSettings, bracketSettings: AVCaptureBracketedStillImageSettings?, error: Swift.Error?) {
+    public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
             self.photoCaptureCompletionBlock?(nil, error)
-        } else if let buffer = photoSampleBuffer, let data = AVCapturePhotoOutput.jpegPhotoDataRepresentation(forJPEGSampleBuffer: buffer, previewPhotoSampleBuffer: nil),
-                  let image = UIImage(data: data) {
-            self.photoCaptureCompletionBlock?(image.fixedOrientation(), nil)
-        } else {
-            self.photoCaptureCompletionBlock?(nil, CameraControllerError.unknown)
+            return
         }
+
+        // Get the photo data using the modern API
+        guard let imageData = photo.fileDataRepresentation() else {
+            self.photoCaptureCompletionBlock?(nil, CameraControllerError.unknown)
+            return
+        }
+
+        guard let image = UIImage(data: imageData) else {
+            self.photoCaptureCompletionBlock?(nil, CameraControllerError.unknown)
+            return
+        }
+
+        self.photoCaptureCompletionBlock?(image.fixedOrientation(), nil)
     }
 }
 
@@ -1312,6 +1237,8 @@ extension UIImage {
             print("right")
         case .up, .upMirrored:
             break
+        @unknown default:
+            break
         }
 
         // Flip image one more time if needed to, this is to prevent flipped image
@@ -1323,6 +1250,8 @@ extension UIImage {
             transform.translatedBy(x: size.height, y: 0)
             transform.scaledBy(x: -1, y: 1)
         case .up, .down, .left, .right:
+            break
+        @unknown default:
             break
         }
 

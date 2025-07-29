@@ -1,4 +1,11 @@
-import { Component, inject, model, OnInit, signal, computed } from '@angular/core';
+import {
+  Component,
+  inject,
+  model,
+  OnInit,
+  signal,
+  computed,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   IonButton,
@@ -73,8 +80,12 @@ export class CameraViewPage implements OnInit {
   readonly #modalController = inject(ModalController);
 
   protected readonly cameraDevices = signal<CameraDevice[]>([]);
-  protected readonly rearCameras = computed(() => this.cameraDevices().filter(d => d.position === 'rear'));
-  protected readonly frontCameras = computed(() => this.cameraDevices().filter(d => d.position === 'front'));
+  protected readonly rearCameras = computed(() =>
+    this.cameraDevices().filter((d) => d.position === 'rear'),
+  );
+  protected readonly frontCameras = computed(() =>
+    this.cameraDevices().filter((d) => d.position === 'front'),
+  );
   protected readonly testResults = signal<string>('');
 
   // Basic camera settings
@@ -121,7 +132,10 @@ export class CameraViewPage implements OnInit {
   }
 
   protected setPreset(preset: string) {
-    let x = 0, y = 0, w = 0, h = 0;
+    let x = 0,
+      y = 0,
+      w = 0,
+      h = 0;
     const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
     switch (preset) {
@@ -159,7 +173,7 @@ export class CameraViewPage implements OnInit {
 
   protected setCapturePreset(preset: string) {
     let width: number, height: number;
-    
+
     switch (preset) {
       case 'vga':
         width = 640;
@@ -199,13 +213,15 @@ export class CameraViewPage implements OnInit {
       default:
         return;
     }
-    
+
     this.pictureWidth.set(width);
     this.pictureHeight.set(height);
     this.useCustomSize.set(true);
-    
+
     // Add to test results to show what was selected
-    const results = this.testResults() + `\n📐 Capture size set to: ${width}x${height} (${preset.toUpperCase()})`;
+    const results =
+      this.testResults() +
+      `\n📐 Capture size set to: ${width}x${height} (${preset.toUpperCase()})`;
     this.testResults.set(results);
   }
 
@@ -221,7 +237,8 @@ export class CameraViewPage implements OnInit {
         y: this.previewY(),
         width: this.previewWidth(),
         height: this.previewHeight(),
-        aspectRatio: this.aspectRatio() === 'custom' ? undefined : this.aspectRatio(),
+        aspectRatio:
+          this.aspectRatio() === 'custom' ? undefined : this.aspectRatio(),
         useTripleCameraIfAvailable: this.useTripleCameraIfAvailable(),
         initialZoomFactor: this.initialZoomFactor(),
         pictureFormat: this.pictureFormat(),
@@ -253,7 +270,8 @@ export class CameraViewPage implements OnInit {
 
     if (data?.error) {
       // Show error in test results
-      const results = this.testResults() + `\n✗ Camera start failed: ${data.error}`;
+      const results =
+        this.testResults() + `\n✗ Camera start failed: ${data.error}`;
       this.testResults.set(results);
       return;
     }
@@ -278,7 +296,8 @@ export class CameraViewPage implements OnInit {
   protected async testHorizontalFov(): Promise<void> {
     try {
       const fov = await this.#cameraViewService.getHorizontalFov();
-      const results = this.testResults() + `\n✓ Horizontal FOV: ${JSON.stringify(fov)}`;
+      const results =
+        this.testResults() + `\n✓ Horizontal FOV: ${JSON.stringify(fov)}`;
       this.testResults.set(results);
     } catch (error) {
       const results = this.testResults() + `\n✗ FOV test failed: ${error}`;
@@ -289,10 +308,13 @@ export class CameraViewPage implements OnInit {
   protected async testSupportedPictureSizes(): Promise<void> {
     try {
       const sizes = await this.#cameraViewService.getSupportedPictureSizes();
-      const results = this.testResults() + `\n✓ Picture sizes: ${JSON.stringify(sizes, null, 2)}`;
+      const results =
+        this.testResults() +
+        `\n✓ Picture sizes: ${JSON.stringify(sizes, null, 2)}`;
       this.testResults.set(results);
     } catch (error) {
-      const results = this.testResults() + `\n✗ Picture sizes test failed: ${error}`;
+      const results =
+        this.testResults() + `\n✗ Picture sizes test failed: ${error}`;
       this.testResults.set(results);
     }
   }
@@ -300,10 +322,12 @@ export class CameraViewPage implements OnInit {
   protected async testFlashModes(): Promise<void> {
     try {
       const modes = await this.#cameraViewService.getSupportedFlashModes();
-      const results = this.testResults() + `\n✓ Flash modes: ${modes.join(', ')}`;
+      const results =
+        this.testResults() + `\n✓ Flash modes: ${modes.join(', ')}`;
       this.testResults.set(results);
     } catch (error) {
-      const results = this.testResults() + `\n✗ Flash modes test failed: ${error}`;
+      const results =
+        this.testResults() + `\n✗ Flash modes test failed: ${error}`;
       this.testResults.set(results);
     }
   }
@@ -311,7 +335,9 @@ export class CameraViewPage implements OnInit {
   protected async testZoomCapabilities(): Promise<void> {
     try {
       const zoom = await this.#cameraViewService.getZoom();
-      const results = this.testResults() + `\n✓ Zoom: min=${zoom.min}, max=${zoom.max}, current=${zoom.current}`;
+      const results =
+        this.testResults() +
+        `\n✓ Zoom: min=${zoom.min}, max=${zoom.max}, current=${zoom.current}`;
       this.testResults.set(results);
     } catch (error) {
       const results = this.testResults() + `\n✗ Zoom test failed: ${error}`;
@@ -356,7 +382,7 @@ export class CameraViewPage implements OnInit {
         results += `\n  ${index + 1}. ${device.label} (${device.position})`;
         results += `\n     Lenses: ${device.lenses.length}`;
         results += `\n     Overall zoom range: ${device.minZoom}x - ${device.maxZoom}x`;
-        device.lenses.forEach(lens => {
+        device.lenses.forEach((lens) => {
           results += `\n       - ${lens.deviceType}: ${lens.baseZoomRatio}x base (${lens.minZoom}x-${lens.maxZoom}x)`;
         });
       });

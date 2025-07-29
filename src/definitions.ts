@@ -107,7 +107,7 @@ export interface CameraPreviewOptions {
    *
    * @since 2.0.0
    */
-  aspectRatio?: '4:3' | '16:9' | 'fill';
+  aspectRatio?: "4:3" | "16:9";
   /**
    * The grid overlay to display on the camera preview.
    * @default "none"
@@ -268,11 +268,7 @@ export interface CameraSampleOptions {
  * The available flash modes for the camera.
  * 'torch' is a continuous light mode.
  */
-export type CameraPreviewFlashMode =
-  | "off"
-  | "on"
-  | "auto"
-  | "torch";
+export type CameraPreviewFlashMode = "off" | "on" | "auto" | "torch";
 
 /**
  * Defines the options for setting the camera preview's opacity.
@@ -324,7 +320,7 @@ export interface CameraPreviewPlugin {
    * @since 0.0.1
    */
   capture(
-    options: CameraPreviewPictureOptions
+    options: CameraPreviewPictureOptions,
   ): Promise<{ value: string; exif: ExifData }>;
 
   /**
@@ -356,7 +352,11 @@ export interface CameraPreviewPlugin {
    * @returns {Promise<{ width: number; height: number; x: number; y: number }>} A promise that resolves with the actual preview dimensions and position.
    * @since 7.4.0
    */
-  setAspectRatio(options: { aspectRatio: '4:3' | '16:9'; x?: number; y?: number }): Promise<{
+  setAspectRatio(options: {
+    aspectRatio: "4:3" | "16:9";
+    x?: number;
+    y?: number;
+  }): Promise<{
     width: number;
     height: number;
     x: number;
@@ -369,7 +369,7 @@ export interface CameraPreviewPlugin {
    * @returns {Promise<{ aspectRatio: '4:3' | '16:9' }>} A promise that resolves with the current aspect ratio.
    * @since 7.4.0
    */
-  getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' }>;
+  getAspectRatio(): Promise<{ aspectRatio: "4:3" | "16:9" }>;
 
   /**
    * Sets the grid mode of the camera preview overlay.
@@ -528,13 +528,23 @@ export interface CameraPreviewPlugin {
    * Gets the current preview size and position.
    * @returns {Promise<{x: number, y: number, width: number, height: number}>}
    */
-  getPreviewSize(): Promise<{x: number, y: number, width: number, height: number}>;
+  getPreviewSize(): Promise<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
   /**
    * Sets the preview size and position.
    * @param options The new position and dimensions.
    * @returns {Promise<{ width: number; height: number; x: number; y: number }>} A promise that resolves with the actual preview dimensions and position.
    */
-  setPreviewSize(options: {x: number, y: number, width: number, height: number}): Promise<{
+  setPreviewSize(options: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Promise<{
     width: number;
     height: number;
     x: number;

@@ -1,11 +1,10 @@
 import Foundation
-import Capacitor
 import AVFoundation
 import Photos
+import Capacitor
 import CoreImage
 import CoreLocation
 import MobileCoreServices
-
 
 extension UIWindow {
     static var isLandscape: Bool {
@@ -90,42 +89,37 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     var currentLocation: CLLocation?
     private var aspectRatio: String?
     private var gridMode: String = "none"
+    private var permissionCallID: String?
+    private var waitingForLocation: Bool = false
 
     // MARK: - Transparency Methods
-
 
     private func makeWebViewTransparent() {
         guard let webView = self.webView else { return }
 
-
-        // Define a recursive function to traverse the view hierarchy
-        func makeSubviewsTransparent(_ view: UIView) {
-            // Set the background color to clear
-            view.backgroundColor = .clear
-
-
-            // Recurse for all subviews
-            for subview in view.subviews {
-                makeSubviewsTransparent(subview)
-            }
-        }
-
-
-        // Set the main webView to be transparent
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-
-
-        // Recursively make all subviews transparent
-        makeSubviewsTransparent(webView)
-
-
-        // Also ensure the webview's container is transparent
-        webView.superview?.backgroundColor = .clear
-
-
-        // Force a layout pass to apply changes
         DispatchQueue.main.async {
+            // Define a recursive function to traverse the view hierarchy
+            func makeSubviewsTransparent(_ view: UIView) {
+                // Set the background color to clear
+                view.backgroundColor = .clear
+
+                // Recurse for all subviews
+                for subview in view.subviews {
+                    makeSubviewsTransparent(subview)
+                }
+            }
+
+            // Set the main webView to be transparent
+            webView.isOpaque = false
+            webView.backgroundColor = .clear
+
+            // Recursively make all subviews transparent
+            makeSubviewsTransparent(webView)
+
+            // Also ensure the webview's container is transparent
+            webView.superview?.backgroundColor = .clear
+
+            // Force a layout pass to apply changes
             webView.setNeedsLayout()
             webView.layoutIfNeeded()
         }
@@ -150,7 +144,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             // Manual positioning - use original rotation logic with no animation
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            
+
             if UIWindow.isLandscape {
                 previewView.frame = CGRect(x: posY, y: posX, width: max(height, width), height: min(height, width))
                 self.cameraController.previewLayer?.frame = previewView.bounds
@@ -160,7 +154,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 previewView.frame = CGRect(x: posX, y: posY, width: min(height, width), height: max(height, width))
                 self.cameraController.previewLayer?.frame = previewView.bounds
             }
-            
+
             CATransaction.commit()
         }
 
@@ -202,65 +196,67 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("camera not started")
             return
         }
-        
+
         guard let newAspectRatio = call.getString("aspectRatio") else {
             call.reject("aspectRatio parameter is required")
             return
         }
-        
+
         self.aspectRatio = newAspectRatio
-        
-        // When aspect ratio changes, calculate maximum size possible from current position
-        if let posX = self.posX, let posY = self.posY {
-            let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
-            let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
-            let paddingBottom = self.paddingBottom ?? 0
-            
-            // Calculate available space from current position
-            let availableWidth: CGFloat
-            let availableHeight: CGFloat
-            
-            if posX == -1 || posY == -1 {
-                // Auto-centering mode - use full dimensions
-                availableWidth = webViewWidth
-                availableHeight = webViewHeight - paddingBottom
-            } else {
-                // Manual positioning - calculate remaining space
-                availableWidth = webViewWidth - posX
-                availableHeight = webViewHeight - posY - paddingBottom
+
+        DispatchQueue.main.async {
+            // When aspect ratio changes, calculate maximum size possible from current position
+            if let posX = self.posX, let posY = self.posY {
+                let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
+                let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
+                let paddingBottom = self.paddingBottom ?? 0
+
+                // Calculate available space from current position
+                let availableWidth: CGFloat
+                let availableHeight: CGFloat
+
+                if posX == -1 || posY == -1 {
+                    // Auto-centering mode - use full dimensions
+                    availableWidth = webViewWidth
+                    availableHeight = webViewHeight - paddingBottom
+                } else {
+                    // Manual positioning - calculate remaining space
+                    availableWidth = webViewWidth - posX
+                    availableHeight = webViewHeight - posY - paddingBottom
+                }
+
+                // Parse aspect ratio - convert to portrait orientation for camera use
+                let ratioParts = newAspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
+                // For camera, we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+                let ratio = ratioParts[1] / ratioParts[0]
+
+                // Calculate maximum size that fits the aspect ratio in available space
+                let maxWidthByHeight = availableHeight * CGFloat(ratio)
+                let maxHeightByWidth = availableWidth / CGFloat(ratio)
+
+                if maxWidthByHeight <= availableWidth {
+                    // Height is the limiting factor
+                    self.width = maxWidthByHeight
+                    self.height = availableHeight
+                } else {
+                    // Width is the limiting factor
+                    self.width = availableWidth
+                    self.height = maxHeightByWidth
+                }
+
+                print("[CameraPreview] Aspect ratio changed to \(newAspectRatio), new size: \(self.width!)x\(self.height!)")
             }
-            
-            // Parse aspect ratio - convert to portrait orientation for camera use
-            let ratioParts = newAspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
-            // For camera, we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-            let ratio = ratioParts[1] / ratioParts[0]
-            
-            // Calculate maximum size that fits the aspect ratio in available space
-            let maxWidthByHeight = availableHeight * CGFloat(ratio)
-            let maxHeightByWidth = availableWidth / CGFloat(ratio)
-            
-            if maxWidthByHeight <= availableWidth {
-                // Height is the limiting factor
-                self.width = maxWidthByHeight
-                self.height = availableHeight
-            } else {
-                // Width is the limiting factor
-                self.width = availableWidth
-                self.height = maxHeightByWidth
-            }
-            
-            print("[CameraPreview] Aspect ratio changed to \(newAspectRatio), new size: \(self.width!)x\(self.height!)")
+
+            self.updateCameraFrame()
+
+            // Return the actual preview bounds
+            var result = JSObject()
+            result["x"] = Double(self.previewView.frame.origin.x)
+            result["y"] = Double(self.previewView.frame.origin.y)
+            result["width"] = Double(self.previewView.frame.width)
+            result["height"] = Double(self.previewView.frame.height)
+            call.resolve(result)
         }
-        
-        self.updateCameraFrame()
-        
-        // Return the actual preview bounds
-        var result = JSObject()
-        result["x"] = Double(self.previewView.frame.origin.x)
-        result["y"] = Double(self.previewView.frame.origin.y)
-        result["width"] = Double(self.previewView.frame.width)
-        result["height"] = Double(self.previewView.frame.height)
-        call.resolve(result)
     }
 
     @objc func getAspectRatio(_ call: CAPPluginCall) {
@@ -311,7 +307,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             }
         }
     }
-
 
     @objc func appWillEnterForeground() {
         if self.isInitialized {
@@ -464,7 +459,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         print("[CameraPreview] Camera start parameters - aspectRatio: \(String(describing: self.aspectRatio)), gridMode: \(self.gridMode)")
         print("[CameraPreview] Screen dimensions: \(UIScreen.main.bounds.size)")
-        print("[CameraPreview] Final frame dimensions - width: \(self.width), height: \(self.height), x: \(self.posX), y: \(self.posY)")
+        print("[CameraPreview] Final frame dimensions - width: \(String(describing: self.width)), height: \(String(describing: self.height)), x: \(String(describing: self.posX)), y: \(String(describing: self.posY))")
 
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
             guard granted else {
@@ -472,40 +467,26 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 return
             }
 
-            DispatchQueue.main.async {
-                if self.cameraController.captureSession?.isRunning ?? false {
-                    call.reject("camera already started")
-                } else {
-                    self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio) {error in
-                        if let error = error {
-                            print(error)
-                            call.reject(error.localizedDescription)
-                            return
-                        }
+            if self.cameraController.captureSession?.isRunning ?? false {
+                call.reject("camera already started")
+            } else {
+                // Pre-initialize session if not already done
+                if self.cameraController.captureSession == nil {
+                    self.cameraController.prepareFullSession()
+                }
+
+                self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio) {error in
+                    if let error = error {
+                        print(error)
+                        call.reject(error.localizedDescription)
+                        return
+                    }
+                    DispatchQueue.main.async {
                         self.completeStartCamera(call: call)
                     }
                 }
             }
         })
-    }
-
-    override public func load() {
-        super.load()
-        // Initialize camera session in background for faster startup
-        prepareBackgroundCamera()
-    }
-
-    private func prepareBackgroundCamera() {
-        DispatchQueue.global(qos: .background).async {
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                guard granted else { return }
-                
-                // Pre-initialize camera controller for faster startup
-                DispatchQueue.main.async {
-                    self.cameraController.prepareBasicSession()
-                }
-            }
-        }
     }
 
     private func completeStartCamera(call: CAPPluginCall) {
@@ -557,74 +538,44 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else {
-                call.reject("Camera controller deallocated")
-                return
-            }
+        // Disable user interaction during flip
+        self.previewView.isUserInteractionEnabled = false
 
-            // Disable user interaction during flip
-            self.previewView.isUserInteractionEnabled = false
+        do {
+            try self.cameraController.switchCameras()
 
-            // Perform camera switch on background thread
-            DispatchQueue.global(qos: .userInitiated).async {
-                var retryCount = 0
-                let maxRetries = 3
+            // Update preview layer frame without animation
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.cameraController.previewLayer?.frame = self.previewView.bounds
+            self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+            CATransaction.commit()
 
-                func attemptFlip() {
-                    do {
-                        try self.cameraController.switchCameras()
+            self.previewView.isUserInteractionEnabled = true
 
-                        DispatchQueue.main.async {
-                            // Update preview layer frame without animation
-                            CATransaction.begin()
-                            CATransaction.setDisableActions(true)
-                            self.cameraController.previewLayer?.frame = self.previewView.bounds
-                            self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
-                            CATransaction.commit()
-                            
-                            self.previewView.isUserInteractionEnabled = true
+            // Ensure webview remains transparent after flip
+            self.makeWebViewTransparent()
 
-
-                            // Ensure webview remains transparent after flip
-                            self.makeWebViewTransparent()
-
-
-                            call.resolve()
-                        }
-                    } catch {
-                        retryCount += 1
-
-                        if retryCount < maxRetries {
-                            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
-                                attemptFlip()
-                            }
-                        } else {
-                            DispatchQueue.main.async {
-                                self.previewView.isUserInteractionEnabled = true
-                                print("Failed to flip camera after \(maxRetries) attempts: \(error.localizedDescription)")
-                                call.reject("Failed to flip camera: \(error.localizedDescription)")
-                            }
-                        }
-                    }
-                }
-
-                attemptFlip()
-            }
+            call.resolve()
+        } catch {
+            self.previewView.isUserInteractionEnabled = true
+            print("Failed to flip camera: \(error.localizedDescription)")
+            call.reject("Failed to flip camera: \(error.localizedDescription)")
         }
     }
 
     @objc func stop(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
-            if self.isInitializing {
-                call.reject("cannot stop camera while initialization is in progress")
-                return
-            }
-            if !self.isInitialized {
-                call.reject("camera not initialized")
-                return
-            }
+        if self.isInitializing {
+            call.reject("cannot stop camera while initialization is in progress")
+            return
+        }
+        if !self.isInitialized {
+            call.reject("camera not initialized")
+            return
+        }
 
+        // UI operations must be on main thread
+        DispatchQueue.main.async {
             // Always attempt to stop and clean up, regardless of captureSession state
             self.cameraController.removeGridOverlay()
             if let previewView = self.previewView {
@@ -636,7 +587,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             self.isInitialized = false
             self.isInitializing = false
             self.cameraController.cleanup()
-
 
             // Remove notification observers
             NotificationCenter.default.removeObserver(self)
@@ -656,74 +606,137 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     @objc func capture(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
+        let withExifLocation = call.getBool("withExifLocation", false)
+        print("[CameraPreview] capture called, withExifLocation: \(withExifLocation)")
 
-            let quality = call.getFloat("quality", 85)
-            let saveToGallery = call.getBool("saveToGallery", false)
-            let withExifLocation = call.getBool("withExifLocation", false)
-            let width = call.getInt("width")
-            let height = call.getInt("height")
+        if withExifLocation {
+            print("[CameraPreview] Location required for capture")
 
-            if withExifLocation {
-                self.locationManager = CLLocationManager()
-                self.locationManager?.delegate = self
-                self.locationManager?.requestWhenInUseAuthorization()
-                self.locationManager?.startUpdatingLocation()
+            // Check location services before main thread dispatch
+            guard CLLocationManager.locationServicesEnabled() else {
+                print("[CameraPreview] Location services are disabled")
+                call.reject("Location services are disabled")
+                return
             }
 
-            self.cameraController.captureImage(width: width, height: height, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
+            // Check if Info.plist has the required key
+            guard Bundle.main.object(forInfoDictionaryKey: "NSLocationWhenInUseUsageDescription") != nil else {
+                print("[CameraPreview] ERROR: NSLocationWhenInUseUsageDescription key missing from Info.plist")
+                call.reject("NSLocationWhenInUseUsageDescription key missing from Info.plist. Add this key with a description of how your app uses location.")
+                return
+            }
+
+            // Ensure location manager setup happens on main thread
+            DispatchQueue.main.async {
+                if self.locationManager == nil {
+                    print("[CameraPreview] Creating location manager on main thread")
+                    self.locationManager = CLLocationManager()
+                    self.locationManager?.delegate = self
+                    self.locationManager?.desiredAccuracy = kCLLocationAccuracyBest
+                    print("[CameraPreview] Location manager created, delegate set to: \(self)")
+                }
+
+                // Check current authorization status
+                let currentStatus = self.locationManager?.authorizationStatus ?? .notDetermined
+                print("[CameraPreview] Current authorization status: \(currentStatus.rawValue)")
+
+                switch currentStatus {
+                case .authorizedWhenInUse, .authorizedAlways:
+                    // Already authorized, get location and capture
+                    print("[CameraPreview] Already authorized, getting location immediately")
+                    self.getCurrentLocation { _ in
+                        self.performCapture(call: call)
+                    }
+
+                case .denied, .restricted:
+                    // Permission denied
+                    print("[CameraPreview] Location permission denied")
+                    call.reject("Location permission denied")
+
+                case .notDetermined:
+                    // Need to request permission
+                    print("[CameraPreview] Location permission not determined, requesting...")
+                    // Save the call for the delegate callback
+                    print("[CameraPreview] Saving call for location authorization flow")
+                    self.bridge?.saveCall(call)
+                    self.permissionCallID = call.callbackId
+                    self.waitingForLocation = true
+
+                    // Request authorization - this will trigger locationManagerDidChangeAuthorization
+                    print("[CameraPreview] Requesting location authorization...")
+                    self.locationManager?.requestWhenInUseAuthorization()
+                // The delegate will handle the rest
+
+                @unknown default:
+                    print("[CameraPreview] Unknown authorization status")
+                    call.reject("Unknown location permission status")
+                }
+            }
+        } else {
+            print("[CameraPreview] No location required, performing capture directly")
+            self.performCapture(call: call)
+        }
+    }
+
+    private func performCapture(call: CAPPluginCall) {
+        print("[CameraPreview] performCapture called")
+        let quality = call.getFloat("quality", 85)
+        let saveToGallery = call.getBool("saveToGallery", false)
+        let withExifLocation = call.getBool("withExifLocation", false)
+        let width = call.getInt("width")
+        let height = call.getInt("height")
+
+        print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1)")
+        print("[CameraPreview] Current location: \(self.currentLocation?.description ?? "nil")")
+
+        self.cameraController.captureImage(width: width, height: height, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
+            print("[CameraPreview] captureImage callback received")
+            DispatchQueue.main.async {
+                print("[CameraPreview] Processing capture on main thread")
                 if let error = error {
+                    print("[CameraPreview] Capture error: \(error.localizedDescription)")
                     call.reject(error.localizedDescription)
                     return
                 }
 
-                        var gallerySuccess = true
-            var galleryError: String?
-            
-            let group = DispatchGroup()
-            
-            group.notify(queue: .main) {
                 guard let imageDataWithExif = self.createImageDataWithExif(from: image!, quality: Int(quality), location: withExifLocation ? self.currentLocation : nil) else {
+                    print("[CameraPreview] Failed to create image data with EXIF")
                     call.reject("Failed to create image data with EXIF")
                     return
                 }
 
+                print("[CameraPreview] Image data created, size: \(imageDataWithExif.count) bytes")
+
                 if saveToGallery {
-                    group.enter()
+                    print("[CameraPreview] Saving to gallery...")
                     self.saveImageDataToGallery(imageData: imageDataWithExif) { success, error in
-                        gallerySuccess = success
-                        if !success {
-                            galleryError = error?.localizedDescription ?? "Unknown error"
-                            print("CameraPreview: Error saving image to gallery: \(galleryError!)")
-                        }
-                        group.leave()
-                    }
-                    
-                    group.notify(queue: .main) {
+                        print("[CameraPreview] Save to gallery completed, success: \(success), error: \(error?.localizedDescription ?? "none")")
                         let exifData = self.getExifData(from: imageDataWithExif)
                         let base64Image = imageDataWithExif.base64EncodedString()
 
                         var result = JSObject()
                         result["value"] = base64Image
                         result["exif"] = exifData
-                        result["gallerySaved"] = gallerySuccess
-                        if !gallerySuccess, let error = galleryError {
-                            result["galleryError"] = error
+                        result["gallerySaved"] = success
+                        if !success, let error = error {
+                            result["galleryError"] = error.localizedDescription
                         }
-                        
+
+                        print("[CameraPreview] Resolving capture call with gallery save")
                         call.resolve(result)
                     }
                 } else {
+                    print("[CameraPreview] Not saving to gallery, returning image data")
                     let exifData = self.getExifData(from: imageDataWithExif)
                     let base64Image = imageDataWithExif.base64EncodedString()
 
                     var result = JSObject()
                     result["value"] = base64Image
                     result["exif"] = exifData
-                    
+
+                    print("[CameraPreview] Resolving capture call")
                     call.resolve(result)
                 }
-            }
             }
         }
     }
@@ -734,7 +747,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
               let exifDict = imageProperties[kCGImagePropertyExifDictionary as String] as? [String: Any] else {
             return [:]
         }
-
 
         var exifData = JSObject()
         for (key, value) in exifDict {
@@ -755,7 +767,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             }
         }
 
-
         return exifData
     }
 
@@ -763,26 +774,26 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         guard let originalImageData = image.jpegData(compressionQuality: CGFloat(Double(quality) / 100.0)) else {
             return nil
         }
-        
+
         guard let imageSource = CGImageSourceCreateWithData(originalImageData as CFData, nil),
               let imageProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
               let cgImage = image.cgImage else {
             return originalImageData
         }
-        
+
         let mutableData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(mutableData, kUTTypeJPEG, 1, nil) else {
             return originalImageData
         }
-        
+
         var finalProperties = imageProperties
-        
+
         // Add GPS location if available
         if let location = location {
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
             formatter.timeZone = TimeZone(abbreviation: "UTC")
-            
+
             let gpsDict: [String: Any] = [
                 kCGImagePropertyGPSLatitude as String: abs(location.coordinate.latitude),
                 kCGImagePropertyGPSLatitudeRef as String: location.coordinate.latitude >= 0 ? "N" : "S",
@@ -792,79 +803,53 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 kCGImagePropertyGPSAltitude as String: location.altitude,
                 kCGImagePropertyGPSAltitudeRef as String: location.altitude >= 0 ? 0 : 1
             ]
-            
+
             finalProperties[kCGImagePropertyGPSDictionary as String] = gpsDict
         }
-        
-        // Add lens information
-        do {
-            let currentZoom = try self.cameraController.getZoom()
-            let lensInfo = try self.cameraController.getCurrentLensInfo()
-            
-            // Create or update EXIF dictionary
-            var exifDict = finalProperties[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? [:]
-            
-            // Add focal length (in mm)
-            exifDict[kCGImagePropertyExifFocalLength as String] = lensInfo.focalLength
-            
-            // Add digital zoom ratio
-            let digitalZoom = Float(currentZoom.current) / lensInfo.baseZoomRatio
-            exifDict[kCGImagePropertyExifDigitalZoomRatio as String] = digitalZoom
-            
-            // Add lens model info
-            exifDict[kCGImagePropertyExifLensModel as String] = lensInfo.deviceType
-            
-            finalProperties[kCGImagePropertyExifDictionary as String] = exifDict
-            
-            // Create or update TIFF dictionary for device info
-            var tiffDict = finalProperties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
-            tiffDict[kCGImagePropertyTIFFMake as String] = "Apple"
-            tiffDict[kCGImagePropertyTIFFModel as String] = UIDevice.current.model
-            finalProperties[kCGImagePropertyTIFFDictionary as String] = tiffDict
-            
-        } catch {
-            print("CameraPreview: Failed to get lens information: \(error)")
-        }
-        
+
+        // Create or update TIFF dictionary for device info
+        var tiffDict = finalProperties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
+        tiffDict[kCGImagePropertyTIFFMake as String] = "Apple"
+        tiffDict[kCGImagePropertyTIFFModel as String] = UIDevice.current.model
+        finalProperties[kCGImagePropertyTIFFDictionary as String] = tiffDict
+
         CGImageDestinationAddImage(destination, cgImage, finalProperties as CFDictionary)
-        
+
         if CGImageDestinationFinalize(destination) {
             return mutableData as Data
         }
-        
+
         return originalImageData
     }
 
     @objc func captureSample(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
-            let quality: Int? = call.getInt("quality", 85)
+        let quality: Int? = call.getInt("quality", 85)
 
-            self.cameraController.captureSample { image, error in
-                guard let image = image else {
-                    print("Image capture error: \(String(describing: error))")
-                    call.reject("Image capture error: \(String(describing: error))")
-                    return
-                }
+        self.cameraController.captureSample { image, error in
+            guard let image = image else {
+                print("Image capture error: \(String(describing: error))")
+                call.reject("Image capture error: \(String(describing: error))")
+                return
+            }
 
-                let imageData: Data?
-                if self.cameraPosition == "front" {
-                    let flippedImage = image.withHorizontallyFlippedOrientation()
-                    imageData = flippedImage.jpegData(compressionQuality: CGFloat(quality!/100))
-                } else {
-                    imageData = image.jpegData(compressionQuality: CGFloat(quality!/100))
-                }
+            let imageData: Data?
+            if self.cameraPosition == "front" {
+                let flippedImage = image.withHorizontallyFlippedOrientation()
+                imageData = flippedImage.jpegData(compressionQuality: CGFloat(quality!/100))
+            } else {
+                imageData = image.jpegData(compressionQuality: CGFloat(quality!/100))
+            }
 
-                if self.storeToFile == false {
-                    let imageBase64 = imageData?.base64EncodedString()
-                    call.resolve(["value": imageBase64!])
-                } else {
-                    do {
-                        let fileUrl = self.getTempFilePath()
-                        try imageData?.write(to: fileUrl)
-                        call.resolve(["value": fileUrl.absoluteString])
-                    } catch {
-                        call.reject("Error writing image to file")
-                    }
+            if self.storeToFile == false {
+                let imageBase64 = imageData?.base64EncodedString()
+                call.resolve(["value": imageBase64!])
+            } else {
+                do {
+                    let fileUrl = self.getTempFilePath()
+                    try imageData?.write(to: fileUrl)
+                    call.resolve(["value": fileUrl.absoluteString])
+                } catch {
+                    call.reject("Error writing image to file")
                 }
             }
         }
@@ -919,31 +904,27 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     @objc func startRecordVideo(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
-            do {
-                try self.cameraController.captureVideo()
-                call.resolve()
-            } catch {
-                call.reject(error.localizedDescription)
-            }
+        do {
+            try self.cameraController.captureVideo()
+            call.resolve()
+        } catch {
+            call.reject(error.localizedDescription)
         }
     }
 
     @objc func stopRecordVideo(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
-            self.cameraController.stopRecording { (fileURL, error) in
-                guard let fileURL = fileURL else {
-                    print(error ?? "Video capture error")
-                    guard let error = error else {
-                        call.reject("Video capture error")
-                        return
-                    }
-                    call.reject(error.localizedDescription)
+        self.cameraController.stopRecording { (fileURL, error) in
+            guard let fileURL = fileURL else {
+                print(error ?? "Video capture error")
+                guard let error = error else {
+                    call.reject("Video capture error")
                     return
                 }
-
-                call.resolve(["videoFilePath": fileURL.absoluteString])
+                call.reject(error.localizedDescription)
+                return
             }
+
+            call.resolve(["videoFilePath": fileURL.absoluteString])
         }
     }
 
@@ -975,21 +956,19 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         for device in session.devices {
             var lenses: [[String: Any]] = []
 
-
             let constituentDevices = device.isVirtualDevice ? device.constituentDevices : [device]
-
 
             for lensDevice in constituentDevices {
                 var deviceType: String
                 switch lensDevice.deviceType {
-                    case .builtInWideAngleCamera: deviceType = "wideAngle"
-                    case .builtInUltraWideCamera: deviceType = "ultraWide"
-                    case .builtInTelephotoCamera: deviceType = "telephoto"
-                    case .builtInDualCamera: deviceType = "dual"
-                    case .builtInDualWideCamera: deviceType = "dualWide"
-                    case .builtInTripleCamera: deviceType = "triple"
-                    case .builtInTrueDepthCamera: deviceType = "trueDepth"
-                    default: deviceType = "unknown"
+                case .builtInWideAngleCamera: deviceType = "wideAngle"
+                case .builtInUltraWideCamera: deviceType = "ultraWide"
+                case .builtInTelephotoCamera: deviceType = "telephoto"
+                case .builtInDualCamera: deviceType = "dual"
+                case .builtInDualWideCamera: deviceType = "dualWide"
+                case .builtInTripleCamera: deviceType = "triple"
+                case .builtInTrueDepthCamera: deviceType = "trueDepth"
+                default: deviceType = "unknown"
                 }
 
                 var baseZoomRatio: Float = 1.0
@@ -998,7 +977,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 } else if lensDevice.deviceType == .builtInTelephotoCamera {
                     baseZoomRatio = 2.0 // A common value for telephoto lenses
                 }
-
 
                 let lensInfo: [String: Any] = [
                     "label": lensDevice.localizedName,
@@ -1011,7 +989,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 lenses.append(lensInfo)
             }
 
-
             let deviceData: [String: Any] = [
                 "deviceId": device.uniqueID,
                 "label": device.localizedName,
@@ -1021,7 +998,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 "maxZoom": Float(device.maxAvailableVideoZoomFactor),
                 "isLogical": device.isVirtualDevice
             ]
-
 
             devices.append(deviceData)
         }
@@ -1038,7 +1014,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         do {
             let zoomInfo = try self.cameraController.getZoom()
             let lensInfo = try self.cameraController.getCurrentLensInfo()
-
 
             var minZoom = zoomInfo.min
             var maxZoom = zoomInfo.max
@@ -1118,47 +1093,32 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else {
-                call.reject("Camera controller deallocated")
-                return
-            }
+        // Disable user interaction during device swap
+        self.previewView.isUserInteractionEnabled = false
 
-            // Disable user interaction during device swap
-            self.previewView.isUserInteractionEnabled = false
+        do {
+            try self.cameraController.swapToDevice(deviceId: deviceId)
 
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    try self.cameraController.swapToDevice(deviceId: deviceId)
+            // Update preview layer frame without animation
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.cameraController.previewLayer?.frame = self.previewView.bounds
+            self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+            CATransaction.commit()
 
-                    DispatchQueue.main.async {
-                        // Update preview layer frame without animation
-                        CATransaction.begin()
-                        CATransaction.setDisableActions(true)
-                        self.cameraController.previewLayer?.frame = self.previewView.bounds
-                        self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
-                        CATransaction.commit()
-                        
-                        self.previewView.isUserInteractionEnabled = true
+            self.previewView.isUserInteractionEnabled = true
 
+            // Ensure webview remains transparent after device switch
+            self.makeWebViewTransparent()
 
-                        // Ensure webview remains transparent after device switch
-                        self.makeWebViewTransparent()
-
-
-                        call.resolve()
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        self.previewView.isUserInteractionEnabled = true
-                        call.reject("Failed to swap to device \(deviceId): \(error.localizedDescription)")
-                    }
-                }
-            }
+            call.resolve()
+        } catch {
+            self.previewView.isUserInteractionEnabled = true
+            call.reject("Failed to swap to device \(deviceId): \(error.localizedDescription)")
         }
     }
 
-        @objc func getDeviceId(_ call: CAPPluginCall) {
+    @objc func getDeviceId(_ call: CAPPluginCall) {
         guard isInitialized else {
             call.reject("Camera not initialized")
             return
@@ -1172,13 +1132,123 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
     }
 
-    public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        self.currentLocation = locations.last
-        self.locationManager?.stopUpdatingLocation()
+    // MARK: - Capacitor Permissions
+
+    private func requestLocationPermission(completion: @escaping (Bool) -> Void) {
+        print("[CameraPreview] requestLocationPermission called")
+        if self.locationManager == nil {
+            print("[CameraPreview] Creating location manager")
+            self.locationManager = CLLocationManager()
+            self.locationManager?.delegate = self
+        }
+
+        let authStatus = self.locationManager?.authorizationStatus
+        print("[CameraPreview] Current authorization status: \(String(describing: authStatus))")
+
+        switch authStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            print("[CameraPreview] Location already authorized")
+            completion(true)
+        case .notDetermined:
+            print("[CameraPreview] Location not determined, requesting authorization...")
+            self.permissionCompletion = completion
+            self.locationManager?.requestWhenInUseAuthorization()
+        case .denied, .restricted:
+            print("[CameraPreview] Location denied or restricted")
+            completion(false)
+        case .none:
+            print("[CameraPreview] Location manager authorization status is nil")
+            completion(false)
+        @unknown default:
+            print("[CameraPreview] Unknown authorization status")
+            completion(false)
+        }
+    }
+
+    private var permissionCompletion: ((Bool) -> Void)?
+
+    public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        print("[CameraPreview] locationManagerDidChangeAuthorization called, status: \(status.rawValue), thread: \(Thread.current)")
+
+        // Handle pending capture call if we have one
+        if let callID = self.permissionCallID, self.waitingForLocation {
+            print("[CameraPreview] Found pending capture call ID: \(callID)")
+
+            let handleAuthorization = {
+                print("[CameraPreview] Getting saved call on thread: \(Thread.current)")
+                guard let call = self.bridge?.savedCall(withID: callID) else {
+                    print("[CameraPreview] ERROR: Could not retrieve saved call")
+                    self.permissionCallID = nil
+                    self.waitingForLocation = false
+                    return
+                }
+                print("[CameraPreview] Successfully retrieved saved call")
+
+                switch status {
+                case .authorizedWhenInUse, .authorizedAlways:
+                    print("[CameraPreview] Location authorized, getting location for capture")
+                    self.getCurrentLocation { _ in
+                        self.performCapture(call: call)
+                        self.bridge?.releaseCall(call)
+                        self.permissionCallID = nil
+                        self.waitingForLocation = false
+                    }
+                case .denied, .restricted:
+                    print("[CameraPreview] Location denied, rejecting capture")
+                    call.reject("Location permission denied")
+                    self.bridge?.releaseCall(call)
+                    self.permissionCallID = nil
+                    self.waitingForLocation = false
+                case .notDetermined:
+                    print("[CameraPreview] Authorization not determined yet")
+                // Don't do anything, wait for user response
+                @unknown default:
+                    print("[CameraPreview] Unknown status, rejecting capture")
+                    call.reject("Unknown location permission status")
+                    self.bridge?.releaseCall(call)
+                    self.permissionCallID = nil
+                    self.waitingForLocation = false
+                }
+            }
+
+            // Check if we're already on main thread
+            if Thread.isMainThread {
+                print("[CameraPreview] Already on main thread")
+                handleAuthorization()
+            } else {
+                print("[CameraPreview] Not on main thread, dispatching")
+                DispatchQueue.main.async(execute: handleAuthorization)
+            }
+        } else {
+            print("[CameraPreview] No pending capture call")
+        }
     }
 
     public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("CameraPreview: Failed to get location: \(error.localizedDescription)")
+        print("[CameraPreview] locationManager didFailWithError: \(error.localizedDescription)")
+    }
+
+    private func getCurrentLocation(completion: @escaping (CLLocation?) -> Void) {
+        print("[CameraPreview] getCurrentLocation called")
+        self.locationCompletion = completion
+        self.locationManager?.startUpdatingLocation()
+        print("[CameraPreview] Started updating location")
+    }
+
+    private var locationCompletion: ((CLLocation?) -> Void)?
+
+    public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        print("[CameraPreview] locationManager didUpdateLocations called, locations count: \(locations.count)")
+        self.currentLocation = locations.last
+        if let completion = locationCompletion {
+            print("[CameraPreview] Calling location completion with location: \(self.currentLocation?.description ?? "nil")")
+            self.locationManager?.stopUpdatingLocation()
+            completion(self.currentLocation)
+            locationCompletion = nil
+        } else {
+            print("[CameraPreview] No location completion handler found")
+        }
     }
 
     private func saveImageDataToGallery(imageData: Data, completion: @escaping (Bool, Error?) -> Void) {
@@ -1190,20 +1260,18 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             completion(false, error)
             return
         }
-        
+
         let status = PHPhotoLibrary.authorizationStatus()
-        
+
         switch status {
         case .authorized:
             performSaveDataToGallery(imageData: imageData, completion: completion)
         case .notDetermined:
             PHPhotoLibrary.requestAuthorization { newStatus in
-                DispatchQueue.main.async {
-                    if newStatus == .authorized {
-                        self.performSaveDataToGallery(imageData: imageData, completion: completion)
-                    } else {
-                        completion(false, NSError(domain: "CameraPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Photo library access denied"]))
-                    }
+                if newStatus == .authorized {
+                    self.performSaveDataToGallery(imageData: imageData, completion: completion)
+                } else {
+                    completion(false, NSError(domain: "CameraPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Photo library access denied"]))
                 }
             }
         case .denied, .restricted:
@@ -1214,33 +1282,37 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             completion(false, NSError(domain: "CameraPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown photo library authorization status"]))
         }
     }
-    
+
     private func performSaveDataToGallery(imageData: Data, completion: @escaping (Bool, Error?) -> Void) {
         // Create a temporary file to write the JPEG data with EXIF
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
-        
+
         do {
             try imageData.write(to: tempURL)
-            
+
             PHPhotoLibrary.shared().performChanges({
                 PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: tempURL)
             }, completionHandler: { success, error in
                 // Clean up temporary file
                 try? FileManager.default.removeItem(at: tempURL)
-                
-                DispatchQueue.main.async {
-                    completion(success, error)
-                }
+
+                completion(success, error)
             })
         } catch {
-            DispatchQueue.main.async {
-                completion(false, error)
-            }
+            completion(false, error)
         }
     }
 
     private func updateCameraFrame() {
         guard let width = self.width, var height = self.height, let posX = self.posX, let posY = self.posY else {
+            return
+        }
+
+        // Ensure UI operations happen on main thread
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async {
+                self.updateCameraFrame()
+            }
             return
         }
 
@@ -1259,7 +1331,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Handle auto-centering when position is -1
         if posX == -1 || posY == -1 {
             finalWidth = webViewWidth
-            
+
             // Calculate height based on aspect ratio or use provided height
             if let aspectRatio = self.aspectRatio {
                 let ratioParts = aspectRatio.split(separator: ":").compactMap { Double($0) }
@@ -1269,9 +1341,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     finalHeight = finalWidth / CGFloat(ratio)
                 }
             }
-            
+
             finalX = posX == -1 ? 0 : posX
-            
+
             if posY == -1 {
                 let availableHeight = webViewHeight - paddingBottom
                 finalY = finalHeight < availableHeight ? (availableHeight - finalHeight) / 2 : 0
@@ -1287,7 +1359,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
                 let ratio = ratioParts[1] / ratioParts[0]
                 let currentRatio = Double(finalWidth) / Double(finalHeight)
-                
+
                 if currentRatio > ratio {
                     let newWidth = Double(finalHeight) * ratio
                     frame.origin.x = finalX + (Double(finalWidth) - newWidth) / 2
@@ -1303,7 +1375,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Disable ALL animations for frame updates - we want instant positioning
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        
+
         // Batch UI updates for better performance
         if self.previewView == nil {
             self.previewView = UIView(frame: frame)
@@ -1316,12 +1388,12 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         if let previewLayer = self.cameraController.previewLayer {
             previewLayer.frame = self.previewView.bounds
         }
-        
+
         // Update grid overlay frame if it exists
         if let gridOverlay = self.cameraController.gridOverlayView {
             gridOverlay.frame = self.previewView.bounds
         }
-        
+
         CATransaction.commit()
     }
 
@@ -1330,12 +1402,15 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("camera not started")
             return
         }
-        var result = JSObject()
-        result["x"] = Double(self.previewView.frame.origin.x)
-        result["y"] = Double(self.previewView.frame.origin.y)
-        result["width"] = Double(self.previewView.frame.width)
-        result["height"] = Double(self.previewView.frame.height)
-        call.resolve(result)
+
+        DispatchQueue.main.async {
+            var result = JSObject()
+            result["x"] = Double(self.previewView.frame.origin.x)
+            result["y"] = Double(self.previewView.frame.origin.y)
+            result["width"] = Double(self.previewView.frame.width)
+            result["height"] = Double(self.previewView.frame.height)
+            call.resolve(result)
+        }
     }
 
     @objc func setPreviewSize(_ call: CAPPluginCall) {
@@ -1343,27 +1418,29 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("camera not started")
             return
         }
-        
+
         // Only update position if explicitly provided, otherwise keep auto-centering
-        if let x = call.getInt("x") { 
-            self.posX = CGFloat(x) 
+        if let x = call.getInt("x") {
+            self.posX = CGFloat(x)
         }
-        if let y = call.getInt("y") { 
-            self.posY = CGFloat(y) 
+        if let y = call.getInt("y") {
+            self.posY = CGFloat(y)
         }
         if let width = call.getInt("width") { self.width = CGFloat(width) }
         if let height = call.getInt("height") { self.height = CGFloat(height) }
-        
-        // Direct update without animation for better performance
-        self.updateCameraFrame()
-        self.makeWebViewTransparent()
-        
-        // Return the actual preview bounds
-        var result = JSObject()
-        result["x"] = Double(self.previewView.frame.origin.x)
-        result["y"] = Double(self.previewView.frame.origin.y)
-        result["width"] = Double(self.previewView.frame.width)
-        result["height"] = Double(self.previewView.frame.height)
-        call.resolve(result)
+
+        DispatchQueue.main.async {
+            // Direct update without animation for better performance
+            self.updateCameraFrame()
+            self.makeWebViewTransparent()
+
+            // Return the actual preview bounds
+            var result = JSObject()
+            result["x"] = Double(self.previewView.frame.origin.x)
+            result["y"] = Double(self.previewView.frame.origin.y)
+            result["width"] = Double(self.previewView.frame.width)
+            result["height"] = Double(self.previewView.frame.height)
+            call.resolve(result)
+        }
     }
 }

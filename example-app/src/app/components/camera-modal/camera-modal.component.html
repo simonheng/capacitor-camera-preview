@@ -1,7 +1,9 @@
-<div class="container"
-     (touchstart)="handleTouchStart($event)"
-     (touchmove)="handleTouchMove($event)"
-     (touchend)="handleTouchEnd()">
+<div
+  class="container"
+  (touchstart)="handleTouchStart($event)"
+  (touchmove)="handleTouchMove($event)"
+  (touchend)="handleTouchEnd()"
+>
   <div id="cameraView">
     @if (!cameraStarted()) {
       <div class="loading-screen">
@@ -11,19 +13,29 @@
   </div>
 
   @if (showBoundary()) {
-    <div class="boundary-overlay"
-         [style.left.px]="currentPreviewX()"
-         [style.top.px]="currentPreviewY()"
-         [style.width]="currentPreviewWidth() ? currentPreviewWidth() + 'px' : '100vw'"
-         [style.height]="currentPreviewHeight() ? currentPreviewHeight() + 'px' : '100vh'"
+    <div
+      class="boundary-overlay"
+      [style.left.px]="currentPreviewX()"
+      [style.top.px]="currentPreviewY()"
+      [style.width]="
+        currentPreviewWidth() ? currentPreviewWidth() + 'px' : '100vw'
+      "
+      [style.height]="
+        currentPreviewHeight() ? currentPreviewHeight() + 'px' : '100vh'
+      "
     ></div>
-    
+
     <!-- Blue boundary showing native-returned position from start() -->
-    <div class="native-boundary-overlay"
-         [style.left.px]="nativePreviewX()"
-         [style.top.px]="nativePreviewY()"
-         [style.width]="nativePreviewWidth() ? nativePreviewWidth() + 'px' : '100vw'"
-         [style.height]="nativePreviewHeight() ? nativePreviewHeight() + 'px' : '100vh'"
+    <div
+      class="native-boundary-overlay"
+      [style.left.px]="nativePreviewX()"
+      [style.top.px]="nativePreviewY()"
+      [style.width]="
+        nativePreviewWidth() ? nativePreviewWidth() + 'px' : '100vw'
+      "
+      [style.height]="
+        nativePreviewHeight() ? nativePreviewHeight() + 'px' : '100vh'
+      "
     ></div>
   }
 
@@ -34,15 +46,19 @@
         <ion-card-content>
           <div class="info-row">
             <span class="label">Status:</span>
-            <span class="value">{{ isRunning() ? 'Running' : 'Stopped' }}</span>
+            <span class="value">{{ isRunning() ? "Running" : "Stopped" }}</span>
           </div>
           <div class="info-row">
             <span class="label">Device:</span>
-            <span class="value">{{ currentDeviceId() || 'Unknown' }}</span>
+            <span class="value">{{ currentDeviceId() || "Unknown" }}</span>
           </div>
           <div class="info-row">
             <span class="label">Zoom:</span>
-            <span class="value">{{ currentZoomFactor() }}x ({{ minZoom() }}-{{ maxZoom() }})</span>
+            <span class="value"
+              >{{ currentZoomFactor() }}x ({{ minZoom() }}-{{
+                maxZoom()
+              }})</span
+            >
           </div>
           @if (currentLens()) {
             <div class="info-row">
@@ -68,7 +84,7 @@
           </div>
           <div class="info-row">
             <span class="label">Recording:</span>
-            <span class="value">{{ isRecording() ? 'Yes' : 'No' }}</span>
+            <span class="value">{{ isRecording() ? "Yes" : "No" }}</span>
           </div>
           <div class="info-row">
             <span class="label">Opacity:</span>
@@ -171,12 +187,12 @@
       size="small"
       [class.grid-active]="currentGridMode() !== 'none'"
     >
-      @if (currentGridMode() === 'none') {
+      @if (currentGridMode() === "none") {
         <ion-icon name="grid-outline"></ion-icon>
-      } @else if (currentGridMode() === '3x3') {
+      } @else if (currentGridMode() === "3x3") {
         <ion-icon name="grid"></ion-icon>
         <span>3×3</span>
-      } @else if (currentGridMode() === '4x4') {
+      } @else if (currentGridMode() === "4x4") {
         <ion-icon name="grid"></ion-icon>
         <span>4×4</span>
       }
@@ -184,7 +200,6 @@
   </ion-fab>
 
   @if (cameraStarted()) {
-
     <!-- Video Recording Controls -->
     <!-- <ion-fab
       class="video-controls"
@@ -245,11 +260,15 @@
     }
   }
 
-<ion-fab class="resize-toggle" slot="fixed" horizontal="start" vertical="bottom">
-  <ion-fab-button (click)="togglePreviewSize()" size="small">
-    <ion-icon name="resize-outline"></ion-icon>
-    <span>{{ isHalfSize() ? 'Extend' : 'Small' }}</span>
-  </ion-fab-button>
-</ion-fab>
-
+  <ion-fab
+    class="resize-toggle"
+    slot="fixed"
+    horizontal="start"
+    vertical="bottom"
+  >
+    <ion-fab-button (click)="togglePreviewSize()" size="small">
+      <ion-icon name="resize-outline"></ion-icon>
+      <span>{{ isHalfSize() ? "Extend" : "Small" }}</span>
+    </ion-fab-button>
+  </ion-fab>
 </div>

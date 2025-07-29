@@ -73,7 +73,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly y = input<number>(0);
   public readonly width = input<number>(0);
   public readonly height = input<number>(0);
-  public readonly aspectRatio = input<'4:3' | '16:9' | 'custom' | undefined>(undefined);
+  public readonly aspectRatio = input<'4:3' | '16:9' | 'custom' | undefined>(
+    undefined,
+  );
 
   // Picture settings inputs
   public readonly pictureFormat = input<PictureFormat>('jpeg');
@@ -119,7 +121,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Camera switching functionality
   protected readonly availableCameras = signal<CameraDevice[]>([]);
   protected readonly selectedCameraIndex = signal<number>(0);
-  protected readonly currentAspectRatio = signal<'4:3' | '16:9' | 'custom'>('custom');
+  protected readonly currentAspectRatio = signal<'4:3' | '16:9' | 'custom'>(
+    'custom',
+  );
   protected readonly currentGridMode = signal<GridMode>('none');
   protected readonly showOverlay = signal<boolean>(true);
 
@@ -148,7 +152,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   #lastZoomCall = 0;
   #zoomThrottleMs = 100; // Throttle zoom calls to max 20fps
 
-
   protected isHalfSize = signal(false);
 
   // Track current preview position and size for boundary overlay
@@ -167,10 +170,16 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     try {
       if (this.isHalfSize()) {
         // Go to full screen (full device size)
-        const newSize = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
-        const nativeResult = await this.#cameraViewService.setPreviewSize(newSize);
+        const newSize = {
+          x: 0,
+          y: 0,
+          width: window.innerWidth,
+          height: window.innerHeight,
+        };
+        const nativeResult =
+          await this.#cameraViewService.setPreviewSize(newSize);
         this.isHalfSize.set(false);
-        
+
         // Update red boundary overlay signals (requested)
         this.currentPreviewX.set(newSize.x);
         this.currentPreviewY.set(newSize.y);
@@ -187,9 +196,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         const centerX = Math.floor((window.innerWidth - 200) / 2);
         const centerY = Math.floor((window.innerHeight - 200) / 2);
         const newSize = { x: centerX, y: centerY, width: 200, height: 200 };
-        const nativeResult = await this.#cameraViewService.setPreviewSize(newSize);
+        const nativeResult =
+          await this.#cameraViewService.setPreviewSize(newSize);
         this.isHalfSize.set(true);
-        
+
         // Update red boundary overlay signals (requested)
         this.currentPreviewX.set(newSize.x);
         this.currentPreviewY.set(newSize.y);
@@ -282,7 +292,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       // Close modal and show error
       await this.#modalController.dismiss({
         error: error instanceof Error ? error.message : String(error),
-        type: 'error'
+        type: 'error',
       });
     }
   }
@@ -296,7 +306,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async close(): Promise<void> {
-    await this.stop();
     await this.#modalController.dismiss();
   }
 
@@ -309,7 +318,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       const quality = this.pictureQuality();
       const format = this.pictureFormat();
 
-      let captureOptions: Partial<CameraPreviewPictureOptions> = { quality, saveToGallery: this.saveToGallery(), withExifLocation: this.withExifLocation() };
+      let captureOptions: Partial<CameraPreviewPictureOptions> = {
+        quality,
+        saveToGallery: this.saveToGallery(),
+        withExifLocation: this.withExifLocation(),
+      };
       if (format === 'png') {
         captureOptions = { ...captureOptions, ...{ format } };
       }
@@ -319,13 +332,15 @@ export class CameraModalComponent implements OnInit, OnDestroy {
           ...captureOptions,
           ...{
             width: this.pictureWidth(),
-            height: this.pictureHeight()
-          }
+            height: this.pictureHeight(),
+          },
         };
       }
 
-      const { value, exif } = await this.#cameraViewService.capture(quality, captureOptions);
-      await this.#cameraViewService.stop();
+      const { value, exif } = await this.#cameraViewService.capture(
+        quality,
+        captureOptions,
+      );
 
       await this.#modalController.dismiss({
         photo: value,
@@ -382,11 +397,14 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     await this.setZoom(newZoom, true); // Force immediate zoom for button clicks
   }
 
-  protected async setZoom(level: number, force: boolean = false): Promise<void> {
+  protected async setZoom(
+    level: number,
+    force: boolean = false,
+  ): Promise<void> {
     const now = Date.now();
 
     // Throttle zoom calls unless forced
-    if (!force && (now - this.#lastZoomCall) < this.#zoomThrottleMs) {
+    if (!force && now - this.#lastZoomCall < this.#zoomThrottleMs) {
       // Update UI immediately for smooth feedback
       this.currentZoomFactor.set(level);
       return;
@@ -400,7 +418,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       console.error('Failed to set zoom', error);
     }
   }
-
 
   protected async nextFlashMode(): Promise<void> {
     try {
@@ -435,11 +452,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       }
 
       this.currentAspectRatio.set(next);
-      
+
       // Instead of restarting camera, just apply the new aspect ratio
       if (next !== 'custom') {
         const nativeResult = await this.#cameraViewService.setAspectRatio(next);
-        
+
         // Update red boundary overlay with new preview size after aspect ratio change
         const newSize = await this.#cameraViewService.getPreviewSize();
         this.currentPreviewX.set(newSize.x);
@@ -498,7 +515,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
       // Update selected camera index to match the new device
       const cameras = this.availableCameras();
-      const foundIndex = cameras.findIndex(camera => camera.deviceId === deviceId);
+      const foundIndex = cameras.findIndex(
+        (camera) => camera.deviceId === deviceId,
+      );
       if (foundIndex >= 0) {
         this.selectedCameraIndex.set(foundIndex);
       }
@@ -553,7 +572,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         results += `\n  ${index + 1}. ${device.label} (${device.position})`;
         results += `\n     Lenses: ${device.lenses.length}`;
         results += `\n     Zoom range: ${device.minZoom}x - ${device.maxZoom}x`;
-        device.lenses.forEach(lens => {
+        device.lenses.forEach((lens) => {
           results += `\n       - ${lens.deviceType} (${lens.baseZoomRatio}x)`;
         });
       });
@@ -589,7 +608,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       // Get available lenses from device data
       const devices = await this.#cameraViewService.getAvailableDevices();
       const currentDeviceId = await this.#cameraViewService.getDeviceId();
-      const currentDevice = devices.find(d => d.deviceId === currentDeviceId);
+      const currentDevice = devices.find((d) => d.deviceId === currentDeviceId);
 
       if (currentDevice) {
         results += `\n✓ Available lenses for ${currentDevice.label}: ${currentDevice.lenses.length}`;
@@ -625,7 +644,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       if (this.showTestResults()) {
-        const results = this.testResults() + `\n✗ Failed to start recording: ${error}`;
+        const results =
+          this.testResults() + `\n✗ Failed to start recording: ${error}`;
         this.testResults.set(results);
       }
       console.error('Failed to start recording:', error);
@@ -638,11 +658,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.isRecording.set(false);
       this.#modalController.dismiss({
         video: result.videoFilePath,
-        type: 'video'
+        type: 'video',
       });
     } catch (error) {
       if (this.showTestResults()) {
-        const results = this.testResults() + `\n✗ Failed to stop recording: ${error}`;
+        const results =
+          this.testResults() + `\n✗ Failed to stop recording: ${error}`;
         this.testResults.set(results);
       }
       console.error('Failed to stop recording:', error);
@@ -654,7 +675,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     if (index < cameras.length) {
       const camera = cameras[index];
       // Use the primary lens base zoom ratio for the label
-      const primaryLens = camera.lenses.find(l => l.deviceType === 'wideAngle') || camera.lenses[0];
+      const primaryLens =
+        camera.lenses.find((l) => l.deviceType === 'wideAngle') ||
+        camera.lenses[0];
       return `${primaryLens?.baseZoomRatio || 1}x`;
     }
     return `${index + 1}`;
@@ -720,8 +743,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
     // Filter cameras by current position preference
     const currentPosition = this.position();
-    const currentPositionDevices = devices.filter(device =>
-      device.position === currentPosition
+    const currentPositionDevices = devices.filter(
+      (device) => device.position === currentPosition,
     );
 
     if (currentPositionDevices.length === 0) return;
@@ -733,7 +756,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     const currentDeviceId = this.currentDeviceId();
     let initialIndex = 0;
     if (currentDeviceId !== null && currentDeviceId !== undefined) {
-      const foundIndex = currentPositionDevices.findIndex(camera => camera.deviceId === currentDeviceId);
+      const foundIndex = currentPositionDevices.findIndex(
+        (camera) => camera.deviceId === currentDeviceId,
+      );
       if (foundIndex >= 0) {
         initialIndex = foundIndex;
       }
@@ -744,7 +769,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Touch event handlers for pinch-to-zoom
   protected handleTouchStart(event: TouchEvent): void {
     if (event.touches.length === 2) {
-      this.#touchStartDistance = getDistance(event.touches[0], event.touches[1]);
+      this.#touchStartDistance = getDistance(
+        event.touches[0],
+        event.touches[1],
+      );
       this.#initialZoomFactorOnPinch = this.currentZoomFactor();
       event.preventDefault();
     }
@@ -757,7 +785,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
       const newZoom = Math.max(
         this.minZoom(),
-        Math.min(this.maxZoom(), this.#initialZoomFactorOnPinch * scale)
+        Math.min(this.maxZoom(), this.#initialZoomFactorOnPinch * scale),
       );
 
       this.setZoom(newZoom);

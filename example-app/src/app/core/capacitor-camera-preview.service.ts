@@ -73,7 +73,10 @@ export class CapacitorCameraViewService {
    * @param options Additional capture options
    * @returns A base64 encoded string of the captured photo
    */
-  async capture(quality: number = 90, options?: Partial<CameraPreviewPictureOptions>): Promise<{ value: string; exif: ExifData }> {
+  async capture(
+    quality: number = 90,
+    options?: Partial<CameraPreviewPictureOptions>,
+  ): Promise<{ value: string; exif: ExifData }> {
     const captureOptions: CameraPreviewPictureOptions = {
       quality,
       ...options,
@@ -108,7 +111,12 @@ export class CapacitorCameraViewService {
    * Get current zoom capabilities and level with lens information
    * @returns Object with min, max, current zoom levels and lens info
    */
-  async getZoom(): Promise<{ min: number; max: number; current: number; lens: LensInfo }> {
+  async getZoom(): Promise<{
+    min: number;
+    max: number;
+    current: number;
+    lens: LensInfo;
+  }> {
     return this.#cameraView.getZoom();
   }
 
@@ -137,7 +145,11 @@ export class CapacitorCameraViewService {
     return (await this.#cameraView.getSupportedFlashModes()).result;
   }
 
-  async setAspectRatio(aspectRatio: '4:3' | '16:9', x?: number, y?: number): Promise<{
+  async setAspectRatio(
+    aspectRatio: '4:3' | '16:9',
+    x?: number,
+    y?: number,
+  ): Promise<{
     width: number;
     height: number;
     x: number;
@@ -219,10 +231,20 @@ export class CapacitorCameraViewService {
     return this.#cameraView.stopRecordVideo();
   }
 
-  async getPreviewSize(): Promise<{x: number, y: number, width: number, height: number}> {
+  async getPreviewSize(): Promise<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }> {
     return this.#cameraView.getPreviewSize();
   }
-  async setPreviewSize(options: {x: number, y: number, width: number, height: number}): Promise<{
+  async setPreviewSize(options: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Promise<{
     width: number;
     height: number;
     x: number;

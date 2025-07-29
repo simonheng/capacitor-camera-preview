@@ -1,5 +1,6 @@
 build
 dist
-example
+example-app
+example-app/www/*
 examples
 docs

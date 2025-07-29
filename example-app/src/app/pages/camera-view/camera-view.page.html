@@ -5,7 +5,6 @@
 </ion-header>
 
 <ion-content>
-
   <ion-card>
     <ion-card-header>
       <ion-card-title>Available Devices</ion-card-title>
@@ -16,16 +15,21 @@
           <ion-label>Rear Cameras</ion-label>
         </ion-item-divider>
         @for(device of rearCameras(); track device.deviceId){
-          <ion-item>
-            <ion-label>
-              <h3>{{ device.label }} {{ device.isLogical ? '(Logical - Default)' : '' }}</h3>
-              <p>ID: {{ device.deviceId }}</p>
-              <p>Zoom: {{ device.minZoom }}x - {{ device.maxZoom }}x</p>
-              @for(lens of device.lenses; track lens.deviceType){
-                <p class="lens-info">Lens: {{ lens.deviceType }} ({{ lens.baseZoomRatio }}x)</p>
-              }
-            </ion-label>
-          </ion-item>
+        <ion-item>
+          <ion-label>
+            <h3>
+              {{ device.label }} {{ device.isLogical ? '(Logical - Default)' :
+              '' }}
+            </h3>
+            <p>ID: {{ device.deviceId }}</p>
+            <p>Zoom: {{ device.minZoom }}x - {{ device.maxZoom }}x</p>
+            @for(lens of device.lenses; track lens.deviceType){
+            <p class="lens-info">
+              Lens: {{ lens.deviceType }} ({{ lens.baseZoomRatio }}x)
+            </p>
+            }
+          </ion-label>
+        </ion-item>
         }
       </ion-list>
       <ion-list>
@@ -33,16 +37,21 @@
           <ion-label>Front Cameras</ion-label>
         </ion-item-divider>
         @for(device of frontCameras(); track device.deviceId){
-          <ion-item>
-            <ion-label>
-              <h3>{{ device.label }} {{ device.isLogical ? '(Logical - Default)' : '' }}</h3>
-              <p>ID: {{ device.deviceId }}</p>
-              <p>Zoom: {{ device.minZoom }}x - {{ device.maxZoom }}x</p>
-              @for(lens of device.lenses; track lens.deviceType){
-                <p class="lens-info">Lens: {{ lens.deviceType }} ({{ lens.baseZoomRatio }}x)</p>
-              }
-            </ion-label>
-          </ion-item>
+        <ion-item>
+          <ion-label>
+            <h3>
+              {{ device.label }} {{ device.isLogical ? '(Logical - Default)' :
+              '' }}
+            </h3>
+            <p>ID: {{ device.deviceId }}</p>
+            <p>Zoom: {{ device.minZoom }}x - {{ device.maxZoom }}x</p>
+            @for(lens of device.lenses; track lens.deviceType){
+            <p class="lens-info">
+              Lens: {{ lens.deviceType }} ({{ lens.baseZoomRatio }}x)
+            </p>
+            }
+          </ion-label>
+        </ion-item>
         }
       </ion-list>
     </ion-card-content>
@@ -53,7 +62,7 @@
       <ion-card-title>Camera Settings</ion-card-title>
     </ion-card-header>
     <ion-card-content>
-     <ion-list lines="full" class="ion-margin-bottom">
+      <ion-list lines="full" class="ion-margin-bottom">
         <ion-item>
           <ion-select
             [(ngModel)]="deviceId"
@@ -66,24 +75,25 @@
             </ion-select-option>
 
             @for (device of cameraDevices(); track device.deviceId) {
-              <ion-select-option value="{{ device.deviceId }}">
-                ({{ device.position }}) - {{ device.label }} ({{ device.lenses.length }} lenses)
-              </ion-select-option>
+            <ion-select-option value="{{ device.deviceId }}">
+              ({{ device.position }}) - {{ device.label }} ({{
+              device.lenses.length }} lenses)
+            </ion-select-option>
             }
           </ion-select>
         </ion-item>
 
         @if (!deviceId()) {
-          <ion-item>
-            <ion-select
-              [(ngModel)]="position"
-              label="Camera Position"
-              label-placement="floating"
-            >
-              <ion-select-option value="back">Back</ion-select-option>
-              <ion-select-option value="front">Front</ion-select-option>
-            </ion-select>
-          </ion-item>
+        <ion-item>
+          <ion-select
+            [(ngModel)]="position"
+            label="Camera Position"
+            label-placement="floating"
+          >
+            <ion-select-option value="back">Back</ion-select-option>
+            <ion-select-option value="front">Front</ion-select-option>
+          </ion-select>
+        </ion-item>
         }
 
         <ion-item>
@@ -110,7 +120,11 @@
             [label]="'Initial Zoom Level (' + initialZoomFactor() + 'x)'"
             labelPlacement="stacked"
           >
-            <ion-icon size="small" slot="start" name="search-outline"></ion-icon>
+            <ion-icon
+              size="small"
+              slot="start"
+              name="search-outline"
+            ></ion-icon>
             <ion-icon slot="end" name="search"></ion-icon>
           </ion-range>
         </ion-item>
@@ -134,21 +148,37 @@
           <ion-list>
             <ion-item>
               <ion-label>X</ion-label>
-              <ion-input [(ngModel)]="previewX" type="number" placeholder="0"></ion-input>
+              <ion-input
+                [(ngModel)]="previewX"
+                type="number"
+                placeholder="0"
+              ></ion-input>
             </ion-item>
             <ion-item>
               <ion-label>Y</ion-label>
-              <ion-input [(ngModel)]="previewY" type="number" placeholder="0"></ion-input>
+              <ion-input
+                [(ngModel)]="previewY"
+                type="number"
+                placeholder="0"
+              ></ion-input>
             </ion-item>
             @if (aspectRatio() === 'custom') {
-              <ion-item>
-                <ion-label>Width</ion-label>
-                <ion-input [(ngModel)]="previewWidth" type="number" placeholder="auto"></ion-input>
-              </ion-item>
-              <ion-item>
-                <ion-label>Height</ion-label>
-                <ion-input [(ngModel)]="previewHeight" type="number" placeholder="auto"></ion-input>
-              </ion-item>
+            <ion-item>
+              <ion-label>Width</ion-label>
+              <ion-input
+                [(ngModel)]="previewWidth"
+                type="number"
+                placeholder="auto"
+              ></ion-input>
+            </ion-item>
+            <ion-item>
+              <ion-label>Height</ion-label>
+              <ion-input
+                [(ngModel)]="previewHeight"
+                type="number"
+                placeholder="auto"
+              ></ion-input>
+            </ion-item>
             }
             <ion-item>
               <ion-label>Aspect Ratio</ion-label>
@@ -164,16 +194,36 @@
           <ion-grid>
             <ion-row class="ion-justify-content-around">
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setPreset('full')">Full Screen</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setPreset('full')"
+                  >Full Screen</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setPreset('top-left')">Top Left</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setPreset('top-left')"
+                  >Top Left</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setPreset('bottom-right')">Bottom Right</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setPreset('bottom-right')"
+                  >Bottom Right</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setPreset('small-center')">Small Center</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setPreset('small-center')"
+                  >Small Center</ion-button
+                >
               </ion-col>
             </ion-row>
           </ion-grid>
@@ -205,7 +255,11 @@
                 [label]="'Picture Quality (' + pictureQuality() + ')'"
                 labelPlacement="stacked"
               >
-                <ion-icon size="small" slot="start" name="sad-outline"></ion-icon>
+                <ion-icon
+                  size="small"
+                  slot="start"
+                  name="sad-outline"
+                ></ion-icon>
                 <ion-icon slot="end" name="happy"></ion-icon>
               </ion-range>
             </ion-item>
@@ -219,14 +273,22 @@
               </ion-checkbox>
             </ion-item>
             @if (useCustomSize()) {
-              <ion-item>
-                <ion-label>Width</ion-label>
-                <ion-input [(ngModel)]="pictureWidth" type="number" placeholder="1920"></ion-input>
-              </ion-item>
-              <ion-item>
-                <ion-label>Height</ion-label>
-                <ion-input [(ngModel)]="pictureHeight" type="number" placeholder="1080"></ion-input>
-              </ion-item>
+            <ion-item>
+              <ion-label>Width</ion-label>
+              <ion-input
+                [(ngModel)]="pictureWidth"
+                type="number"
+                placeholder="1920"
+              ></ion-input>
+            </ion-item>
+            <ion-item>
+              <ion-label>Height</ion-label>
+              <ion-input
+                [(ngModel)]="pictureHeight"
+                type="number"
+                placeholder="1080"
+              ></ion-input>
+            </ion-item>
             }
           </ion-list>
 
@@ -234,43 +296,92 @@
           <ion-grid>
             <ion-row class="ion-justify-content-around">
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setCapturePreset('vga')">VGA</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setCapturePreset('vga')"
+                  >VGA</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setCapturePreset('hd')">HD</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setCapturePreset('hd')"
+                  >HD</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setCapturePreset('fullhd')">Full HD</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setCapturePreset('fullhd')"
+                  >Full HD</ion-button
+                >
               </ion-col>
             </ion-row>
             <ion-row class="ion-justify-content-around ion-margin-top">
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setCapturePreset('4k')">4K UHD</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setCapturePreset('4k')"
+                  >4K UHD</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setCapturePreset('square')">Square</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setCapturePreset('square')"
+                  >Square</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setCapturePreset('portrait')">Portrait</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setCapturePreset('portrait')"
+                  >Portrait</ion-button
+                >
               </ion-col>
             </ion-row>
             <ion-row class="ion-justify-content-around ion-margin-top">
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setCapturePreset('small')">Small</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setCapturePreset('small')"
+                  >Small</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" (click)="setCapturePreset('large')">Large</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  (click)="setCapturePreset('large')"
+                  >Large</ion-button
+                >
               </ion-col>
               <ion-col size="auto">
-                <ion-button fill="outline" size="small" color="danger" (click)="setCapturePreset('disable')">Disable Custom</ion-button>
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  color="danger"
+                  (click)="setCapturePreset('disable')"
+                  >Disable Custom</ion-button
+                >
               </ion-col>
             </ion-row>
           </ion-grid>
-          
+
           @if (useCustomSize()) {
-            <div class="ion-margin-top">
-              <p><strong>Current Size:</strong> {{ pictureWidth() }} x {{ pictureHeight() }} px</p>
-            </div>
+          <div class="ion-margin-top">
+            <p>
+              <strong>Current Size:</strong> {{ pictureWidth() }} x {{
+              pictureHeight() }} px
+            </p>
+          </div>
           }
         </ion-card-content>
       </ion-card>
@@ -286,7 +397,11 @@
             [label]="'Camera Opacity (' + opacity() + '%)'"
             labelPlacement="stacked"
           >
-            <ion-icon size="small" slot="start" name="eye-off-outline"></ion-icon>
+            <ion-icon
+              size="small"
+              slot="start"
+              name="eye-off-outline"
+            ></ion-icon>
             <ion-icon slot="end" name="eye"></ion-icon>
           </ion-range>
         </ion-item>
@@ -377,7 +492,11 @@
       </ion-button>
 
       <div class="quick-tests ion-margin-top">
-        <ion-button (click)="quickTestHighQuality()" fill="outline" size="small">
+        <ion-button
+          (click)="quickTestHighQuality()"
+          fill="outline"
+          size="small"
+        >
           <ion-icon name="star" slot="start"></ion-icon>
           High Quality Test
         </ion-button>
@@ -395,33 +514,47 @@
 
       <div class="capture-size-tests ion-margin-top">
         <h4>Capture Size Tests</h4>
-        <ion-button (click)="quickTestHDCapture()" fill="outline" size="small" color="secondary">
+        <ion-button
+          (click)="quickTestHDCapture()"
+          fill="outline"
+          size="small"
+          color="secondary"
+        >
           <ion-icon name="camera" slot="start"></ion-icon>
           HD Capture Test
         </ion-button>
 
-        <ion-button (click)="quickTest4KCapture()" fill="outline" size="small" color="secondary">
+        <ion-button
+          (click)="quickTest4KCapture()"
+          fill="outline"
+          size="small"
+          color="secondary"
+        >
           <ion-icon name="camera" slot="start"></ion-icon>
           4K Capture Test
         </ion-button>
 
-        <ion-button (click)="quickTestSquareCapture()" fill="outline" size="small" color="secondary">
+        <ion-button
+          (click)="quickTestSquareCapture()"
+          fill="outline"
+          size="small"
+          color="secondary"
+        >
           <ion-icon name="camera" slot="start"></ion-icon>
           Square Capture Test
         </ion-button>
       </div>
 
       @if (testResults()) {
-        <ion-card class="ion-margin-top">
-          <ion-card-header>
-            <ion-card-title>Test Results</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <pre>{{ testResults() }}</pre>
-          </ion-card-content>
-        </ion-card>
+      <ion-card class="ion-margin-top">
+        <ion-card-header>
+          <ion-card-title>Test Results</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <pre>{{ testResults() }}</pre>
+        </ion-card-content>
+      </ion-card>
       }
     </ion-card-content>
   </ion-card>
-
 </ion-content>

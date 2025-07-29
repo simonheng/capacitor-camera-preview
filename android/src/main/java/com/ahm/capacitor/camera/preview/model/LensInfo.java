@@ -4,31 +4,37 @@ package com.ahm.capacitor.camera.preview.model;
  * Represents lens information for a camera device.
  */
 public class LensInfo {
-    private final float focalLength;
-    private final String deviceType;
-    private final float baseZoomRatio;
-    private final float digitalZoom;
 
-    public LensInfo(float focalLength, String deviceType, float baseZoomRatio, float digitalZoom) {
-        this.focalLength = Math.round(focalLength * 100.0f) / 100.0f;
-        this.deviceType = deviceType;
-        this.baseZoomRatio = baseZoomRatio;
-        this.digitalZoom = digitalZoom;
-    }
+  private final float focalLength;
+  private final String deviceType;
+  private final float baseZoomRatio;
+  private final float digitalZoom;
 
-    public float getFocalLength() {
-        return focalLength;
-    }
+  public LensInfo(
+    float focalLength,
+    String deviceType,
+    float baseZoomRatio,
+    float digitalZoom
+  ) {
+    this.focalLength = Math.round(focalLength * 100.0f) / 100.0f;
+    this.deviceType = deviceType;
+    this.baseZoomRatio = baseZoomRatio;
+    this.digitalZoom = digitalZoom;
+  }
 
-    public String getDeviceType() {
-        return deviceType;
-    }
+  public float getFocalLength() {
+    return focalLength;
+  }
 
-    public float getBaseZoomRatio() {
-        return baseZoomRatio;
-    }
+  public String getDeviceType() {
+    return deviceType;
+  }
 
-    public float getDigitalZoom() {
-        return digitalZoom;
-    }
-} 
+  public float getBaseZoomRatio() {
+    return baseZoomRatio;
+  }
+
+  public float getDigitalZoom() {
+    return digitalZoom;
+  }
+}

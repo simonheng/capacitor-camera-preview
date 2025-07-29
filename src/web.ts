@@ -35,9 +35,13 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     );
   }
 
-  async start(options: CameraPreviewOptions): Promise<{ width: number; height: number; x: number; y: number }> {
+  async start(
+    options: CameraPreviewOptions,
+  ): Promise<{ width: number; height: number; x: number; y: number }> {
     if (options.aspectRatio && (options.width || options.height)) {
-      throw new Error("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.");
+      throw new Error(
+        "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.",
+      );
     }
     if (this.isStarted) {
       throw new Error("camera already started");
@@ -56,7 +60,9 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     if (video) {
       video.remove();
     }
-    const container = options.parent ? document.getElementById(options.parent) : document.body;
+    const container = options.parent
+      ? document.getElementById(options.parent)
+      : document.body;
     if (!container) {
       throw new Error("container not found");
     }
@@ -83,19 +89,21 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     if (options.x) {
       this.videoElement.style.left = `${options.x}px`;
     }
-      // Create and add grid overlay if needed
-      if (gridMode !== "none") {
-        const gridOverlay = this.createGridOverlay(gridMode);
-        gridOverlay.id = "camera-grid-overlay";
-        parent?.appendChild(gridOverlay);
-      }
+    // Create and add grid overlay if needed
+    if (gridMode !== "none") {
+      const gridOverlay = this.createGridOverlay(gridMode);
+      gridOverlay.id = "camera-grid-overlay";
+      parent?.appendChild(gridOverlay);
+    }
 
     if (options.y) {
       this.videoElement.style.top = `${options.y}px`;
     }
 
     if (options.aspectRatio) {
-      const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
+      const [widthRatio, heightRatio] = options.aspectRatio
+        .split(":")
+        .map(Number);
       const ratio = widthRatio / heightRatio;
 
       if (options.width) {
@@ -104,7 +112,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         this.videoElement.width = options.height * ratio;
       }
     } else {
-      this.videoElement.style.objectFit = 'cover';
+      this.videoElement.style.objectFit = "cover";
     }
 
     const constraints: MediaStreamConstraints = {
@@ -161,7 +169,9 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
   async capture(options: CameraPreviewPictureOptions): Promise<any> {
     return new Promise((resolve, reject) => {
-      const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
+      const video = document.getElementById(
+        DEFAULT_VIDEO_ID,
+      ) as HTMLVideoElement;
       if (!video?.srcObject) {
         reject(new Error("camera is not running"));
         return;
@@ -304,11 +314,15 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
   async getAvailableDevices(): Promise<{ devices: CameraDevice[] }> {
     if (!navigator.mediaDevices?.enumerateDevices) {
-      throw new Error("getAvailableDevices not supported under the web platform");
+      throw new Error(
+        "getAvailableDevices not supported under the web platform",
+      );
     }
 
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+    const videoDevices = devices.filter(
+      (device) => device.kind === "videoinput",
+    );
 
     // Group devices by position (front/back)
     const frontDevices: any[] = [];
@@ -322,13 +336,21 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       let deviceType: DeviceType = DeviceType.WIDE_ANGLE;
       let baseZoomRatio = 1.0;
 
-      if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
+      if (labelLower.includes("ultra") || labelLower.includes("0.5")) {
         deviceType = DeviceType.ULTRA_WIDE;
         baseZoomRatio = 0.5;
-      } else if (labelLower.includes('telephoto') || labelLower.includes('tele') || labelLower.includes('2x') || labelLower.includes('3x')) {
+      } else if (
+        labelLower.includes("telephoto") ||
+        labelLower.includes("tele") ||
+        labelLower.includes("2x") ||
+        labelLower.includes("3x")
+      ) {
         deviceType = DeviceType.TELEPHOTO;
         baseZoomRatio = 2.0;
-      } else if (labelLower.includes('depth') || labelLower.includes('truedepth')) {
+      } else if (
+        labelLower.includes("depth") ||
+        labelLower.includes("truedepth")
+      ) {
         deviceType = DeviceType.TRUE_DEPTH;
         baseZoomRatio = 1.0;
       }
@@ -340,11 +362,11 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         focalLength: 4.25,
         baseZoomRatio,
         minZoom: 1.0,
-        maxZoom: 1.0
+        maxZoom: 1.0,
       };
 
       // Determine position and add to appropriate array
-      if (labelLower.includes('back') || labelLower.includes('rear')) {
+      if (labelLower.includes("back") || labelLower.includes("rear")) {
         backDevices.push(lensInfo);
       } else {
         frontDevices.push(lensInfo);
@@ -360,8 +382,8 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         position: "front",
         lenses: frontDevices,
         isLogical: false,
-        minZoom: Math.min(...frontDevices.map(d => d.minZoom)),
-        maxZoom: Math.max(...frontDevices.map(d => d.maxZoom))
+        minZoom: Math.min(...frontDevices.map((d) => d.minZoom)),
+        maxZoom: Math.max(...frontDevices.map((d) => d.maxZoom)),
       });
     }
 
@@ -372,15 +394,20 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         position: "rear",
         lenses: backDevices,
         isLogical: false,
-        minZoom: Math.min(...backDevices.map(d => d.minZoom)),
-        maxZoom: Math.max(...backDevices.map(d => d.maxZoom))
+        minZoom: Math.min(...backDevices.map((d) => d.minZoom)),
+        maxZoom: Math.max(...backDevices.map((d) => d.maxZoom)),
       });
     }
 
     return { devices: result };
   }
 
-  async getZoom(): Promise<{ min: number; max: number; current: number; lens: LensInfo }> {
+  async getZoom(): Promise<{
+    min: number;
+    max: number;
+    current: number;
+    lens: LensInfo;
+  }> {
     const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video?.srcObject) {
       throw new Error("camera is not running");
@@ -406,16 +433,24 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     if (this.currentDeviceId) {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const device = devices.find(d => d.deviceId === this.currentDeviceId);
+      const device = devices.find((d) => d.deviceId === this.currentDeviceId);
       if (device) {
         const labelLower = device.label.toLowerCase();
-        if (labelLower.includes('ultra') || labelLower.includes('0.5')) {
+        if (labelLower.includes("ultra") || labelLower.includes("0.5")) {
           deviceType = DeviceType.ULTRA_WIDE;
           baseZoomRatio = 0.5;
-        } else if (labelLower.includes('telephoto') || labelLower.includes('tele') || labelLower.includes('2x') || labelLower.includes('3x')) {
+        } else if (
+          labelLower.includes("telephoto") ||
+          labelLower.includes("tele") ||
+          labelLower.includes("2x") ||
+          labelLower.includes("3x")
+        ) {
           deviceType = DeviceType.TELEPHOTO;
           baseZoomRatio = 2.0;
-        } else if (labelLower.includes('depth') || labelLower.includes('truedepth')) {
+        } else if (
+          labelLower.includes("depth") ||
+          labelLower.includes("truedepth")
+        ) {
           deviceType = DeviceType.TRUE_DEPTH;
           baseZoomRatio = 1.0;
         }
@@ -427,7 +462,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       focalLength: 4.25,
       deviceType,
       baseZoomRatio,
-      digitalZoom: currentZoom / baseZoomRatio
+      digitalZoom: currentZoom / baseZoomRatio,
     };
 
     return {
@@ -459,12 +494,12 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     const zoomLevel = Math.max(
       capabilities.zoom.min || 1,
-      Math.min(capabilities.zoom.max || 1, options.level)
+      Math.min(capabilities.zoom.max || 1, options.level),
     );
 
     try {
       await videoTrack.applyConstraints({
-        advanced: [{ zoom: zoomLevel } as any]
+        advanced: [{ zoom: zoomLevel } as any],
       });
     } catch (error) {
       throw new Error(`Failed to set zoom: ${error}`);
@@ -503,8 +538,11 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     try {
       // Try to determine camera position from device
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const device = devices.find(d => d.deviceId === options.deviceId);
-      this.isBackCamera = device?.label.toLowerCase().includes('back') || device?.label.toLowerCase().includes('rear') || false;
+      const device = devices.find((d) => d.deviceId === options.deviceId);
+      this.isBackCamera =
+        device?.label.toLowerCase().includes("back") ||
+        device?.label.toLowerCase().includes("rear") ||
+        false;
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = stream;
@@ -524,7 +562,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
   }
 
-  async getAspectRatio(): Promise<{ aspectRatio: '4:3' | '16:9' }> {
+  async getAspectRatio(): Promise<{ aspectRatio: "4:3" | "16:9" }> {
     const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video) {
       throw new Error("camera is not running");
@@ -536,19 +574,23 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     if (width && height) {
       const ratio = width / height;
       // Check for portrait camera ratios: 4:3 -> 3:4, 16:9 -> 9:16
-      if (Math.abs(ratio - (3 / 4)) < 0.01) {
-        return { aspectRatio: '4:3' };
+      if (Math.abs(ratio - 3 / 4) < 0.01) {
+        return { aspectRatio: "4:3" };
       }
-      if (Math.abs(ratio - (9 / 16)) < 0.01) {
-        return { aspectRatio: '16:9' };
+      if (Math.abs(ratio - 9 / 16) < 0.01) {
+        return { aspectRatio: "16:9" };
       }
     }
 
     // Default to 4:3 if no specific aspect ratio is matched
-    return { aspectRatio: '4:3' };
+    return { aspectRatio: "4:3" };
   }
 
-  async setAspectRatio(options: { aspectRatio: '4:3' | '16:9'; x?: number; y?: number }): Promise<{
+  async setAspectRatio(options: {
+    aspectRatio: "4:3" | "16:9";
+    x?: number;
+    y?: number;
+  }): Promise<{
     width: number;
     height: number;
     x: number;
@@ -560,19 +602,21 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
 
     if (options.aspectRatio) {
-      const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
+      const [widthRatio, heightRatio] = options.aspectRatio
+        .split(":")
+        .map(Number);
       // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
       const ratio = heightRatio / widthRatio;
-      
+
       // Get current position and size
       const rect = video.getBoundingClientRect();
       const currentWidth = rect.width;
       const currentHeight = rect.height;
       const currentRatio = currentWidth / currentHeight;
-      
+
       let newWidth: number;
       let newHeight: number;
-      
+
       if (currentRatio > ratio) {
         // Width is larger, fit by height and center horizontally
         newWidth = currentHeight * ratio;
@@ -582,7 +626,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         newWidth = currentWidth;
         newHeight = currentWidth / ratio;
       }
-      
+
       // Calculate position
       let x: number, y: number;
       if (options.x !== undefined && options.y !== undefined) {
@@ -594,27 +638,27 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         x = (window.innerWidth - newWidth) / 2;
         y = (window.innerHeight - newHeight) / 2;
       }
-      
+
       video.style.width = `${newWidth}px`;
       video.style.height = `${newHeight}px`;
       video.style.left = `${x}px`;
       video.style.top = `${y}px`;
-      video.style.position = 'absolute';
+      video.style.position = "absolute";
 
       return {
         width: Math.round(newWidth),
         height: Math.round(newHeight),
         x: Math.round(x),
-        y: Math.round(y)
+        y: Math.round(y),
       };
     } else {
-      video.style.objectFit = 'cover';
+      video.style.objectFit = "cover";
       const rect = video.getBoundingClientRect();
       return {
         width: Math.round(rect.width),
         height: Math.round(rect.height),
         x: Math.round(rect.left),
-        y: Math.round(rect.top)
+        y: Math.round(rect.top),
       };
     }
   }
@@ -642,7 +686,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     // Create grid lines
     for (let i = 1; i < divisions; i++) {
       // Vertical lines
-      const verticalLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const verticalLine = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "line",
+      );
       verticalLine.setAttribute("x1", `${(i / divisions) * 100}%`);
       verticalLine.setAttribute("y1", "0%");
       verticalLine.setAttribute("x2", `${(i / divisions) * 100}%`);
@@ -652,7 +699,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       svg.appendChild(verticalLine);
 
       // Horizontal lines
-      const horizontalLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const horizontalLine = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "line",
+      );
       horizontalLine.setAttribute("x1", "0%");
       horizontalLine.setAttribute("y1", `${(i / divisions) * 100}%`);
       horizontalLine.setAttribute("x2", "100%");
@@ -669,15 +719,22 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   async setGridMode(options: { gridMode: GridMode }): Promise<void> {
     // Web implementation of grid mode would need to be implemented
     // For now, just resolve as a no-op
-    console.warn(`Grid mode '${options.gridMode}' is not yet implemented for web platform`);
+    console.warn(
+      `Grid mode '${options.gridMode}' is not yet implemented for web platform`,
+    );
   }
 
   async getGridMode(): Promise<{ gridMode: GridMode }> {
     // Web implementation - default to none
-    return { gridMode: 'none' };
+    return { gridMode: "none" };
   }
 
-  async getPreviewSize(): Promise<{x: number, y: number, width: number, height: number}> {
+  async getPreviewSize(): Promise<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }> {
     const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video) {
       throw new Error("camera is not running");
@@ -686,10 +743,15 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       x: video.offsetLeft,
       y: video.offsetTop,
       width: video.width,
-      height: video.height
+      height: video.height,
     };
   }
-  async setPreviewSize(options: {x: number, y: number, width: number, height: number}): Promise<{
+  async setPreviewSize(options: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Promise<{
     width: number;
     height: number;
     x: number;
@@ -708,8 +770,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       width: options.width,
       height: options.height,
       x: options.x,
-      y: options.y
+      y: options.y,
     };
   }
-
 }
