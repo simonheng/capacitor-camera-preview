@@ -9,6 +9,7 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.location.Location;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -139,6 +140,29 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
   private void saveImageToGallery(byte[] data) {
     try {
+      // Detect image format from byte array header
+      String extension = ".jpg";
+      String mimeType = "image/jpeg";
+      
+      if (data.length >= 8) {
+        // Check for PNG signature (89 50 4E 47 0D 0A 1A 0A)
+        if (data[0] == (byte) 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+          extension = ".png";
+          mimeType = "image/png";
+        }
+        // Check for JPEG signature (FF D8 FF)
+        else if (data[0] == (byte) 0xFF && data[1] == (byte) 0xD8 && data[2] == (byte) 0xFF) {
+          extension = ".jpg";
+          mimeType = "image/jpeg";
+        }
+        // Check for WebP signature (RIFF ... WEBP)
+        else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+                 data.length >= 12 && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
+          extension = ".webp";
+          mimeType = "image/webp";
+        }
+      }
+      
       File photo = new File(
         Environment.getExternalStoragePublicDirectory(
           Environment.DIRECTORY_PICTURES
@@ -147,19 +171,14 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(
           new java.util.Date()
         ) +
-        ".jpg"
+        extension
       );
       FileOutputStream fos = new FileOutputStream(photo);
       fos.write(data);
       fos.close();
 
       // Notify the gallery of the new image
-      Intent mediaScanIntent = new Intent(
-        Intent.ACTION_MEDIA_SCANNER_SCAN_FILE
-      );
-      Uri contentUri = Uri.fromFile(photo);
-      mediaScanIntent.setData(contentUri);
-      context.sendBroadcast(mediaScanIntent);
+      MediaScannerConnection.scanFile(this.context, new String[]{photo.getAbsolutePath()}, new String[]{mimeType}, null);
     } catch (IOException e) {
       Log.e(TAG, "Error saving image to gallery", e);
     }
