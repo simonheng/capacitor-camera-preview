@@ -1312,9 +1312,13 @@ extension UIImage {
 
         switch imageOrientation {
         case .left, .leftMirrored, .right, .rightMirrored:
-            ctx.draw(self.cgImage!, in: CGRect(x: 0, y: 0, width: size.height, height: size.width))
+            if let cgImage = self.cgImage {
+                ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: size.height, height: size.width))
+            }
         default:
-            ctx.draw(self.cgImage!, in: CGRect(x: 0, y: 0, width: size.width, height: size.height))
+            if let cgImage = self.cgImage {
+                ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: size.width, height: size.height))
+            }
         }
         guard let newCGImage = ctx.makeImage() else { return nil }
         return UIImage.init(cgImage: newCGImage, scale: 1, orientation: .up)
