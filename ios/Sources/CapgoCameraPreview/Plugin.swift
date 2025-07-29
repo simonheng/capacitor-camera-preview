@@ -700,7 +700,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     return
                 }
 
-                guard let imageDataWithExif = self.createImageDataWithExif(from: image!, quality: Int(quality), location: withExifLocation ? self.currentLocation : nil) else {
+                guard let image = image,
+                      let imageDataWithExif = self.createImageDataWithExif(
+                          from: image,
+                          quality: Int(quality),
+                          location: withExifLocation ? self.currentLocation : nil
+                      )
+                else {
                     print("[CameraPreview] Failed to create image data with EXIF")
                     call.reject("Failed to create image data with EXIF")
                     return
