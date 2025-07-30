@@ -277,8 +277,9 @@ public class CameraPreview
       call.reject("level parameter is required");
       return;
     }
+    Boolean autoFocus = call.getBoolean("autoFocus", true);
     try {
-      cameraXView.setZoom(level);
+      cameraXView.setZoom(level, autoFocus);
       call.resolve();
     } catch (Exception e) {
       call.reject("Failed to set zoom: " + e.getMessage());
@@ -467,6 +468,7 @@ public class CameraPreview
     );
     final String aspectRatio = call.getString("aspectRatio", "4:3");
     final String gridMode = call.getString("gridMode", "none");
+    final float initialZoomLevel = call.getFloat("initialZoomLevel", 1.0f);
 
     // Check for conflict between aspectRatio and size
     if (
@@ -479,7 +481,7 @@ public class CameraPreview
       return;
     }
 
-    float targetZoom = 1.0f;
+    float targetZoom = initialZoomLevel;
     // Check if the selected device is a physical ultra-wide
     if (originalDeviceId != null) {
       List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(

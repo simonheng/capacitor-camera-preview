@@ -527,7 +527,24 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           : sessionConfig.getZoomFactor();
         if (initialZoom != 1.0f) {
           Log.d(TAG, "Applying initial zoom of " + initialZoom);
-          setZoomInternal(initialZoom);
+          
+          // Validate zoom is within bounds
+          if (zoomState != null) {
+            float minZoom = zoomState.getMinZoomRatio();
+            float maxZoom = zoomState.getMaxZoomRatio();
+            
+            if (initialZoom < minZoom || initialZoom > maxZoom) {
+              if (listener != null) {
+                listener.onCameraStartError(
+                  "Initial zoom level " + initialZoom + " is not available. " +
+                  "Valid range is " + minZoom + " to " + maxZoom
+                );
+                return;
+              }
+            }
+          }
+          
+          setZoomInternal(initialZoom, false);
         }
 
         isRunning = true;
@@ -1281,7 +1298,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     }
   }
 
-  public void setZoom(float zoomRatio) throws Exception {
+  public void setZoom(float zoomRatio, boolean autoFocus) throws Exception {
     if (camera == null) {
       throw new Exception("Camera not initialized");
     }
@@ -1300,6 +1317,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           try {
             zoomFuture.get();
             Log.d(TAG, "Zoom successfully set to " + zoomRatio);
+            // Trigger autofocus after zoom if requested
+            if (autoFocus) {
+              triggerAutoFocus();
+            }
           } catch (Exception e) {
             Log.e(TAG, "Error setting zoom: " + e.getMessage());
           }
@@ -1380,7 +1401,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     return sizes;
   }
 
-  private void setZoomInternal(float zoomRatio) {
+  private void setZoomInternal(float zoomRatio, boolean autoFocus) {
     if (camera != null) {
       try {
         float minZoom = Objects.requireNonNull(
@@ -1437,6 +1458,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                   TAG,
                   "setZoomInternal: CameraX switched to camera: " + newCameraId
                 );
+              }
+              
+              // Trigger autofocus after zoom if requested
+              if (autoFocus) {
+                triggerAutoFocus();
               }
             } catch (Exception e) {
               Log.w(
@@ -2258,5 +2284,50 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     }
 
     return new int[] { x, y, width, height };
+  }
+
+  private void triggerAutoFocus() {
+    if (camera == null) {
+      return;
+    }
+    
+    Log.d(TAG, "triggerAutoFocus: Triggering autofocus at center");
+    
+    // Focus on the center of the view
+    int viewWidth = previewView.getWidth();
+    int viewHeight = previewView.getHeight();
+    
+    if (viewWidth == 0 || viewHeight == 0) {
+      return;
+    }
+    
+    // Create MeteringPoint at the center of the preview
+    MeteringPointFactory factory = previewView.getMeteringPointFactory();
+    MeteringPoint point = factory.createPoint(viewWidth / 2f, viewHeight / 2f);
+    
+    // Create focus and metering action
+    FocusMeteringAction action = new FocusMeteringAction.Builder(
+      point,
+      FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
+    )
+      .setAutoCancelDuration(3, TimeUnit.SECONDS) // Auto-cancel after 3 seconds
+      .build();
+    
+    try {
+      ListenableFuture<FocusMeteringResult> focusFuture = camera.getCameraControl().startFocusAndMetering(action);
+      focusFuture.addListener(
+        () -> {
+          try {
+            FocusMeteringResult result = focusFuture.get();
+            Log.d(TAG, "triggerAutoFocus: Focus completed successfully: " + result.isFocusSuccessful());
+          } catch (Exception e) {
+            Log.e(TAG, "triggerAutoFocus: Error during focus", e);
+          }
+        },
+        ContextCompat.getMainExecutor(context)
+      );
+    } catch (Exception e) {
+      Log.e(TAG, "triggerAutoFocus: Failed to trigger autofocus", e);
+    }
   }
 }

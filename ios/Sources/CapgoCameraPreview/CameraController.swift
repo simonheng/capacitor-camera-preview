@@ -152,7 +152,7 @@ extension CameraController {
         print("[CameraPreview] Outputs pre-created")
     }
 
-    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, completionHandler: @escaping (Error?) -> Void) {
+    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float = 1.0, completionHandler: @escaping (Error?) -> Void) {
         do {
             // Session and outputs already created in load(), just configure user-specific settings
             if self.captureSession == nil {
@@ -175,6 +175,33 @@ extension CameraController {
             // Start the session
             captureSession.startRunning()
             print("[CameraPreview] Session started")
+            
+            // Validate and set initial zoom level
+            if initialZoomLevel != 1.0 {
+                let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera
+                if let device = device {
+                    let minZoom = device.minAvailableVideoZoomFactor
+                    let maxZoom = min(device.maxAvailableVideoZoomFactor, saneMaxZoomFactor)
+                    
+                    if CGFloat(initialZoomLevel) < minZoom || CGFloat(initialZoomLevel) > maxZoom {
+                        let error = CameraControllerError.invalidZoomLevel(min: minZoom, max: maxZoom, requested: CGFloat(initialZoomLevel))
+                        completionHandler(error)
+                        return
+                    }
+                    
+                    do {
+                        try device.lockForConfiguration()
+                        device.videoZoomFactor = CGFloat(initialZoomLevel)
+                        device.unlockForConfiguration()
+                        self.zoomFactor = CGFloat(initialZoomLevel)
+                        print("[CameraPreview] Set initial zoom to \(initialZoomLevel)")
+                    } catch {
+                        print("[CameraPreview] Failed to set initial zoom: \(error)")
+                        completionHandler(error)
+                        return
+                    }
+                }
+            }
 
             completionHandler(nil)
         } catch {
@@ -747,7 +774,7 @@ extension CameraController {
         )
     }
 
-    func setZoom(level: CGFloat, ramp: Bool) throws {
+    func setZoom(level: CGFloat, ramp: Bool, autoFocus: Bool = true) throws {
         var currentCamera: AVCaptureDevice?
         switch currentCameraPosition {
         case .front:
@@ -778,8 +805,63 @@ extension CameraController {
 
             // Update our internal zoom factor tracking
             self.zoomFactor = zoomLevel
+            
+            // Trigger autofocus after zoom if requested
+            if autoFocus {
+                self.triggerAutoFocus()
+            }
         } catch {
             throw CameraControllerError.invalidOperation
+        }
+    }
+    
+    private func triggerAutoFocus() {
+        var currentCamera: AVCaptureDevice?
+        switch currentCameraPosition {
+        case .front:
+            currentCamera = self.frontCamera
+        case .rear:
+            currentCamera = self.rearCamera
+        default: break
+        }
+        
+        guard let device = currentCamera else {
+            return
+        }
+        
+        // Focus on the center of the preview (0.5, 0.5)
+        let centerPoint = CGPoint(x: 0.5, y: 0.5)
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Set focus mode to auto if supported
+            if device.isFocusModeSupported(.autoFocus) {
+                device.focusMode = .autoFocus
+                if device.isFocusPointOfInterestSupported {
+                    device.focusPointOfInterest = centerPoint
+                }
+            } else if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+                if device.isFocusPointOfInterestSupported {
+                    device.focusPointOfInterest = centerPoint
+                }
+            }
+            
+            // Also set exposure point if supported
+            if device.isExposurePointOfInterestSupported && device.isExposureModeSupported(.autoExpose) {
+                device.exposureMode = .autoExpose
+                device.exposurePointOfInterest = centerPoint
+            } else if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+                if device.isExposurePointOfInterestSupported {
+                    device.exposurePointOfInterest = centerPoint
+                }
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            // Silently ignore errors during autofocus
         }
     }
 
@@ -1221,6 +1303,7 @@ enum CameraControllerError: Swift.Error {
     case cannotFindDocumentsDirectory
     case fileVideoOutputNotFound
     case unknown
+    case invalidZoomLevel(min: CGFloat, max: CGFloat, requested: CGFloat)
 }
 
 public enum CameraPosition {
@@ -1247,6 +1330,8 @@ extension CameraControllerError: LocalizedError {
             return NSLocalizedString("Cannot find documents directory", comment: "This should never happen")
         case .fileVideoOutputNotFound:
             return NSLocalizedString("Video recording is not available. Make sure the camera is properly initialized.", comment: "Video recording not available")
+        case .invalidZoomLevel(let min, let max, let requested):
+            return NSLocalizedString("Invalid zoom level. Must be between \(min) and \(max). Requested: \(requested)", comment: "Invalid Zoom Level")
         }
     }
 }

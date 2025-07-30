@@ -188,6 +188,14 @@ export interface CameraPreviewOptions {
    * @platform ios
    */
   deviceId?: string;
+  /**
+   * The initial zoom level when starting the camera preview.
+   * If the requested zoom level is not available, the native plugin will reject.
+   * @default 1.0
+   * @platform android, ios
+   * @since 2.2.0
+   */
+  initialZoomLevel?: number;
 }
 
 /**
@@ -478,13 +486,13 @@ export interface CameraPreviewPlugin {
   }>;
 
   /**
-   * Sets the camera's zoom level.
+   * Sets the zoom level of the camera.
    *
-   * @param {{ level: number; ramp?: boolean }} options - The desired zoom level. `ramp` is currently unused.
+   * @param {{ level: number; ramp?: boolean; autoFocus?: boolean }} options - The desired zoom level. `ramp` is currently unused. `autoFocus` defaults to true.
    * @returns {Promise<void>} A promise that resolves when the zoom level is set.
    * @since 7.4.0
    */
-  setZoom(options: { level: number; ramp?: boolean }): Promise<void>;
+  setZoom(options: { level: number; ramp?: boolean; autoFocus?: boolean }): Promise<void>;
 
   /**
    * Gets the current flash mode.

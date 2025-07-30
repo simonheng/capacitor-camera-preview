@@ -450,6 +450,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.disableAudio = call.getBool("disableAudio") ?? true
         self.aspectRatio = call.getString("aspectRatio")
         self.gridMode = call.getString("gridMode") ?? "none"
+        let initialZoomLevel = call.getFloat("initialZoomLevel") ?? 1.0
         if self.aspectRatio != nil && (call.getInt("width") != nil || call.getInt("height") != nil) {
             call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
             return
@@ -473,7 +474,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     self.cameraController.prepareFullSession()
                 }
 
-                self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio) {error in
+                self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio, initialZoomLevel: Float(initialZoomLevel)) {error in
                     if let error = error {
                         print(error)
                         call.reject(error.localizedDescription)
@@ -1063,9 +1064,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
 
         let ramp = call.getBool("ramp") ?? true
+        let autoFocus = call.getBool("autoFocus") ?? true
 
         do {
-            try self.cameraController.setZoom(level: CGFloat(level), ramp: ramp)
+            try self.cameraController.setZoom(level: CGFloat(level), ramp: ramp, autoFocus: autoFocus)
             call.resolve()
         } catch {
             call.reject("Failed to set zoom: \(error.localizedDescription)")

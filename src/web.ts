@@ -134,6 +134,35 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     if (!this.isBackCamera) {
       this.videoElement.style.transform = "scaleX(-1)";
     }
+    
+    // Set initial zoom level if specified and supported
+    if (options.initialZoomLevel && options.initialZoomLevel !== 1.0) {
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const capabilities = videoTrack.getCapabilities() as any;
+        
+        if (capabilities.zoom) {
+          const zoomLevel = options.initialZoomLevel;
+          const minZoom = capabilities.zoom.min || 1;
+          const maxZoom = capabilities.zoom.max || 1;
+          
+          if (zoomLevel < minZoom || zoomLevel > maxZoom) {
+            stream.getTracks().forEach(track => track.stop());
+            throw new Error(`Initial zoom level ${zoomLevel} is not available. Valid range is ${minZoom} to ${maxZoom}`);
+          }
+          
+          try {
+            await videoTrack.applyConstraints({
+              advanced: [{ zoom: zoomLevel } as any],
+            });
+          } catch (error) {
+            console.warn(`Failed to set initial zoom level: ${error}`);
+            // Don't throw, just continue without zoom
+          }
+        }
+      }
+    }
+    
     this.isStarted = true;
     return {
       width: this.videoElement.width,
@@ -473,7 +502,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     };
   }
 
-  async setZoom(options: { level: number; ramp?: boolean }): Promise<void> {
+  async setZoom(options: { level: number; ramp?: boolean; autoFocus?: boolean }): Promise<void> {
     const video = document.getElementById(DEFAULT_VIDEO_ID) as HTMLVideoElement;
     if (!video?.srcObject) {
       throw new Error("camera is not running");
@@ -496,6 +525,8 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       capabilities.zoom.min || 1,
       Math.min(capabilities.zoom.max || 1, options.level),
     );
+    
+    // Note: autoFocus is not supported on web platform
 
     try {
       await videoTrack.applyConstraints({
