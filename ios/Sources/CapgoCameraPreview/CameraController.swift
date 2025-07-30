@@ -175,20 +175,20 @@ extension CameraController {
             // Start the session
             captureSession.startRunning()
             print("[CameraPreview] Session started")
-            
+
             // Validate and set initial zoom level
             if initialZoomLevel != 1.0 {
                 let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera
                 if let device = device {
                     let minZoom = device.minAvailableVideoZoomFactor
                     let maxZoom = min(device.maxAvailableVideoZoomFactor, saneMaxZoomFactor)
-                    
+
                     if CGFloat(initialZoomLevel) < minZoom || CGFloat(initialZoomLevel) > maxZoom {
                         let error = CameraControllerError.invalidZoomLevel(min: minZoom, max: maxZoom, requested: CGFloat(initialZoomLevel))
                         completionHandler(error)
                         return
                     }
-                    
+
                     do {
                         try device.lockForConfiguration()
                         device.videoZoomFactor = CGFloat(initialZoomLevel)
@@ -537,6 +537,26 @@ extension CameraController {
 
         let settings = AVCapturePhotoSettings()
 
+        // Apply the current flash mode to the photo settings
+        // Check if the current device supports flash
+        var currentCamera: AVCaptureDevice?
+        switch currentCameraPosition {
+        case .front:
+            currentCamera = self.frontCamera
+        case .rear:
+            currentCamera = self.rearCamera
+        default:
+            break
+        }
+
+        // Only apply flash if the device has flash and the flash mode is supported
+        if let device = currentCamera, device.hasFlash {
+            let supportedFlashModes = photoOutput.supportedFlashModes
+            if supportedFlashModes.contains(self.flashMode) {
+                settings.flashMode = self.flashMode
+            }
+        }
+
         self.photoCaptureCompletionBlock = { (image, error) in
             if let error = error {
                 completion(nil, error)
@@ -805,7 +825,7 @@ extension CameraController {
 
             // Update our internal zoom factor tracking
             self.zoomFactor = zoomLevel
-            
+
             // Trigger autofocus after zoom if requested
             if autoFocus {
                 self.triggerAutoFocus()
@@ -814,7 +834,7 @@ extension CameraController {
             throw CameraControllerError.invalidOperation
         }
     }
-    
+
     private func triggerAutoFocus() {
         var currentCamera: AVCaptureDevice?
         switch currentCameraPosition {
@@ -824,17 +844,17 @@ extension CameraController {
             currentCamera = self.rearCamera
         default: break
         }
-        
+
         guard let device = currentCamera else {
             return
         }
-        
+
         // Focus on the center of the preview (0.5, 0.5)
         let centerPoint = CGPoint(x: 0.5, y: 0.5)
-        
+
         do {
             try device.lockForConfiguration()
-            
+
             // Set focus mode to auto if supported
             if device.isFocusModeSupported(.autoFocus) {
                 device.focusMode = .autoFocus
@@ -847,7 +867,7 @@ extension CameraController {
                     device.focusPointOfInterest = centerPoint
                 }
             }
-            
+
             // Also set exposure point if supported
             if device.isExposurePointOfInterestSupported && device.isExposureModeSupported(.autoExpose) {
                 device.exposureMode = .autoExpose
@@ -858,7 +878,7 @@ extension CameraController {
                     device.exposurePointOfInterest = centerPoint
                 }
             }
-            
+
             device.unlockForConfiguration()
         } catch {
             // Silently ignore errors during autofocus
