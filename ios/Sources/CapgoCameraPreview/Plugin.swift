@@ -469,11 +469,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             if self.cameraController.captureSession?.isRunning ?? false {
                 call.reject("camera already started")
             } else {
-                // Pre-initialize session if not already done
-                if self.cameraController.captureSession == nil {
-                    self.cameraController.prepareFullSession()
-                }
-
                 self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio, initialZoomLevel: Float(initialZoomLevel)) {error in
                     if let error = error {
                         print(error)
