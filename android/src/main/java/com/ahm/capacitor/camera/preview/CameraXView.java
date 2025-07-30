@@ -18,11 +18,18 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Rational;
 import android.util.Size;
+import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
+import android.view.animation.ScaleAnimation;
+import android.view.animation.AlphaAnimation;
+import android.view.animation.AnimationSet;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
-import android.widget.FrameLayout;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
@@ -101,6 +108,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private PreviewView previewView;
   private GridOverlayView gridOverlayView;
   private FrameLayout previewContainer;
+  private View focusIndicatorView;
   private CameraSelector currentCameraSelector;
   private String currentDeviceId;
   private int currentFlashMode = ImageCapture.FLASH_MODE_OFF;
@@ -112,6 +120,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private final Executor mainExecutor;
   private ExecutorService cameraExecutor;
   private boolean isRunning = false;
+  private ListenableFuture<FocusMeteringResult> currentFocusFuture = null; // Track current focus operation
 
   public CameraXView(Context context, WebView webView) {
     this.context = context;
@@ -143,7 +152,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       // Detect image format from byte array header
       String extension = ".jpg";
       String mimeType = "image/jpeg";
-      
+
       if (data.length >= 8) {
         // Check for PNG signature (89 50 4E 47 0D 0A 1A 0A)
         if (data[0] == (byte) 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
@@ -162,7 +171,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           mimeType = "image/webp";
         }
       }
-      
+
       File photo = new File(
         Environment.getExternalStoragePublicDirectory(
           Environment.DIRECTORY_PICTURES
@@ -195,6 +204,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
   public void stopSession() {
     isRunning = false;
+    // Cancel any ongoing focus operation when stopping session
+    if (currentFocusFuture != null && !currentFocusFuture.isDone()) {
+      currentFocusFuture.cancel(true);
+    }
+    currentFocusFuture = null;
+
     mainExecutor.execute(() -> {
       if (cameraProvider != null) {
         cameraProvider.unbindAll();
@@ -236,12 +251,48 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
     }
 
-    // Create a container to hold both the preview and grid overlay
+        // Create a container to hold both the preview and grid overlay
     previewContainer = new FrameLayout(context);
+    // Ensure container can receive touch events
+    previewContainer.setClickable(true);
+    previewContainer.setFocusable(true);
 
     // Create and setup the preview view
     previewView = new PreviewView(context);
     previewView.setScaleType(PreviewView.ScaleType.FIT_CENTER);
+    // Also make preview view touchable as backup
+    previewView.setClickable(true);
+    previewView.setFocusable(true);
+
+    // Add touch listener to both container and preview view for maximum compatibility
+    View.OnTouchListener touchListener = new View.OnTouchListener() {
+      @Override
+      public boolean onTouch(View v, MotionEvent event) {
+        Log.d(TAG, "onTouch: " + v.getClass().getSimpleName() + " received touch event: " + event.getAction() +
+              " at (" + event.getX() + ", " + event.getY() + ")");
+
+        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+          float x = event.getX() / v.getWidth();
+          float y = event.getY() / v.getHeight();
+
+          Log.d(TAG, "onTouch: Touch detected at raw coords (" + event.getX() + ", " + event.getY() +
+                "), view size: " + v.getWidth() + "x" + v.getHeight() + ", normalized: (" + x + ", " + y + ")");
+
+          try {
+            // Trigger focus with indicator
+            setFocus(x, y);
+          } catch (Exception e) {
+            Log.e(TAG, "Error during tap-to-focus: " + e.getMessage(), e);
+          }
+          return true;
+        }
+        return false;
+      }
+    };
+
+    previewContainer.setOnTouchListener(touchListener);
+    previewView.setOnTouchListener(touchListener);
+
     previewContainer.addView(
       previewView,
       new FrameLayout.LayoutParams(
@@ -252,6 +303,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     // Create and setup the grid overlay
     gridOverlayView = new GridOverlayView(context);
+    // Make grid overlay not intercept touch events
+    gridOverlayView.setClickable(false);
+    gridOverlayView.setFocusable(false);
     previewContainer.addView(
       gridOverlayView,
       new FrameLayout.LayoutParams(
@@ -402,6 +456,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     if (gridOverlayView != null) {
       gridOverlayView = null;
     }
+    if (focusIndicatorView != null) {
+      focusIndicatorView = null;
+    }
     webView.setBackgroundColor(android.graphics.Color.WHITE);
   }
 
@@ -527,12 +584,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           : sessionConfig.getZoomFactor();
         if (initialZoom != 1.0f) {
           Log.d(TAG, "Applying initial zoom of " + initialZoom);
-          
+
           // Validate zoom is within bounds
           if (zoomState != null) {
             float minZoom = zoomState.getMinZoomRatio();
             float maxZoom = zoomState.getMaxZoomRatio();
-            
+
             if (initialZoom < minZoom || initialZoom > maxZoom) {
               if (listener != null) {
                 listener.onCameraStartError(
@@ -543,7 +600,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               }
             }
           }
-          
+
           setZoomInternal(initialZoom, false);
         }
 
@@ -1338,11 +1395,26 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       throw new Exception("Camera not initialized");
     }
 
-    Log.d(TAG, "setFocus: Setting focus at (" + x + ", " + y + ")");
+    if (previewView == null) {
+      throw new Exception("Preview view not initialized");
+    }
 
-    // Convert normalized coordinates (0-1) to view coordinates
+    // Cancel any ongoing focus operation
+    if (currentFocusFuture != null && !currentFocusFuture.isDone()) {
+      Log.d(TAG, "setFocus: Cancelling previous focus operation");
+      currentFocusFuture.cancel(true);
+    }
+
+
     int viewWidth = previewView.getWidth();
     int viewHeight = previewView.getHeight();
+    float indicatorX = x * viewWidth;
+    float indicatorY = y * viewHeight;
+    showFocusIndicator(indicatorX, indicatorY);
+
+    if (viewWidth <= 0 || viewHeight <= 0) {
+      throw new Exception("Preview view has invalid dimensions: " + viewWidth + "x" + viewHeight);
+    }
 
     // Create MeteringPoint using the preview view
     MeteringPointFactory factory = previewView.getMeteringPointFactory();
@@ -1357,25 +1429,189 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       .build();
 
     try {
-      ListenableFuture<FocusMeteringResult> focusFuture = camera
+      currentFocusFuture = camera
         .getCameraControl()
         .startFocusAndMetering(action);
 
-      focusFuture.addListener(
+      currentFocusFuture.addListener(
         () -> {
           try {
-            FocusMeteringResult result = focusFuture.get();
-            Log.d(TAG, "Focus result: " + result.isFocusSuccessful());
+            FocusMeteringResult result = currentFocusFuture.get();
           } catch (Exception e) {
-            Log.e(TAG, "Error during focus: " + e.getMessage());
+            // Handle cancellation gracefully - this is expected when rapid taps occur
+            if (e.getMessage() != null && (e.getMessage().contains("Cancelled by another startFocusAndMetering") ||
+                e.getMessage().contains("OperationCanceledException") ||
+                e.getClass().getSimpleName().contains("OperationCanceledException"))) {
+              Log.d(TAG, "Focus operation was cancelled by a newer focus request");
+            } else {
+              Log.e(TAG, "Error during focus: " + e.getMessage());
+            }
+          } finally {
+            // Clear the reference if this is still the current operation
+            if (currentFocusFuture != null && currentFocusFuture.isDone()) {
+              currentFocusFuture = null;
+            }
           }
         },
         ContextCompat.getMainExecutor(context)
       );
     } catch (Exception e) {
+      currentFocusFuture = null;
       Log.e(TAG, "Failed to set focus: " + e.getMessage());
       throw e;
     }
+  }
+
+  private void showFocusIndicator(float x, float y) {
+    if (previewContainer == null) {
+      Log.w(TAG, "showFocusIndicator: previewContainer is null");
+      return;
+    }
+
+    // Check if container has been laid out
+    if (previewContainer.getWidth() == 0 || previewContainer.getHeight() == 0) {
+      Log.w(TAG, "showFocusIndicator: previewContainer not laid out yet, posting to run after layout");
+      previewContainer.post(() -> showFocusIndicator(x, y));
+      return;
+    }
+
+    // Remove any existing focus indicator
+    if (focusIndicatorView != null) {
+      previewContainer.removeView(focusIndicatorView);
+      focusIndicatorView = null;
+    }
+
+    // Create an elegant focus indicator
+    View container = new View(context);
+    int size = (int) (60 * context.getResources().getDisplayMetrics().density); // 60dp size
+    FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size, size);
+
+    // Center the indicator on the touch point with bounds checking
+    int containerWidth = previewContainer.getWidth();
+    int containerHeight = previewContainer.getHeight();
+
+    params.leftMargin = Math.max(0, Math.min((int) (x - size / 2), containerWidth - size));
+    params.topMargin = Math.max(0, Math.min((int) (y - size / 2), containerHeight - size));
+
+    // Create an elegant focus ring - white stroke with transparent center
+    GradientDrawable drawable = new GradientDrawable();
+    drawable.setShape(GradientDrawable.OVAL);
+    drawable.setStroke((int) (2 * context.getResources().getDisplayMetrics().density), Color.WHITE); // 2dp white stroke
+    drawable.setColor(Color.TRANSPARENT); // Transparent center
+    container.setBackground(drawable);
+
+    focusIndicatorView = container;
+
+    // Set initial state for smooth animation
+    focusIndicatorView.setAlpha(1f); // Start visible
+    focusIndicatorView.setScaleX(1.8f); // Start larger for scale-in effect
+    focusIndicatorView.setScaleY(1.8f);
+    focusIndicatorView.setVisibility(View.VISIBLE);
+
+    // Ensure container doesn't intercept touch events
+    container.setClickable(false);
+    container.setFocusable(false);
+
+    // Ensure the focus indicator has a high elevation for visibility
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+      focusIndicatorView.setElevation(10f);
+    }
+
+    // Add to container first
+    previewContainer.addView(focusIndicatorView, params);
+
+    // Fix z-ordering: ensure focus indicator is always on top
+    focusIndicatorView.bringToFront();
+
+    // Force a layout pass to ensure the view is properly positioned
+    previewContainer.requestLayout();
+
+
+    // Smooth scale down animation with easing (no fade needed since we start visible)
+    ScaleAnimation scaleAnimation = new ScaleAnimation(
+      1.8f, 1.0f, 1.8f, 1.0f,
+      Animation.RELATIVE_TO_SELF, 0.5f,
+      Animation.RELATIVE_TO_SELF, 0.5f
+    );
+    scaleAnimation.setDuration(300);
+    scaleAnimation.setInterpolator(new android.view.animation.OvershootInterpolator(1.2f));
+
+    // Start the animation
+    focusIndicatorView.startAnimation(scaleAnimation);
+
+    // Schedule fade out and removal with smoother timing
+    focusIndicatorView.postDelayed(new Runnable() {
+      @Override
+      public void run() {
+        if (focusIndicatorView != null) {
+          // Smooth fade to semi-transparent
+          AlphaAnimation fadeToTransparent = new AlphaAnimation(1f, 0.4f);
+          fadeToTransparent.setDuration(400);
+          fadeToTransparent.setInterpolator(new android.view.animation.AccelerateInterpolator());
+
+          fadeToTransparent.setAnimationListener(new Animation.AnimationListener() {
+
+              @Override
+              public void onAnimationStart(Animation animation) {
+                Log.d(TAG, "showFocusIndicator: Fade to transparent started");
+              }
+
+              @Override
+              public void onAnimationEnd(Animation animation) {
+                Log.d(TAG, "showFocusIndicator: Fade to transparent ended, starting final fade out");
+                // Final smooth fade out and scale down
+                if (focusIndicatorView != null) {
+                  AnimationSet finalAnimation = new AnimationSet(false);
+
+                  AlphaAnimation finalFadeOut = new AlphaAnimation(0.4f, 0f);
+                  finalFadeOut.setDuration(500);
+                  finalFadeOut.setStartOffset(300);
+                  finalFadeOut.setInterpolator(new android.view.animation.AccelerateInterpolator());
+
+                  ScaleAnimation finalScaleDown = new ScaleAnimation(
+                    1.0f, 0.9f, 1.0f, 0.9f,
+                    Animation.RELATIVE_TO_SELF, 0.5f,
+                    Animation.RELATIVE_TO_SELF, 0.5f
+                  );
+                  finalScaleDown.setDuration(500);
+                  finalScaleDown.setStartOffset(300);
+                  finalScaleDown.setInterpolator(new android.view.animation.AccelerateInterpolator());
+
+                  finalAnimation.addAnimation(finalFadeOut);
+                  finalAnimation.addAnimation(finalScaleDown);
+
+                  finalAnimation.setAnimationListener(new Animation.AnimationListener() {
+                    @Override
+                    public void onAnimationStart(Animation animation) {
+                      Log.d(TAG, "showFocusIndicator: Final animation started");
+                    }
+
+                    @Override
+                    public void onAnimationEnd(Animation animation) {
+                      Log.d(TAG, "showFocusIndicator: Final animation ended, removing indicator");
+                      // Remove the focus indicator
+                      if (focusIndicatorView != null && previewContainer != null) {
+                        previewContainer.removeView(focusIndicatorView);
+                        focusIndicatorView = null;
+                      }
+                    }
+
+                    @Override
+                    public void onAnimationRepeat(Animation animation) {}
+                  });
+
+                  focusIndicatorView.startAnimation(finalAnimation);
+                }
+              }
+
+            @Override
+            public void onAnimationRepeat(Animation animation) {}
+          });
+
+          focusIndicatorView.startAnimation(fadeToTransparent);
+        }
+              }
+      }, 800); // Optimal timing for smooth focus feedback
   }
 
   public static List<Size> getSupportedPictureSizes(String facing) {
@@ -1459,7 +1695,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                   "setZoomInternal: CameraX switched to camera: " + newCameraId
                 );
               }
-              
+
               // Trigger autofocus after zoom if requested
               if (autoFocus) {
                 triggerAutoFocus();
@@ -2290,21 +2526,27 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     if (camera == null) {
       return;
     }
-    
+
     Log.d(TAG, "triggerAutoFocus: Triggering autofocus at center");
-    
+
+    // Cancel any ongoing focus operation
+    if (currentFocusFuture != null && !currentFocusFuture.isDone()) {
+      Log.d(TAG, "triggerAutoFocus: Cancelling previous focus operation");
+      currentFocusFuture.cancel(true);
+    }
+
     // Focus on the center of the view
     int viewWidth = previewView.getWidth();
     int viewHeight = previewView.getHeight();
-    
+
     if (viewWidth == 0 || viewHeight == 0) {
       return;
     }
-    
+
     // Create MeteringPoint at the center of the preview
     MeteringPointFactory factory = previewView.getMeteringPointFactory();
     MeteringPoint point = factory.createPoint(viewWidth / 2f, viewHeight / 2f);
-    
+
     // Create focus and metering action
     FocusMeteringAction action = new FocusMeteringAction.Builder(
       point,
@@ -2312,21 +2554,34 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     )
       .setAutoCancelDuration(3, TimeUnit.SECONDS) // Auto-cancel after 3 seconds
       .build();
-    
+
     try {
-      ListenableFuture<FocusMeteringResult> focusFuture = camera.getCameraControl().startFocusAndMetering(action);
-      focusFuture.addListener(
+      currentFocusFuture = camera.getCameraControl().startFocusAndMetering(action);
+      currentFocusFuture.addListener(
         () -> {
           try {
-            FocusMeteringResult result = focusFuture.get();
+            FocusMeteringResult result = currentFocusFuture.get();
             Log.d(TAG, "triggerAutoFocus: Focus completed successfully: " + result.isFocusSuccessful());
           } catch (Exception e) {
-            Log.e(TAG, "triggerAutoFocus: Error during focus", e);
+            // Handle cancellation gracefully - this is expected when rapid operations occur
+            if (e.getMessage() != null && (e.getMessage().contains("Cancelled by another startFocusAndMetering") ||
+                e.getMessage().contains("OperationCanceledException") ||
+                e.getClass().getSimpleName().contains("OperationCanceledException"))) {
+              Log.d(TAG, "triggerAutoFocus: Auto-focus was cancelled by a newer focus request");
+            } else {
+              Log.e(TAG, "triggerAutoFocus: Error during focus", e);
+            }
+          } finally {
+            // Clear the reference if this is still the current operation
+            if (currentFocusFuture != null && currentFocusFuture.isDone()) {
+              currentFocusFuture = null;
+            }
           }
         },
         ContextCompat.getMainExecutor(context)
       );
     } catch (Exception e) {
+      currentFocusFuture = null;
       Log.e(TAG, "triggerAutoFocus: Failed to trigger autofocus", e);
     }
   }
