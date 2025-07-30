@@ -30,6 +30,7 @@ class CameraController: NSObject {
 
     var previewLayer: AVCaptureVideoPreviewLayer?
     var gridOverlayView: GridOverlayView?
+    var focusIndicatorView: UIView?
 
     var flashMode = AVCaptureDevice.FlashMode.off
     var photoCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
@@ -885,7 +886,7 @@ extension CameraController {
         }
     }
 
-    func setFocus(at point: CGPoint) throws {
+    func setFocus(at point: CGPoint, showIndicator: Bool = false, in view: UIView? = nil) throws {
         var currentCamera: AVCaptureDevice?
         switch currentCameraPosition {
         case .front:
@@ -902,6 +903,13 @@ extension CameraController {
         guard device.isFocusPointOfInterestSupported else {
             // Device doesn't support focus point of interest
             return
+        }
+
+        // Show focus indicator if requested and view is provided
+        if showIndicator, let view = view, let previewLayer = self.previewLayer {
+            // Convert the device point to layer point for indicator display
+            let layerPoint = previewLayer.layerPointConverted(fromCaptureDevicePoint: point)
+            showFocusIndicator(at: layerPoint, in: view)
         }
 
         do {
@@ -1099,6 +1107,9 @@ extension CameraController {
         self.previewLayer?.removeFromSuperlayer()
         self.previewLayer = nil
 
+        self.focusIndicatorView?.removeFromSuperview()
+        self.focusIndicatorView = nil
+
         self.frontCameraInput = nil
         self.rearCameraInput = nil
         self.audioInput = nil
@@ -1189,6 +1200,11 @@ extension CameraController: UIGestureRecognizerDelegate {
         let point = tap.location(in: tap.view)
         let devicePoint = self.previewLayer?.captureDevicePointConverted(fromLayerPoint: point)
 
+        // Show focus indicator at the tap point
+        if let view = tap.view {
+            showFocusIndicator(at: point, in: view)
+        }
+
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
@@ -1206,6 +1222,54 @@ extension CameraController: UIGestureRecognizerDelegate {
             }
         } catch {
             debugPrint(error)
+        }
+    }
+
+    private func showFocusIndicator(at point: CGPoint, in view: UIView) {
+        // Remove any existing focus indicator
+        focusIndicatorView?.removeFromSuperview()
+
+        // Create a new focus indicator
+        let indicator = UIView(frame: CGRect(x: 0, y: 0, width: 80, height: 80))
+        indicator.center = point
+        indicator.layer.borderColor = UIColor.yellow.cgColor
+        indicator.layer.borderWidth = 2.0
+        indicator.layer.cornerRadius = 40
+        indicator.backgroundColor = UIColor.clear
+        indicator.alpha = 0
+        indicator.transform = CGAffineTransform(scaleX: 1.5, y: 1.5)
+
+        // Add inner circle for better visibility
+        let innerCircle = UIView(frame: CGRect(x: 20, y: 20, width: 40, height: 40))
+        innerCircle.layer.borderColor = UIColor.yellow.cgColor
+        innerCircle.layer.borderWidth = 1.0
+        innerCircle.layer.cornerRadius = 20
+        innerCircle.backgroundColor = UIColor.clear
+        indicator.addSubview(innerCircle)
+
+        view.addSubview(indicator)
+        focusIndicatorView = indicator
+
+        // Animate the focus indicator
+        UIView.animate(withDuration: 0.15, animations: {
+            indicator.alpha = 1.0
+            indicator.transform = CGAffineTransform.identity
+        }) { _ in
+            // Keep the indicator visible for a moment
+            UIView.animate(withDuration: 0.2, delay: 0.5, options: [], animations: {
+                indicator.alpha = 0.3
+            }) { _ in
+                // Fade out and remove
+                UIView.animate(withDuration: 0.3, delay: 0.2, options: [], animations: {
+                    indicator.alpha = 0
+                    indicator.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+                }) { _ in
+                    indicator.removeFromSuperview()
+                    if self.focusIndicatorView == indicator {
+                        self.focusIndicatorView = nil
+                    }
+                }
+            }
         }
     }
 
