@@ -2,7 +2,7 @@
   class="container"
   (touchstart)="handleTouchStart($event)"
   (touchmove)="handleTouchMove($event)"
-  (touchend)="handleTouchEnd()"
+  (touchend)="handleTouchEnd($event)"
 >
   <div id="cameraView">
     @if (!cameraStarted()) {

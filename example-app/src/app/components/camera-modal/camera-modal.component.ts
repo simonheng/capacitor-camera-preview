@@ -147,6 +147,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   #supportedFlashModes = signal<Array<FlashMode>>(['off']);
   #touchStartDistance = 0;
+  #touchStartTime = 0;
+  #touchStartX = 0;
+  #touchStartY = 0;
   #initialZoomFactorOnPinch = 1.0;
   #lastZoomCall = 0;
   #zoomThrottleMs = 100; // Throttle zoom calls to max 20fps
@@ -766,6 +769,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   // Touch event handlers for pinch-to-zoom
   protected handleTouchStart(event: TouchEvent): void {
+    if (event.touches.length === 1) {
+      this.#touchStartTime = Date.now();
+      this.#touchStartX = event.touches[0].clientX;
+      this.#touchStartY = event.touches[0].clientY;
+    }
     if (event.touches.length === 2) {
       this.#touchStartDistance = getDistance(
         event.touches[0],
@@ -791,13 +799,35 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     }
   }
 
-  protected handleTouchEnd(): void {
-    if (this.#touchStartDistance > 0) {
-      // Ensure final zoom level is set on native side
-      this.setZoom(this.currentZoomFactor(), true);
+  public async handleTouchEnd(event?: TouchEvent) {
+      // Handle pinch-to-zoom end
+      if (this.#touchStartDistance > 0) {
+          // Ensure final zoom level is set on native side
+          this.setZoom(this.currentZoomFactor(), true);
+          this.#touchStartDistance = 0;
+          return;
+      }
+
+      // Handle tap-to-focus
+      if (event && event.changedTouches.length === 1 && this.#touchStartTime > 0) {
+          const touchEndTime = Date.now();
+          const touchDuration = touchEndTime - this.#touchStartTime;
+
+          // Check if it's a tap (not a long press or drag)
+          if (touchDuration < 300) {
+              const touch = event.changedTouches[0];
+              const deltaX = Math.abs(touch.clientX - this.#touchStartX);
+              const deltaY = Math.abs(touch.clientY - this.#touchStartY);
+
+              // Check if finger didn't move much (not a swipe)
+              if (deltaX < 10 && deltaY < 10) {
+                  await this.setFocusAtPoint(touch.clientX, touch.clientY);
+              }
+          }
+      }
+
+      this.#touchStartTime = 0;
     }
-    this.#touchStartDistance = 0;
-  }
 
   protected getDisplayLenses(device: CameraDevice): CameraLens[] {
     return device.lenses;
@@ -828,4 +858,25 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.currentPreviewHeight.set(this.height());
     }
   }
+
+  private async setFocusAtPoint(clientX: number, clientY: number) {
+    try {
+        // Get the camera view element bounds
+        const cameraView = document.getElementById('cameraView');
+        if (!cameraView) return;
+
+        const rect = cameraView.getBoundingClientRect();
+
+        // Calculate normalized coordinates (0-1)
+        const normalizedX = (clientX - rect.left) / rect.width;
+        const normalizedY = (clientY - rect.top) / rect.height;
+
+        // Ensure coordinates are within bounds
+        if (normalizedX >= 0 && normalizedX <= 1 && normalizedY >= 0 && normalizedY <= 1) {
+            await this.#cameraViewService.setFocus({ x: normalizedX, y: normalizedY });
+        }
+    } catch (error) {
+        // Silently fail if focus is not supported
+    }
+}
 }

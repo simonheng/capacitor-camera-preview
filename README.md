@@ -562,14 +562,14 @@ Gets the current zoom state, including min/max and current lens info.
 ### setZoom(...)
 
 ```typescript
-setZoom(options: { level: number; ramp?: boolean; }) => Promise<void>
+setZoom(options: { level: number; ramp?: boolean; autoFocus?: boolean; }) => Promise<void>
 ```
 
-Sets the camera's zoom level.
+Sets the zoom level of the camera.
 
-| Param         | Type                                            | Description                                           |
-| ------------- | ----------------------------------------------- | ----------------------------------------------------- |
-| **`options`** | <code>{ level: number; ramp?: boolean; }</code> | - The desired zoom level. `ramp` is currently unused. |
+| Param         | Type                                                                 | Description                                                                         |
+| ------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **`options`** | <code>{ level: number; ramp?: boolean; autoFocus?: boolean; }</code> | - The desired zoom level. `ramp` is currently unused. `autoFocus` defaults to true. |
 
 **Since:** 7.4.0
 
@@ -713,6 +713,7 @@ Defines the configuration options for starting the camera preview.
 | **`enableZoom`**                   | <code>boolean</code>                          | If true, enables pinch-to-zoom functionality on the preview.                                                                                                                                            | <code>false</code>  |       |
 | **`enableVideoMode`**              | <code>boolean</code>                          | If true, uses the video-optimized preset for the camera session.                                                                                                                                        | <code>false</code>  |       |
 | **`deviceId`**                     | <code>string</code>                           | The `deviceId` of the camera to use. If provided, `position` is ignored.                                                                                                                                |                     |       |
+| **`initialZoomLevel`**             | <code>number</code>                           | The initial zoom level when starting the camera preview. If the requested zoom level is not available, the native plugin will reject.                                                                   | <code>1.0</code>    | 2.2.0 |
 
 
 #### ExifData
