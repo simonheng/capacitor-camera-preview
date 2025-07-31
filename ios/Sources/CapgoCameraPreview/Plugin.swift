@@ -191,16 +191,16 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             // This ensures consistent behavior where changing aspect ratio recenters the view
             self.posX = -1
             self.posY = -1
-            
+
             // Calculate maximum size based on aspect ratio
             let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
             let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
             let paddingBottom = self.paddingBottom ?? 0
-            
+
             // Calculate available space
             let availableWidth: CGFloat
             let availableHeight: CGFloat
-            
+
             if self.posX == -1 || self.posY == -1 {
                 // Auto-centering mode - use full dimensions
                 availableWidth = webViewWidth
@@ -210,16 +210,16 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 availableWidth = webViewWidth - self.posX!
                 availableHeight = webViewHeight - self.posY! - paddingBottom
             }
-            
+
             // Parse aspect ratio - convert to portrait orientation for camera use
             let ratioParts = newAspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
             // For camera, we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
             let ratio = ratioParts[1] / ratioParts[0]
-            
+
             // Calculate maximum size that fits the aspect ratio in available space
             let maxWidthByHeight = availableHeight * CGFloat(ratio)
             let maxHeightByWidth = availableWidth / CGFloat(ratio)
-            
+
             if maxWidthByHeight <= availableWidth {
                 // Height is the limiting factor
                 self.width = maxWidthByHeight
@@ -229,7 +229,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 self.width = availableWidth
                 self.height = maxHeightByWidth
             }
-            
+
             print("[CameraPreview] Aspect ratio changed to \(newAspectRatio), new size: \(self.width!)x\(self.height!)")
 
             self.updateCameraFrame()
@@ -484,8 +484,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Display the camera preview on the configured view
         try? self.cameraController.displayPreview(on: self.previewView)
 
-        let frontView = self.toBack! ? self.webView : self.previewView
-        self.cameraController.setupGestures(target: frontView ?? self.previewView, enableZoom: self.enableZoom!)
+        self.cameraController.setupGestures(target: self.previewView, enableZoom: self.enableZoom!)
 
         // Add grid overlay if enabled
         if self.gridMode != "none" {
@@ -1296,7 +1295,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         let currentX = x ?? self.posX ?? -1
         let currentY = y ?? self.posY ?? -1
         let currentAspectRatio = aspectRatio ?? self.aspectRatio
-        
+
         let paddingBottom = self.paddingBottom ?? 0
         let adjustedHeight = currentHeight - CGFloat(paddingBottom)
 
@@ -1343,7 +1342,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 finalY = currentY
             }
         }
-        
+
         return CGRect(x: finalX, y: finalY, width: finalWidth, height: finalHeight)
     }
 
@@ -1436,13 +1435,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         } else {
             self.posX = -1 // Auto-center if X not provided
         }
-        
+
         if let y = call.getInt("y") {
             self.posY = CGFloat(y)
         } else {
             self.posY = -1 // Auto-center if Y not provided
         }
-        
+
         if let width = call.getInt("width") { self.width = CGFloat(width) }
         if let height = call.getInt("height") { self.height = CGFloat(height) }
 
@@ -1492,7 +1491,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 }
                 let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: focusPoint)
 
-                try self.cameraController.setFocus(at: devicePoint)
+                try self.cameraController.setFocus(at: devicePoint, showIndicator: true, in: self.previewView)
                 call.resolve()
             } catch {
                 call.reject("Failed to set focus: \(error.localizedDescription)")
