@@ -1021,6 +1021,12 @@ extension CameraController {
     }
 
     func setFocus(at point: CGPoint, showIndicator: Bool = false, in view: UIView? = nil) throws {
+        // Validate that coordinates are within bounds (0-1 range for device coordinates)
+        if point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1 {
+            print("setFocus: Coordinates out of bounds - x: \(point.x), y: \(point.y)")
+            throw CameraControllerError.invalidOperation
+        }
+
         var currentCamera: AVCaptureDevice?
         switch currentCameraPosition {
         case .front:
@@ -1039,7 +1045,7 @@ extension CameraController {
             return
         }
 
-        // Show focus indicator if requested and view is provided
+        // Show focus indicator if requested and view is provided - only after validation
         if showIndicator, let view = view, let previewLayer = self.previewLayer {
             // Convert the device point to layer point for indicator display
             let layerPoint = previewLayer.layerPointConverted(fromCaptureDevicePoint: point)

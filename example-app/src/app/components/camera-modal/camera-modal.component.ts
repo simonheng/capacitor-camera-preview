@@ -194,6 +194,18 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         this.nativePreviewY.set(nativeResult.y);
         this.nativePreviewWidth.set(nativeResult.width);
         this.nativePreviewHeight.set(nativeResult.height);
+        
+        // Log the difference for debugging
+        console.log('Preview Size Difference:', {
+          requested: newSize,
+          returned: nativeResult,
+          difference: {
+            x: nativeResult.x - newSize.x,
+            y: nativeResult.y - newSize.y,
+            width: nativeResult.width - newSize.width,
+            height: nativeResult.height - newSize.height
+          }
+        });
       } else {
         // Go to small centered preview (200x200 in center)
         const centerX = Math.floor((window.innerWidth - 200) / 2);
@@ -214,6 +226,18 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         this.nativePreviewY.set(nativeResult.y);
         this.nativePreviewWidth.set(nativeResult.width);
         this.nativePreviewHeight.set(nativeResult.height);
+        
+        // Log the difference for debugging
+        console.log('Preview Size Difference:', {
+          requested: newSize,
+          returned: nativeResult,
+          difference: {
+            x: nativeResult.x - newSize.x,
+            y: nativeResult.y - newSize.y,
+            width: nativeResult.width - newSize.width,
+            height: nativeResult.height - newSize.height
+          }
+        });
       }
     } catch (error) {
       console.error('Failed to toggle preview size', error);
@@ -287,6 +311,29 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.currentPreviewY.set(nativeResult.y);
       this.currentPreviewWidth.set(nativeResult.width);
       this.currentPreviewHeight.set(nativeResult.height);
+      
+      // Log the difference for debugging
+      const expectedX = startOptions.x ?? 0;
+      const expectedY = startOptions.y ?? 0;
+      const expectedWidth = startOptions.width ?? window.innerWidth;
+      const expectedHeight = startOptions.height ?? window.innerHeight;
+      
+      console.log('Camera Start Difference:', {
+        requested: { 
+          x: expectedX, 
+          y: expectedY, 
+          width: expectedWidth, 
+          height: expectedHeight,
+          aspectRatio: startOptions.aspectRatio
+        },
+        returned: nativeResult,
+        difference: {
+          x: nativeResult.x - expectedX,
+          y: nativeResult.y - expectedY,
+          width: nativeResult.width - expectedWidth,
+          height: nativeResult.height - expectedHeight
+        }
+      });
 
       await Promise.all([
         this.#initializeZoomLimits(),
@@ -879,28 +926,37 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   private async setFocusAtPoint(clientX: number, clientY: number) {
     try {
-      // Get the camera view element bounds
-      const cameraView = document.getElementById('cameraView');
-      if (!cameraView) return;
+      // Use the actual native preview bounds, not the cameraView element
+      const nativeX = this.nativePreviewX();
+      const nativeY = this.nativePreviewY();
+      const nativeWidth = this.nativePreviewWidth();
+      const nativeHeight = this.nativePreviewHeight();
 
-      const rect = cameraView.getBoundingClientRect();
-
-      // Calculate normalized coordinates (0-1)
-      const normalizedX = (clientX - rect.left) / rect.width;
-      const normalizedY = (clientY - rect.top) / rect.height;
-
-      // Ensure coordinates are within bounds
-      if (
-        normalizedX >= 0 &&
-        normalizedX <= 1 &&
-        normalizedY >= 0 &&
-        normalizedY <= 1
-      ) {
-        await this.#cameraViewService.setFocus({
-          x: normalizedX,
-          y: normalizedY,
-        });
+      // Check if we have valid native bounds
+      if (nativeWidth <= 0 || nativeHeight <= 0) {
+        console.warn('Native preview bounds not available');
+        return;
       }
+
+      // Check if the click is within the native preview bounds
+      if (
+        clientX < nativeX ||
+        clientX > nativeX + nativeWidth ||
+        clientY < nativeY ||
+        clientY > nativeY + nativeHeight
+      ) {
+        console.log('Click outside native preview bounds');
+        return;
+      }
+
+      // Calculate normalized coordinates (0-1) relative to native preview
+      const normalizedX = (clientX - nativeX) / nativeWidth;
+      const normalizedY = (clientY - nativeY) / nativeHeight;
+
+      await this.#cameraViewService.setFocus({
+        x: normalizedX,
+        y: normalizedY,
+      });
     } catch (error) {
       // Silently fail if focus is not supported
     }

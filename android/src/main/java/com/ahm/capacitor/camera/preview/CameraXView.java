@@ -480,6 +480,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
             if (height != oldHeight) {
               int screenHeight = metrics.heightPixels;
+              // Always center based on full screen height
               y = (screenHeight - height) / 2;
               Log.d(
                 TAG,
@@ -516,27 +517,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       height
     );
 
-    // Only add insets for positioning coordinates, not for full-screen sizes or centered content
-    int webViewTopInset = getWebViewTopInset();
-    int webViewLeftInset = getWebViewLeftInset();
-
-    // Don't add insets if centered or full-screen
-    if (sessionConfig.isCentered() || (x == 0 && y == 0)) {
-      layoutParams.leftMargin = x;
-      layoutParams.topMargin = y;
-      Log.d(
-        TAG,
-        "calculatePreviewLayoutParams: Centered/Full-screen mode - keeping position without insets. isCentered=" +
-        sessionConfig.isCentered()
-      );
-    } else {
-      layoutParams.leftMargin = x + webViewLeftInset;
-      layoutParams.topMargin = y + webViewTopInset;
-      Log.d(
-        TAG,
-        "calculatePreviewLayoutParams: Positioned mode - applying insets"
-      );
-    }
+    // The X and Y positions passed from CameraPreview already include webView insets
+    // when edge-to-edge is active, so we don't need to add them again here
+    layoutParams.leftMargin = x;
+    layoutParams.topMargin = y;
 
     Log.d(
       TAG,
@@ -561,18 +545,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       width +
       " height:" +
       height
-    );
-    Log.d(
-      TAG,
-      "calculatePreviewLayoutParams: Final margins - leftMargin:" +
-      layoutParams.leftMargin +
-      " topMargin:" +
-      layoutParams.topMargin +
-      " (WebView insets: left=" +
-      webViewLeftInset +
-      ", top=" +
-      webViewTopInset +
-      ")"
     );
     return layoutParams;
   }
@@ -1543,6 +1515,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       throw new Exception("Preview view not initialized");
     }
 
+    // Validate that coordinates are within bounds (0-1 range)
+    if (x < 0f || x > 1f || y < 0f || y > 1f) {
+      Log.w(TAG, "setFocus: Coordinates out of bounds - x: " + x + ", y: " + y);
+      throw new Exception("Focus coordinates must be between 0 and 1");
+    }
+
     // Cancel any ongoing focus operation
     if (currentFocusFuture != null && !currentFocusFuture.isDone()) {
       Log.d(TAG, "setFocus: Cancelling previous focus operation");
@@ -1551,15 +1529,17 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     int viewWidth = previewView.getWidth();
     int viewHeight = previewView.getHeight();
-    float indicatorX = x * viewWidth;
-    float indicatorY = y * viewHeight;
-    showFocusIndicator(indicatorX, indicatorY);
-
+    
     if (viewWidth <= 0 || viewHeight <= 0) {
       throw new Exception(
         "Preview view has invalid dimensions: " + viewWidth + "x" + viewHeight
       );
     }
+
+    // Only show focus indicator after validation passes
+    float indicatorX = x * viewWidth;
+    float indicatorY = y * viewHeight;
+    showFocusIndicator(indicatorX, indicatorY);
 
     // Create MeteringPoint using the preview view
     MeteringPointFactory factory = previewView.getMeteringPointFactory();
@@ -2736,10 +2716,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private int getWebViewTopInset() {
     try {
       if (webView != null) {
-        ViewGroup.LayoutParams layoutParams = webView.getLayoutParams();
-        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
-          return ((ViewGroup.MarginLayoutParams) layoutParams).topMargin;
-        }
+        // Get the actual WebView position on screen
+        int[] location = new int[2];
+        webView.getLocationOnScreen(location);
+        return location[1]; // Y position is the top inset
       }
     } catch (Exception e) {
       Log.w(TAG, "Failed to get WebView top inset", e);
@@ -2750,10 +2730,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private int getWebViewLeftInset() {
     try {
       if (webView != null) {
-        ViewGroup.LayoutParams layoutParams = webView.getLayoutParams();
-        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
-          return ((ViewGroup.MarginLayoutParams) layoutParams).leftMargin;
-        }
+        // Get the actual WebView position on screen for consistency
+        int[] location = new int[2];
+        webView.getLocationOnScreen(location);
+        return location[0]; // X position is the left inset
       }
     } catch (Exception e) {
       Log.w(TAG, "Failed to get WebView left inset", e);
@@ -2769,31 +2749,30 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       return new int[] { 0, 0, 0, 0 }; // x, y, width, height
     }
 
-    ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
-    int x = 0, y = 0, width = 0, height = 0;
+    // Get actual camera preview bounds (accounts for letterboxing/pillarboxing)
+    int actualX = getPreviewX();
+    int actualY = getPreviewY();
+    int actualWidth = getPreviewWidth();
+    int actualHeight = getPreviewHeight();
 
-    if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
-      ViewGroup.MarginLayoutParams params =
-        (ViewGroup.MarginLayoutParams) layoutParams;
+    // Convert to logical pixels for JavaScript
+    DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+    float pixelRatio = metrics.density;
 
-      // Remove insets to get original coordinates in DP
-      DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-      float pixelRatio = metrics.density;
+    // Remove WebView insets from coordinates
+    int webViewTopInset = getWebViewTopInset();
+    int webViewLeftInset = getWebViewLeftInset();
 
-      int webViewTopInset = getWebViewTopInset();
-      int webViewLeftInset = getWebViewLeftInset();
-
-      x = Math.max(
-        0,
-        (int) ((params.leftMargin - webViewLeftInset) / pixelRatio)
-      );
-      y = Math.max(
-        0,
-        (int) ((params.topMargin - webViewTopInset) / pixelRatio)
-      );
-      width = (int) (params.width / pixelRatio);
-      height = (int) (params.height / pixelRatio);
-    }
+    int x = Math.max(
+      0,
+      (int) ((actualX - webViewLeftInset) / pixelRatio)
+    );
+    int y = Math.max(
+      0,
+      (int) ((actualY - webViewTopInset) / pixelRatio)
+    );
+    int width = (int) (actualWidth / pixelRatio);
+    int height = (int) (actualHeight / pixelRatio);
 
     return new int[] { x, y, width, height };
   }

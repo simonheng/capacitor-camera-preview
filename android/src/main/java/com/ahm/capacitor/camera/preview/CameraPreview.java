@@ -9,6 +9,7 @@ import android.location.Location;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Size;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 import com.ahm.capacitor.camera.preview.model.CameraDevice;
@@ -574,6 +575,41 @@ public class CameraPreview
 
         // Calculate pixel ratio
         float pixelRatio = metrics.density;
+        
+        // The key insight: JavaScript coordinates are relative to the WebView's viewport
+        // If the WebView is positioned below the status bar (webViewLocationOnScreen[1] > 0), 
+        // we need to add that offset when placing native views
+        int webViewTopInset = webViewLocationOnScreen[1];
+        boolean isEdgeToEdgeActive = webViewLocationOnScreen[1] > 0;
+        
+        // Log all the positioning information for debugging
+        Log.d("CameraPreview", "WebView Position Debug:");
+        Log.d("CameraPreview", "  - webView.getTop(): " + webViewTop);
+        Log.d("CameraPreview", "  - webView.getLeft(): " + webViewLeft);
+        Log.d("CameraPreview", "  - webView locationInWindow: (" + webViewLocationInWindow[0] + ", " + webViewLocationInWindow[1] + ")");
+        Log.d("CameraPreview", "  - webView locationOnScreen: (" + webViewLocationOnScreen[0] + ", " + webViewLocationOnScreen[1] + ")");
+        Log.d("CameraPreview", "  - parent locationInWindow: (" + parentLocationInWindow[0] + ", " + parentLocationInWindow[1] + ")");
+        Log.d("CameraPreview", "  - parent locationOnScreen: (" + parentLocationOnScreen[0] + ", " + parentLocationOnScreen[1] + ")");
+        
+        // Check if WebView has margins
+        View webView = getBridge().getWebView();
+        ViewGroup.LayoutParams webViewLayoutParams = webView.getLayoutParams();
+        if (webViewLayoutParams instanceof ViewGroup.MarginLayoutParams) {
+          ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) webViewLayoutParams;
+          Log.d("CameraPreview", "  - webView margins: left=" + marginParams.leftMargin + 
+                ", top=" + marginParams.topMargin + 
+                ", right=" + marginParams.rightMargin + 
+                ", bottom=" + marginParams.bottomMargin);
+        }
+        
+        // Check WebView padding
+        Log.d("CameraPreview", "  - webView padding: left=" + webView.getPaddingLeft() + 
+              ", top=" + webView.getPaddingTop() + 
+              ", right=" + webView.getPaddingRight() + 
+              ", bottom=" + webView.getPaddingBottom());
+        
+        Log.d("CameraPreview", "  - Using webViewTopInset: " + webViewTopInset);
+        Log.d("CameraPreview", "  - isEdgeToEdgeActive: " + isEdgeToEdgeActive);
 
         // Calculate position - center if x or y is -1
         int computedX;
@@ -588,7 +624,13 @@ public class CameraPreview
           : getBridge().getWebView().getHeight();
         computedHeight -= (int) (paddingBottom * pixelRatio);
 
-        Log.d("CameraPreview", "Positioning logic - x: " + x + ", y: " + y);
+        Log.d("CameraPreview", "========================");
+        Log.d("CameraPreview", "POSITIONING CALCULATIONS:");
+        Log.d("CameraPreview", "1. INPUT - x: " + x + ", y: " + y + ", width: " + width + ", height: " + height);
+        Log.d("CameraPreview", "2. PIXEL RATIO: " + pixelRatio);
+        Log.d("CameraPreview", "3. SCREEN - width: " + metrics.widthPixels + ", height: " + metrics.heightPixels);
+        Log.d("CameraPreview", "4. WEBVIEW - width: " + getBridge().getWebView().getWidth() + ", height: " + getBridge().getWebView().getHeight());
+        Log.d("CameraPreview", "5. COMPUTED DIMENSIONS - width: " + computedWidth + ", height: " + computedHeight);
 
         if (x == -1) {
           // Center horizontally
@@ -617,20 +659,51 @@ public class CameraPreview
         }
 
         if (y == -1) {
-          // Center vertically using full screen height
-          int screenHeight = metrics.heightPixels;
-          computedY = (screenHeight - computedHeight) / 2;
-          Log.d(
-            "CameraPreview",
-            "Centering vertically: screenHeight=" +
-            screenHeight +
-            ", computedHeight=" +
-            computedHeight +
-            ", computedY=" +
-            computedY
-          );
+          // Center vertically
+          if (isEdgeToEdgeActive) {
+            // When WebView is offset from top, center within the available space
+            // The camera should be centered in the full screen, not just the WebView area
+            computedY = (metrics.heightPixels - computedHeight) / 2;
+            Log.d(
+              "CameraPreview",
+              "Centering vertically with WebView offset: screenHeight=" +
+              metrics.heightPixels +
+              ", webViewTop=" +
+              webViewTopInset +
+              ", computedHeight=" +
+              computedHeight +
+              ", computedY=" +
+              computedY
+            );
+          } else {
+            // Normal mode - use full screen height
+            computedY = (metrics.heightPixels - computedHeight) / 2;
+            Log.d(
+              "CameraPreview",
+              "Centering vertically (normal): screenHeight=" +
+              metrics.heightPixels +
+              ", computedHeight=" +
+              computedHeight +
+              ", computedY=" +
+              computedY
+            );
+          }
         } else {
           computedY = (int) (y * pixelRatio);
+          // If edge-to-edge is active, JavaScript Y is relative to WebView content area
+          // We need to add the inset to get absolute screen position
+          if (isEdgeToEdgeActive) {
+            computedY += webViewTopInset;
+            Log.d(
+              "CameraPreview",
+              "Edge-to-edge adjustment: Y position " +
+              (int)(y * pixelRatio) +
+              " + inset " +
+              webViewTopInset +
+              " = " +
+              computedY
+            );
+          }
           Log.d(
             "CameraPreview",
             "Using provided Y position: " +
@@ -638,10 +711,15 @@ public class CameraPreview
             " * " +
             pixelRatio +
             " = " +
-            computedY
+            computedY +
+            (isEdgeToEdgeActive ? " (adjusted for edge-to-edge)" : "")
           );
         }
 
+        Log.d(
+          "CameraPreview",
+          "2b. EDGE-TO-EDGE - " + (isEdgeToEdgeActive ? "ACTIVE (inset=" + webViewTopInset + ")" : "INACTIVE")
+        );
         Log.d(
           "CameraPreview",
           "3. COMPUTED POSITION - x=" + computedX + ", y=" + computedY
@@ -776,18 +854,16 @@ public class CameraPreview
         .getDisplayMetrics();
       float pixelRatio = metrics.density;
 
-      // Check if edge-to-edge mode is active by looking at WebView insets
-      // If the WebView has a top margin, it means edge-to-edge is active
-      // and JavaScript positions are relative to WebView content area
+      // When WebView is offset from the top (e.g., below status bar),
+      // we need to convert between JavaScript coordinates (relative to WebView)
+      // and native coordinates (relative to screen)
+      WebView webView = getBridge().getWebView();
       int webViewTopInset = 0;
       boolean isEdgeToEdgeActive = false;
-      WebView webView = getBridge().getWebView();
-      if (
-        webView != null &&
-        webView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
-      ) {
-        webViewTopInset =
-          ((ViewGroup.MarginLayoutParams) webView.getLayoutParams()).topMargin;
+      if (webView != null) {
+        int[] location = new int[2];
+        webView.getLocationOnScreen(location);
+        webViewTopInset = location[1];
         isEdgeToEdgeActive = webViewTopInset > 0;
       }
 
@@ -972,8 +1048,24 @@ public class CameraPreview
       .getDisplayMetrics();
     float pixelRatio = metrics.density;
 
+    // Check if edge-to-edge mode is active
+    WebView webView = getBridge().getWebView();
+    int webViewTopInset = 0;
+    boolean isEdgeToEdgeActive = false;
+    if (webView != null) {
+      int[] location = new int[2];
+      webView.getLocationOnScreen(location);
+      webViewTopInset = location[1];
+      isEdgeToEdgeActive = webViewTopInset > 0;
+    }
+
     int x = (xParam != null && xParam > 0) ? (int) (xParam * pixelRatio) : 0;
     int y = (yParam != null && yParam > 0) ? (int) (yParam * pixelRatio) : 0;
+    
+    // Add edge-to-edge inset to Y if active
+    if (isEdgeToEdgeActive && y > 0) {
+      y += webViewTopInset;
+    }
     int width = (widthParam != null && widthParam > 0)
       ? (int) (widthParam * pixelRatio)
       : 0;

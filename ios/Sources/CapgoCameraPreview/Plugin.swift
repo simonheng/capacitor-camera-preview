@@ -137,26 +137,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         let height = heightValue - paddingBottom
 
         // Handle auto-centering during rotation
-        if posX == -1 || posY == -1 {
-            // Trigger full recalculation for auto-centered views
-            self.updateCameraFrame()
-        } else {
-            // Manual positioning - use original rotation logic with no animation
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-
-            if UIWindow.isLandscape {
-                previewView.frame = CGRect(x: posY, y: posX, width: max(height, width), height: min(height, width))
-                self.cameraController.previewLayer?.frame = previewView.bounds
-            }
-
-            if UIWindow.isPortrait {
-                previewView.frame = CGRect(x: posX, y: posY, width: min(height, width), height: max(height, width))
-                self.cameraController.previewLayer?.frame = previewView.bounds
-            }
-
-            CATransaction.commit()
-        }
+        // Always use the factorized method for consistent positioning
+        self.updateCameraFrame()
 
         if let connection = self.cameraController.fileVideoOutput?.connection(with: .video) {
             switch UIDevice.current.orientation {
@@ -205,47 +187,50 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.aspectRatio = newAspectRatio
 
         DispatchQueue.main.async {
-            // When aspect ratio changes, calculate maximum size possible from current position
-            if let posX = self.posX, let posY = self.posY {
-                let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
-                let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
-                let paddingBottom = self.paddingBottom ?? 0
-
-                // Calculate available space from current position
-                let availableWidth: CGFloat
-                let availableHeight: CGFloat
-
-                if posX == -1 || posY == -1 {
-                    // Auto-centering mode - use full dimensions
-                    availableWidth = webViewWidth
-                    availableHeight = webViewHeight - paddingBottom
-                } else {
-                    // Manual positioning - calculate remaining space
-                    availableWidth = webViewWidth - posX
-                    availableHeight = webViewHeight - posY - paddingBottom
-                }
-
-                // Parse aspect ratio - convert to portrait orientation for camera use
-                let ratioParts = newAspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
-                // For camera, we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-                let ratio = ratioParts[1] / ratioParts[0]
-
-                // Calculate maximum size that fits the aspect ratio in available space
-                let maxWidthByHeight = availableHeight * CGFloat(ratio)
-                let maxHeightByWidth = availableWidth / CGFloat(ratio)
-
-                if maxWidthByHeight <= availableWidth {
-                    // Height is the limiting factor
-                    self.width = maxWidthByHeight
-                    self.height = availableHeight
-                } else {
-                    // Width is the limiting factor
-                    self.width = availableWidth
-                    self.height = maxHeightByWidth
-                }
-
-                print("[CameraPreview] Aspect ratio changed to \(newAspectRatio), new size: \(self.width!)x\(self.height!)")
+            // When aspect ratio changes, always auto-center the view
+            // This ensures consistent behavior where changing aspect ratio recenters the view
+            self.posX = -1
+            self.posY = -1
+            
+            // Calculate maximum size based on aspect ratio
+            let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
+            let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
+            let paddingBottom = self.paddingBottom ?? 0
+            
+            // Calculate available space
+            let availableWidth: CGFloat
+            let availableHeight: CGFloat
+            
+            if self.posX == -1 || self.posY == -1 {
+                // Auto-centering mode - use full dimensions
+                availableWidth = webViewWidth
+                availableHeight = webViewHeight - paddingBottom
+            } else {
+                // Manual positioning - calculate remaining space
+                availableWidth = webViewWidth - self.posX!
+                availableHeight = webViewHeight - self.posY! - paddingBottom
             }
+            
+            // Parse aspect ratio - convert to portrait orientation for camera use
+            let ratioParts = newAspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
+            // For camera, we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+            let ratio = ratioParts[1] / ratioParts[0]
+            
+            // Calculate maximum size that fits the aspect ratio in available space
+            let maxWidthByHeight = availableHeight * CGFloat(ratio)
+            let maxHeightByWidth = availableWidth / CGFloat(ratio)
+            
+            if maxWidthByHeight <= availableWidth {
+                // Height is the limiting factor
+                self.width = maxWidthByHeight
+                self.height = availableHeight
+            } else {
+                // Width is the limiting factor
+                self.width = availableWidth
+                self.height = maxHeightByWidth
+            }
+            
+            print("[CameraPreview] Aspect ratio changed to \(newAspectRatio), new size: \(self.width!)x\(self.height!)")
 
             self.updateCameraFrame()
 
@@ -1304,8 +1289,66 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
     }
 
+    private func calculateCameraFrame(x: CGFloat? = nil, y: CGFloat? = nil, width: CGFloat? = nil, height: CGFloat? = nil, aspectRatio: String? = nil) -> CGRect {
+        // Use provided values or existing ones
+        let currentWidth = width ?? self.width ?? UIScreen.main.bounds.size.width
+        let currentHeight = height ?? self.height ?? UIScreen.main.bounds.size.height
+        let currentX = x ?? self.posX ?? -1
+        let currentY = y ?? self.posY ?? -1
+        let currentAspectRatio = aspectRatio ?? self.aspectRatio
+        
+        let paddingBottom = self.paddingBottom ?? 0
+        let adjustedHeight = currentHeight - CGFloat(paddingBottom)
+
+        // Cache webView dimensions for performance
+        let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
+        let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
+
+        var finalX = currentX
+        var finalY = currentY
+        var finalWidth = currentWidth
+        var finalHeight = adjustedHeight
+
+        // Handle auto-centering when position is -1
+        if currentX == -1 || currentY == -1 {
+            // Only override dimensions if aspect ratio is provided and no explicit dimensions given
+            if let ratio = currentAspectRatio, 
+               currentWidth == UIScreen.main.bounds.size.width && 
+               currentHeight == UIScreen.main.bounds.size.height {
+                finalWidth = webViewWidth
+
+                // Calculate height based on aspect ratio
+                let ratioParts = ratio.split(separator: ":").compactMap { Double($0) }
+                if ratioParts.count == 2 {
+                    // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+                    let ratioValue = ratioParts[1] / ratioParts[0]
+                    finalHeight = finalWidth / CGFloat(ratioValue)
+                }
+            }
+
+            // Center horizontally if x is -1
+            if currentX == -1 {
+                finalX = (webViewWidth - finalWidth) / 2
+            } else {
+                finalX = currentX
+            }
+
+            // Center vertically if y is -1
+            if currentY == -1 {
+                // Use full screen height for centering
+                let screenHeight = UIScreen.main.bounds.size.height
+                finalY = (screenHeight - finalHeight) / 2
+                print("[CameraPreview] Centering vertically: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
+            } else {
+                finalY = currentY
+            }
+        }
+        
+        return CGRect(x: finalX, y: finalY, width: finalWidth, height: finalHeight)
+    }
+
     private func updateCameraFrame() {
-        guard let width = self.width, var height = self.height, let posX = self.posX, let posY = self.posY else {
+        guard let width = self.width, let height = self.height, let posX = self.posX, let posY = self.posY else {
             return
         }
 
@@ -1317,52 +1360,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        let paddingBottom = self.paddingBottom ?? 0
-        height -= paddingBottom
-
-        // Cache webView dimensions for performance
-        let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
-        let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
-
-        var finalX = posX
-        var finalY = posY
-        var finalWidth = width
-        var finalHeight = height
-
-        // Handle auto-centering when position is -1
-        if posX == -1 || posY == -1 {
-            // Only override dimensions if aspect ratio is provided and no explicit dimensions given
-            if let aspectRatio = self.aspectRatio, width == UIScreen.main.bounds.size.width && height == UIScreen.main.bounds.size.height {
-                finalWidth = webViewWidth
-
-                // Calculate height based on aspect ratio
-                let ratioParts = aspectRatio.split(separator: ":").compactMap { Double($0) }
-                if ratioParts.count == 2 {
-                    // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-                    let ratio = ratioParts[1] / ratioParts[0]
-                    finalHeight = finalWidth / CGFloat(ratio)
-                }
-            }
-
-            // Center horizontally if x is -1
-            if posX == -1 {
-                finalX = (webViewWidth - finalWidth) / 2
-            } else {
-                finalX = posX
-            }
-
-            // Center vertically if y is -1
-            if posY == -1 {
-                // Use full screen height for centering
-                let screenHeight = UIScreen.main.bounds.size.height
-                finalY = (screenHeight - finalHeight) / 2
-                print("[CameraPreview] Centering vertically: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
-            } else {
-                finalY = posY
-            }
-        }
-
-        var frame = CGRect(x: finalX, y: finalY, width: finalWidth, height: finalHeight)
+        // Calculate the base frame using the factorized method
+        var frame = calculateCameraFrame()
 
         // Apply aspect ratio adjustments only if not auto-centering
         if posX != -1 && posY != -1, let aspectRatio = self.aspectRatio {
@@ -1370,15 +1369,15 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             if ratioParts.count == 2 {
                 // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
                 let ratio = ratioParts[1] / ratioParts[0]
-                let currentRatio = Double(finalWidth) / Double(finalHeight)
+                let currentRatio = Double(frame.width) / Double(frame.height)
 
                 if currentRatio > ratio {
-                    let newWidth = Double(finalHeight) * ratio
-                    frame.origin.x = finalX + (Double(finalWidth) - newWidth) / 2
+                    let newWidth = Double(frame.height) * ratio
+                    frame.origin.x = frame.origin.x + (frame.width - CGFloat(newWidth)) / 2
                     frame.size.width = CGFloat(newWidth)
                 } else {
-                    let newHeight = Double(finalWidth) / ratio
-                    frame.origin.y = finalY + (Double(finalHeight) - newHeight) / 2
+                    let newHeight = Double(frame.width) / ratio
+                    frame.origin.y = frame.origin.y + (frame.height - CGFloat(newHeight)) / 2
                     frame.size.height = CGFloat(newHeight)
                 }
             }
@@ -1431,13 +1430,19 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        // Only update position if explicitly provided, otherwise keep auto-centering
+        // Always set to -1 for auto-centering if not explicitly provided
         if let x = call.getInt("x") {
             self.posX = CGFloat(x)
+        } else {
+            self.posX = -1 // Auto-center if X not provided
         }
+        
         if let y = call.getInt("y") {
             self.posY = CGFloat(y)
+        } else {
+            self.posY = -1 // Auto-center if Y not provided
         }
+        
         if let width = call.getInt("width") { self.width = CGFloat(width) }
         if let height = call.getInt("height") { self.height = CGFloat(height) }
 
