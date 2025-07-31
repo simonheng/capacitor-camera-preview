@@ -167,6 +167,10 @@ export class CapacitorCameraViewService {
     return CameraPreview.getAspectRatio();
   }
 
+  async setFocus(options: { x: number; y: number }): Promise<void> {
+    return this.#cameraView.setFocus(options);
+  }
+
   /**
    * Set the flash mode
    * @param mode The flash mode to set

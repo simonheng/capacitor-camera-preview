@@ -47,6 +47,10 @@ class CameraController: NSObject {
     var videoFileURL: URL?
     private let saneMaxZoomFactor: CGFloat = 25.5
 
+    // Track output preparation status
+    private var outputsPrepared: Bool = false
+    private let outputPreparationQueue = DispatchQueue(label: "camera.output.preparation", qos: .utility)
+
     var isUsingMultiLensVirtualCamera: Bool {
         guard let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera else { return false }
         // A rear multi-lens virtual camera will have a min zoom of 1.0 but support wider angles
@@ -64,18 +68,27 @@ extension CameraController {
         // 1. Create and configure session
         self.captureSession = AVCaptureSession()
 
-        // 2. Pre-configure session preset (can be changed later)
-        if captureSession!.canSetSessionPreset(.high) {
+        // 2. Pre-configure session preset (can be changed later) - use medium for faster startup
+        if captureSession!.canSetSessionPreset(.medium) {
+            captureSession!.sessionPreset = .medium // Start with medium, upgrade later if needed
+        } else if captureSession!.canSetSessionPreset(.high) {
             captureSession!.sessionPreset = .high
         }
 
-        // 3. Discover and configure all cameras
+        // 3. Discover cameras on-demand (only when needed for better startup performance)
+        // discoverAndConfigureCameras() - moved to lazy loading
+
+        // // 4. Pre-create outputs asynchronously to avoid blocking camera opening
+        // outputPreparationQueue.async { [weak self] in
+        //     self?.prepareOutputs()
+        // }
+
+        print("[CameraPreview] Full session preparation complete - cameras will be discovered on-demand, outputs being prepared asynchronously")
+    }
+
+    private func ensureCamerasDiscovered() {
+        guard allDiscoveredDevices.isEmpty else { return }
         discoverAndConfigureCameras()
-
-        // 4. Pre-create outputs (don't add to session yet)
-        prepareOutputs()
-
-        print("[CameraPreview] Full session preparation complete")
     }
 
     private func discoverAndConfigureCameras() {
@@ -136,94 +149,211 @@ extension CameraController {
     }
 
     private func prepareOutputs() {
-        // Pre-create photo output
+        // Pre-create photo output with optimized settings
         self.photoOutput = AVCapturePhotoOutput()
-        self.photoOutput?.isHighResolutionCaptureEnabled = false // Default, can be changed
+        self.photoOutput?.isHighResolutionCaptureEnabled = false // Start with lower resolution for speed
+
+        // Configure photo output for better performance
+        if #available(iOS 13.0, *) {
+            self.photoOutput?.maxPhotoQualityPrioritization = .speed // Prioritize speed over quality initially
+        }
 
         // Pre-create video output
         self.fileVideoOutput = AVCaptureMovieFileOutput()
 
-        // Pre-create data output
+        // Pre-create data output with optimized settings
         self.dataOutput = AVCaptureVideoDataOutput()
         self.dataOutput?.videoSettings = [
             (kCVPixelBufferPixelFormatTypeKey as String): NSNumber(value: kCVPixelFormatType_32BGRA as UInt32)
         ]
         self.dataOutput?.alwaysDiscardsLateVideoFrames = true
 
-        print("[CameraPreview] Outputs pre-created")
+        // Use a background queue for sample buffer processing to avoid blocking main thread
+        let dataOutputQueue = DispatchQueue(label: "camera.data.output", qos: .userInitiated)
+        self.dataOutput?.setSampleBufferDelegate(nil, queue: dataOutputQueue) // Will be set later
+
+        // Mark outputs as prepared
+        self.outputsPrepared = true
+
+        print("[CameraPreview] Outputs pre-created with performance optimizations")
+    }
+
+    private func waitForOutputsToBeReady() {
+        // If outputs are already prepared, return immediately
+        if outputsPrepared {
+            return
+        }
+
+        // Wait for outputs to be prepared with a timeout
+        let semaphore = DispatchSemaphore(value: 0)
+        var outputsReady = false
+
+        // Check for outputs readiness periodically
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { timer in
+            if self.outputsPrepared {
+                outputsReady = true
+                timer.invalidate()
+                semaphore.signal()
+            }
+        }
+
+        // Wait for outputs to be ready or timeout after 2 seconds
+        let timeout = DispatchTime.now() + .seconds(2)
+        let result = semaphore.wait(timeout: timeout)
+
+        timer.invalidate()
+
+        if result == .timedOut && !outputsReady {
+            print("[CameraPreview] Warning: Timed out waiting for outputs to be prepared, proceeding anyway")
+            // Fallback: prepare outputs synchronously if async preparation failed
+            if !outputsPrepared {
+                prepareOutputs()
+            }
+        } else {
+            print("[CameraPreview] Outputs ready, proceeding with camera preparation")
+        }
+    }
+
+    func upgradeQualitySettings() {
+        guard let captureSession = self.captureSession else { return }
+
+        // Upgrade session preset to high quality after initial startup
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+
+            captureSession.beginConfiguration()
+
+            // Upgrade to high quality preset
+            if captureSession.canSetSessionPreset(.high) && captureSession.sessionPreset != .high {
+                captureSession.sessionPreset = .high
+                print("[CameraPreview] Upgraded session preset to high quality")
+            }
+
+            // Upgrade photo output quality
+            if let photoOutput = self.photoOutput {
+                photoOutput.isHighResolutionCaptureEnabled = true
+                if #available(iOS 13.0, *) {
+                    photoOutput.maxPhotoQualityPrioritization = .quality
+                }
+                print("[CameraPreview] Upgraded photo output to high resolution")
+            }
+
+            captureSession.commitConfiguration()
+        }
     }
 
     func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float = 1.0, completionHandler: @escaping (Error?) -> Void) {
-        do {
-            // Session and outputs already created in load(), just configure user-specific settings
-            if self.captureSession == nil {
-                // Fallback if prepareFullSession() wasn't called
-                self.prepareFullSession()
+        // Use background queue for preparation to avoid blocking main thread
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                DispatchQueue.main.async {
+                    completionHandler(CameraControllerError.unknown)
+                }
+                return
             }
 
-            guard let captureSession = self.captureSession else {
-                throw CameraControllerError.captureSessionIsMissing
-            }
+            do {
+                // Session and outputs already created in load(), just configure user-specific settings
+                if self.captureSession == nil {
+                    // Fallback if prepareFullSession() wasn't called
+                    self.prepareFullSession()
+                }
 
-            print("[CameraPreview] Fast prepare - using pre-initialized session")
+                guard let captureSession = self.captureSession else {
+                    throw CameraControllerError.captureSessionIsMissing
+                }
 
-            // Configure device inputs for the requested camera
-            try self.configureDeviceInputs(cameraPosition: cameraPosition, deviceId: deviceId, disableAudio: disableAudio)
+                print("[CameraPreview] Fast prepare - using pre-initialized session")
 
-            // Add outputs to session and apply user settings
-            try self.addOutputsToSession(cameraMode: cameraMode, aspectRatio: aspectRatio)
+                // Pre-create outputs asynchronously to avoid blocking camera opening
+                outputPreparationQueue.async { [weak self] in
+                    self?.prepareOutputs()
+                }
 
-            // Start the session
-            captureSession.startRunning()
-            print("[CameraPreview] Session started")
+                // // Configure device inputs for the requested camera
+                try self.configureDeviceInputs(cameraPosition: cameraPosition, deviceId: deviceId, disableAudio: disableAudio)
 
-            // Validate and set initial zoom level
-            if initialZoomLevel != 1.0 {
-                let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera
-                if let device = device {
-                    let minZoom = device.minAvailableVideoZoomFactor
-                    let maxZoom = min(device.maxAvailableVideoZoomFactor, saneMaxZoomFactor)
+                // Start the session on background thread (AVCaptureSession.startRunning() is thread-safe)
+                captureSession.startRunning()
+                print("[CameraPreview] Session started")
 
-                    if CGFloat(initialZoomLevel) < minZoom || CGFloat(initialZoomLevel) > maxZoom {
-                        let error = CameraControllerError.invalidZoomLevel(min: minZoom, max: maxZoom, requested: CGFloat(initialZoomLevel))
-                        completionHandler(error)
-                        return
-                    }
-
-                    do {
-                        try device.lockForConfiguration()
-                        device.videoZoomFactor = CGFloat(initialZoomLevel)
-                        device.unlockForConfiguration()
-                        self.zoomFactor = CGFloat(initialZoomLevel)
-                        print("[CameraPreview] Set initial zoom to \(initialZoomLevel)")
-                    } catch {
-                        print("[CameraPreview] Failed to set initial zoom: \(error)")
-                        completionHandler(error)
-                        return
+                // Validate and set initial zoom level asynchronously
+                if initialZoomLevel != 1.0 {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.setInitialZoom(level: initialZoomLevel)
                     }
                 }
-            }
 
-            completionHandler(nil)
+                // Call completion on main thread
+                DispatchQueue.main.async {
+                    completionHandler(nil)
+
+                    // Upgrade quality settings after a short delay for better user experience
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                        guard let self = self else { return }
+
+                        // Wait for outputs to be prepared before proceeding
+                        self.waitForOutputsToBeReady()
+
+                        // Add outputs to session and apply user settings
+                        do {
+                            try self.addOutputsToSession(cameraMode: cameraMode, aspectRatio: aspectRatio)
+                            print("[CameraPreview] Outputs successfully added to session")
+                        } catch {
+                            print("[CameraPreview] Error adding outputs to session: \(error)")
+                        }
+
+                        self.upgradeQualitySettings()
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    completionHandler(error)
+                }
+            }
+        }
+    }
+
+    private func setInitialZoom(level: Float) {
+        let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera
+        guard let device = device else { return }
+
+        let minZoom = device.minAvailableVideoZoomFactor
+        let maxZoom = min(device.maxAvailableVideoZoomFactor, saneMaxZoomFactor)
+
+        guard CGFloat(level) >= minZoom && CGFloat(level) <= maxZoom else {
+            print("[CameraPreview] Initial zoom level \(level) out of range (\(minZoom)-\(maxZoom))")
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+            device.videoZoomFactor = CGFloat(level)
+            device.unlockForConfiguration()
+            self.zoomFactor = CGFloat(level)
+            print("[CameraPreview] Set initial zoom to \(level)")
         } catch {
-            completionHandler(error)
+            print("[CameraPreview] Failed to set initial zoom: \(error)")
         }
     }
 
     private func configureDeviceInputs(cameraPosition: String, deviceId: String?, disableAudio: Bool) throws {
         guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
 
+        // Ensure cameras are discovered before configuring inputs
+        ensureCamerasDiscovered()
+
         var selectedDevice: AVCaptureDevice?
 
-        // If deviceId is specified, find that specific device from pre-discovered devices
+        // If deviceId is specified, find that specific device from discovered devices
         if let deviceId = deviceId {
             selectedDevice = self.allDiscoveredDevices.first(where: { $0.uniqueID == deviceId })
             guard selectedDevice != nil else {
-                print("[CameraPreview] ERROR: Device with ID \(deviceId) not found in pre-discovered devices")
+                print("[CameraPreview] ERROR: Device with ID \(deviceId) not found in discovered devices")
                 throw CameraControllerError.noCamerasAvailable
             }
         } else {
-            // Use position-based selection from pre-discovered cameras
+            // Use position-based selection from discovered cameras
             if cameraPosition == "rear" {
                 selectedDevice = self.rearCamera
             } else if cameraPosition == "front" {
@@ -249,16 +379,16 @@ extension CameraController {
                 self.rearCameraInput = deviceInput
                 self.currentCameraPosition = .rear
 
-                // Configure zoom for multi-camera systems
-                try finalDevice.lockForConfiguration()
-                let defaultWideAngleZoom: CGFloat = 2.0
-                if finalDevice.isVirtualDevice && finalDevice.constituentDevices.count > 1 && finalDevice.videoZoomFactor != defaultWideAngleZoom {
+                // Configure zoom for multi-camera systems - simplified and faster
+                if finalDevice.isVirtualDevice && finalDevice.constituentDevices.count > 1 {
+                    try finalDevice.lockForConfiguration()
+                    let defaultWideAngleZoom: CGFloat = 1.0 // Changed from 2.0 to 1.0 for faster startup
                     if defaultWideAngleZoom >= finalDevice.minAvailableVideoZoomFactor && defaultWideAngleZoom <= finalDevice.maxAvailableVideoZoomFactor {
                         print("[CameraPreview] Setting initial zoom to \(defaultWideAngleZoom)")
                         finalDevice.videoZoomFactor = defaultWideAngleZoom
                     }
+                    finalDevice.unlockForConfiguration()
                 }
-                finalDevice.unlockForConfiguration()
             }
         } else {
             throw CameraControllerError.inputsAreInvalid
@@ -282,6 +412,10 @@ extension CameraController {
 
     private func addOutputsToSession(cameraMode: Bool, aspectRatio: String?) throws {
         guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
+
+        // Begin configuration to batch all changes
+        captureSession.beginConfiguration()
+        defer { captureSession.commitConfiguration() }
 
         // Update session preset based on aspect ratio if needed
         var targetPreset: AVCaptureSession.Preset = .high // Default to high quality
@@ -321,9 +455,10 @@ extension CameraController {
         // Add data output
         if let dataOutput = self.dataOutput, captureSession.canAddOutput(dataOutput) {
             captureSession.addOutput(dataOutput)
-            captureSession.commitConfiguration()
-
-            dataOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
+            // Set delegate after outputs are added for better performance
+            DispatchQueue.main.async {
+                dataOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
+            }
         }
     }
 
@@ -332,33 +467,32 @@ extension CameraController {
 
         print("[CameraPreview] displayPreview called with view frame: \(view.frame)")
 
-        self.previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        self.previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill
+        // Create and configure preview layer in one go
+        let previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
 
-        // Optimize preview layer for better quality
-        self.previewLayer?.connection?.videoOrientation = .portrait
-        self.previewLayer?.isOpaque = true
-
-        // Set contentsScale for retina display quality
-        self.previewLayer?.contentsScale = UIScreen.main.scale
-
-        // Enable high-quality rendering
-        if #available(iOS 13.0, *) {
-            self.previewLayer?.videoGravity = .resizeAspectFill
-        }
-
-        view.layer.insertSublayer(self.previewLayer!, at: 0)
-
-        // Disable animation for frame update
+        // Batch all layer configuration to avoid multiple redraws
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        self.previewLayer?.frame = view.bounds
+
+        previewLayer.videoGravity = AVLayerVideoGravity.resizeAspectFill
+        previewLayer.connection?.videoOrientation = .portrait
+        previewLayer.isOpaque = true
+        previewLayer.contentsScale = UIScreen.main.scale
+        previewLayer.frame = view.bounds
+
+        // Insert layer and store reference
+        view.layer.insertSublayer(previewLayer, at: 0)
+        self.previewLayer = previewLayer
+
         CATransaction.commit()
 
         print("[CameraPreview] Set preview layer frame to view bounds: \(view.bounds)")
         print("[CameraPreview] Session preset: \(captureSession.sessionPreset.rawValue)")
 
-        updateVideoOrientation()
+        // Update video orientation asynchronously to avoid blocking
+        DispatchQueue.main.async { [weak self] in
+            self?.updateVideoOrientation()
+        }
     }
 
     func addGridOverlay(to view: UIView, gridMode: String) {
@@ -1124,6 +1258,9 @@ extension CameraController {
 
         self.captureSession = nil
         self.currentCameraPosition = nil
+
+        // Reset output preparation status
+        self.outputsPrepared = false
     }
 
     func captureVideo() throws {
