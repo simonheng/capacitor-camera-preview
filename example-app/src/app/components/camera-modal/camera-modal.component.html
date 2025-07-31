@@ -13,30 +13,40 @@
   </div>
 
   <!-- Black background mask around camera preview -->
-  @if (cameraStarted() && nativePreviewWidth() > 0 && nativePreviewHeight() > 0) {
+  @if (
+    cameraStarted() && nativePreviewWidth() > 0 && nativePreviewHeight() > 0
+  ) {
     <div class="camera-mask">
       <!-- Top bar -->
-      <div class="mask-segment mask-top" 
-           [style.height.px]="nativePreviewY()">
-      </div>
+      <div
+        class="mask-segment mask-top"
+        [style.height.px]="nativePreviewY()"
+      ></div>
       <!-- Bottom bar -->
-      <div class="mask-segment mask-bottom" 
-           [style.top.px]="nativePreviewY() + nativePreviewHeight()"
-           [style.height.px]="window.innerHeight - (nativePreviewY() + nativePreviewHeight())">
-      </div>
+      <div
+        class="mask-segment mask-bottom"
+        [style.top.px]="nativePreviewY() + nativePreviewHeight()"
+        [style.height.px]="
+          window.innerHeight - (nativePreviewY() + nativePreviewHeight())
+        "
+      ></div>
       <!-- Left bar -->
-      <div class="mask-segment mask-left" 
-           [style.top.px]="nativePreviewY()"
-           [style.width.px]="nativePreviewX()"
-           [style.height.px]="nativePreviewHeight()">
-      </div>
+      <div
+        class="mask-segment mask-left"
+        [style.top.px]="nativePreviewY()"
+        [style.width.px]="nativePreviewX()"
+        [style.height.px]="nativePreviewHeight()"
+      ></div>
       <!-- Right bar -->
-      <div class="mask-segment mask-right" 
-           [style.top.px]="nativePreviewY()"
-           [style.left.px]="nativePreviewX() + nativePreviewWidth()"
-           [style.width.px]="window.innerWidth - (nativePreviewX() + nativePreviewWidth())"
-           [style.height.px]="nativePreviewHeight()">
-      </div>
+      <div
+        class="mask-segment mask-right"
+        [style.top.px]="nativePreviewY()"
+        [style.left.px]="nativePreviewX() + nativePreviewWidth()"
+        [style.width.px]="
+          window.innerWidth - (nativePreviewX() + nativePreviewWidth())
+        "
+        [style.height.px]="nativePreviewHeight()"
+      ></div>
     </div>
   }
 

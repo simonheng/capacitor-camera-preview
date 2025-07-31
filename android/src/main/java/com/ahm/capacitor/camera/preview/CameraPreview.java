@@ -11,7 +11,6 @@ import android.util.Log;
 import android.util.Size;
 import android.view.ViewGroup;
 import android.webkit.WebView;
-
 import com.ahm.capacitor.camera.preview.model.CameraDevice;
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
@@ -449,11 +448,25 @@ public class CameraPreview
     final Integer yParam = call.getInt("y");
     final int x = xParam != null ? xParam : -1;
     final int y = yParam != null ? yParam : -1;
-    
+
     Log.d("CameraPreview", "========================");
     Log.d("CameraPreview", "CAMERA POSITION TRACKING START:");
-    Log.d("CameraPreview", "1. RAW PARAMS - xParam: " + xParam + ", yParam: " + yParam);
-    Log.d("CameraPreview", "2. AFTER DEFAULT - x: " + x + " (center=" + (x == -1) + "), y: " + y + " (center=" + (y == -1) + ")");
+    Log.d(
+      "CameraPreview",
+      "1. RAW PARAMS - xParam: " + xParam + ", yParam: " + yParam
+    );
+    Log.d(
+      "CameraPreview",
+      "2. AFTER DEFAULT - x: " +
+      x +
+      " (center=" +
+      (x == -1) +
+      "), y: " +
+      y +
+      " (center=" +
+      (y == -1) +
+      ")"
+    );
     final int width = call.getInt("width", 0);
     final int height = call.getInt("height", 0);
     final int paddingBottom = call.getInt("paddingBottom", 0);
@@ -565,7 +578,7 @@ public class CameraPreview
         // Calculate position - center if x or y is -1
         int computedX;
         int computedY;
-        
+
         // Calculate dimensions first
         int computedWidth = width != 0
           ? (int) (width * pixelRatio)
@@ -574,31 +587,72 @@ public class CameraPreview
           ? (int) (height * pixelRatio)
           : getBridge().getWebView().getHeight();
         computedHeight -= (int) (paddingBottom * pixelRatio);
-        
+
         Log.d("CameraPreview", "Positioning logic - x: " + x + ", y: " + y);
-        
+
         if (x == -1) {
           // Center horizontally
           int screenWidth = metrics.widthPixels;
           computedX = (screenWidth - computedWidth) / 2;
-          Log.d("CameraPreview", "Centering horizontally: screenWidth=" + screenWidth + ", computedWidth=" + computedWidth + ", computedX=" + computedX);
+          Log.d(
+            "CameraPreview",
+            "Centering horizontally: screenWidth=" +
+            screenWidth +
+            ", computedWidth=" +
+            computedWidth +
+            ", computedX=" +
+            computedX
+          );
         } else {
           computedX = (int) (x * pixelRatio);
-          Log.d("CameraPreview", "Using provided X position: " + x + " * " + pixelRatio + " = " + computedX);
+          Log.d(
+            "CameraPreview",
+            "Using provided X position: " +
+            x +
+            " * " +
+            pixelRatio +
+            " = " +
+            computedX
+          );
         }
-        
+
         if (y == -1) {
           // Center vertically using full screen height
           int screenHeight = metrics.heightPixels;
           computedY = (screenHeight - computedHeight) / 2;
-          Log.d("CameraPreview", "Centering vertically: screenHeight=" + screenHeight + ", computedHeight=" + computedHeight + ", computedY=" + computedY);
+          Log.d(
+            "CameraPreview",
+            "Centering vertically: screenHeight=" +
+            screenHeight +
+            ", computedHeight=" +
+            computedHeight +
+            ", computedY=" +
+            computedY
+          );
         } else {
           computedY = (int) (y * pixelRatio);
-          Log.d("CameraPreview", "Using provided Y position: " + y + " * " + pixelRatio + " = " + computedY);
+          Log.d(
+            "CameraPreview",
+            "Using provided Y position: " +
+            y +
+            " * " +
+            pixelRatio +
+            " = " +
+            computedY
+          );
         }
 
-        Log.d("CameraPreview", "3. COMPUTED POSITION - x=" + computedX + ", y=" + computedY);
-        Log.d("CameraPreview", "4. COMPUTED SIZE - width=" + computedWidth + ", height=" + computedHeight);
+        Log.d(
+          "CameraPreview",
+          "3. COMPUTED POSITION - x=" + computedX + ", y=" + computedY
+        );
+        Log.d(
+          "CameraPreview",
+          "4. COMPUTED SIZE - width=" +
+          computedWidth +
+          ", height=" +
+          computedHeight
+        );
         Log.d("CameraPreview", "=== COORDINATE DEBUG ===");
         Log.d(
           "CameraPreview",
@@ -658,7 +712,7 @@ public class CameraPreview
 
         // Pass along whether we're centering so CameraXView knows not to add insets
         boolean isCentered = (x == -1 || y == -1);
-        
+
         CameraSessionConfiguration config = new CameraSessionConfiguration(
           finalDeviceId,
           position,
@@ -728,21 +782,56 @@ public class CameraPreview
       int webViewTopInset = 0;
       boolean isEdgeToEdgeActive = false;
       WebView webView = getBridge().getWebView();
-      if (webView != null && webView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-        webViewTopInset = ((ViewGroup.MarginLayoutParams) webView.getLayoutParams()).topMargin;
+      if (
+        webView != null &&
+        webView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
+      ) {
+        webViewTopInset =
+          ((ViewGroup.MarginLayoutParams) webView.getLayoutParams()).topMargin;
         isEdgeToEdgeActive = webViewTopInset > 0;
       }
-      
+
       // Only convert to relative position if edge-to-edge is active
       int relativeY = isEdgeToEdgeActive ? (y - webViewTopInset) : y;
 
       Log.d("CameraPreview", "========================");
       Log.d("CameraPreview", "CAMERA STARTED - POSITION RETURNED:");
-      Log.d("CameraPreview", "7. RETURNED (pixels) - x=" + x + ", y=" + y + ", width=" + width + ", height=" + height);
-      Log.d("CameraPreview", "8. EDGE-TO-EDGE - " + (isEdgeToEdgeActive ? "ACTIVE" : "INACTIVE"));
+      Log.d(
+        "CameraPreview",
+        "7. RETURNED (pixels) - x=" +
+        x +
+        ", y=" +
+        y +
+        ", width=" +
+        width +
+        ", height=" +
+        height
+      );
+      Log.d(
+        "CameraPreview",
+        "8. EDGE-TO-EDGE - " + (isEdgeToEdgeActive ? "ACTIVE" : "INACTIVE")
+      );
       Log.d("CameraPreview", "9. WEBVIEW INSET - " + webViewTopInset);
-      Log.d("CameraPreview", "10. RELATIVE Y - " + relativeY + " (y=" + y + (isEdgeToEdgeActive ? " - inset=" + webViewTopInset : " unchanged") + ")");
-      Log.d("CameraPreview", "11. RETURNED (logical) - x=" + (x / pixelRatio) + ", y=" + (relativeY / pixelRatio) + ", width=" + (width / pixelRatio) + ", height=" + (height / pixelRatio));
+      Log.d(
+        "CameraPreview",
+        "10. RELATIVE Y - " +
+        relativeY +
+        " (y=" +
+        y +
+        (isEdgeToEdgeActive ? " - inset=" + webViewTopInset : " unchanged") +
+        ")"
+      );
+      Log.d(
+        "CameraPreview",
+        "11. RETURNED (logical) - x=" +
+        (x / pixelRatio) +
+        ", y=" +
+        (relativeY / pixelRatio) +
+        ", width=" +
+        (width / pixelRatio) +
+        ", height=" +
+        (height / pixelRatio)
+      );
       Log.d("CameraPreview", "12. PIXEL RATIO - " + pixelRatio);
       Log.d("CameraPreview", "========================");
 

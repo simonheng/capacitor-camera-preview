@@ -492,7 +492,11 @@ export interface CameraPreviewPlugin {
    * @returns {Promise<void>} A promise that resolves when the zoom level is set.
    * @since 7.4.0
    */
-  setZoom(options: { level: number; ramp?: boolean; autoFocus?: boolean }): Promise<void>;
+  setZoom(options: {
+    level: number;
+    ramp?: boolean;
+    autoFocus?: boolean;
+  }): Promise<void>;
 
   /**
    * Gets the current flash mode.

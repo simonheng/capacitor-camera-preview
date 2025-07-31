@@ -3,7 +3,9 @@ package com.ahm.capacitor.camera.preview;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
@@ -18,17 +20,15 @@ import android.util.Size;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.webkit.WebView;
-import android.widget.FrameLayout;
+import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
+import android.view.animation.AnimationSet;
 import android.view.animation.AnimationUtils;
 import android.view.animation.ScaleAnimation;
-import android.view.animation.AlphaAnimation;
-import android.view.animation.AnimationSet;
+import android.webkit.WebView;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
+import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
@@ -149,18 +149,36 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
       if (data.length >= 8) {
         // Check for PNG signature (89 50 4E 47 0D 0A 1A 0A)
-        if (data[0] == (byte) 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+        if (
+          data[0] == (byte) 0x89 &&
+          data[1] == 0x50 &&
+          data[2] == 0x4E &&
+          data[3] == 0x47
+        ) {
           extension = ".png";
           mimeType = "image/png";
         }
         // Check for JPEG signature (FF D8 FF)
-        else if (data[0] == (byte) 0xFF && data[1] == (byte) 0xD8 && data[2] == (byte) 0xFF) {
+        else if (
+          data[0] == (byte) 0xFF &&
+          data[1] == (byte) 0xD8 &&
+          data[2] == (byte) 0xFF
+        ) {
           extension = ".jpg";
           mimeType = "image/jpeg";
         }
         // Check for WebP signature (RIFF ... WEBP)
-        else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
-                 data.length >= 12 && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
+        else if (
+          data[0] == 0x52 &&
+          data[1] == 0x49 &&
+          data[2] == 0x46 &&
+          data[3] == 0x46 &&
+          data.length >= 12 &&
+          data[8] == 0x57 &&
+          data[9] == 0x45 &&
+          data[10] == 0x42 &&
+          data[11] == 0x50
+        ) {
           extension = ".webp";
           mimeType = "image/webp";
         }
@@ -181,7 +199,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       fos.close();
 
       // Notify the gallery of the new image
-      MediaScannerConnection.scanFile(this.context, new String[]{photo.getAbsolutePath()}, new String[]{mimeType}, null);
+      MediaScannerConnection.scanFile(
+        this.context,
+        new String[] { photo.getAbsolutePath() },
+        new String[] { mimeType },
+        null
+      );
     } catch (IOException e) {
       Log.e(TAG, "Error saving image to gallery", e);
     }
@@ -245,7 +268,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
     }
 
-        // Create a container to hold both the preview and grid overlay
+    // Create a container to hold both the preview and grid overlay
     previewContainer = new FrameLayout(context);
     // Ensure container can receive touch events
     previewContainer.setClickable(true);
@@ -262,15 +285,39 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     View.OnTouchListener touchListener = new View.OnTouchListener() {
       @Override
       public boolean onTouch(View v, MotionEvent event) {
-        Log.d(TAG, "onTouch: " + v.getClass().getSimpleName() + " received touch event: " + event.getAction() +
-              " at (" + event.getX() + ", " + event.getY() + ")");
+        Log.d(
+          TAG,
+          "onTouch: " +
+          v.getClass().getSimpleName() +
+          " received touch event: " +
+          event.getAction() +
+          " at (" +
+          event.getX() +
+          ", " +
+          event.getY() +
+          ")"
+        );
 
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
           float x = event.getX() / v.getWidth();
           float y = event.getY() / v.getHeight();
 
-          Log.d(TAG, "onTouch: Touch detected at raw coords (" + event.getX() + ", " + event.getY() +
-                "), view size: " + v.getWidth() + "x" + v.getHeight() + ", normalized: (" + x + ", " + y + ")");
+          Log.d(
+            TAG,
+            "onTouch: Touch detected at raw coords (" +
+            event.getX() +
+            ", " +
+            event.getY() +
+            "), view size: " +
+            v.getWidth() +
+            "x" +
+            v.getHeight() +
+            ", normalized: (" +
+            x +
+            ", " +
+            y +
+            ")"
+          );
 
           try {
             // Trigger focus with indicator
@@ -319,24 +366,44 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       FrameLayout.LayoutParams layoutParams = calculatePreviewLayoutParams();
       parent.addView(previewContainer, layoutParams);
       if (sessionConfig.isToBack()) webView.bringToFront();
-      
+
       // Log the actual position after layout
       previewContainer.post(() -> {
         Log.d(TAG, "========================");
         Log.d(TAG, "ACTUAL CAMERA VIEW POSITION (after layout):");
-        Log.d(TAG, "Container position - Left: " + previewContainer.getLeft() + 
-              ", Top: " + previewContainer.getTop() + 
-              ", Right: " + previewContainer.getRight() + 
-              ", Bottom: " + previewContainer.getBottom());
-        Log.d(TAG, "Container size - Width: " + previewContainer.getWidth() + 
-              ", Height: " + previewContainer.getHeight());
-        
+        Log.d(
+          TAG,
+          "Container position - Left: " +
+          previewContainer.getLeft() +
+          ", Top: " +
+          previewContainer.getTop() +
+          ", Right: " +
+          previewContainer.getRight() +
+          ", Bottom: " +
+          previewContainer.getBottom()
+        );
+        Log.d(
+          TAG,
+          "Container size - Width: " +
+          previewContainer.getWidth() +
+          ", Height: " +
+          previewContainer.getHeight()
+        );
+
         // Get parent info
         ViewGroup containerParent = (ViewGroup) previewContainer.getParent();
         if (containerParent != null) {
-          Log.d(TAG, "Parent class: " + containerParent.getClass().getSimpleName());
-          Log.d(TAG, "Parent size - Width: " + containerParent.getWidth() + 
-                ", Height: " + containerParent.getHeight());
+          Log.d(
+            TAG,
+            "Parent class: " + containerParent.getClass().getSimpleName()
+          );
+          Log.d(
+            TAG,
+            "Parent size - Width: " +
+            containerParent.getWidth() +
+            ", Height: " +
+            containerParent.getHeight()
+          );
         }
         Log.d(TAG, "========================");
       });
@@ -389,34 +456,46 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           int oldHeight = height;
           width = optimalWidth;
           height = optimalHeight;
-          
+
           // If we're centered and dimensions changed, recalculate position
           if (sessionConfig.isCentered()) {
             DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-            
+
             if (width != oldWidth) {
               int screenWidth = metrics.widthPixels;
               x = (screenWidth - width) / 2;
               Log.d(
                 TAG,
                 "calculatePreviewLayoutParams: Recentered X after aspect ratio - " +
-                "oldWidth=" + oldWidth + ", newWidth=" + width + 
-                ", screenWidth=" + screenWidth + ", newX=" + x
+                "oldWidth=" +
+                oldWidth +
+                ", newWidth=" +
+                width +
+                ", screenWidth=" +
+                screenWidth +
+                ", newX=" +
+                x
               );
             }
-            
+
             if (height != oldHeight) {
               int screenHeight = metrics.heightPixels;
               y = (screenHeight - height) / 2;
               Log.d(
                 TAG,
                 "calculatePreviewLayoutParams: Recentered Y after aspect ratio - " +
-                "oldHeight=" + oldHeight + ", newHeight=" + height + 
-                ", screenHeight=" + screenHeight + ", newY=" + y
+                "oldHeight=" +
+                oldHeight +
+                ", newHeight=" +
+                height +
+                ", screenHeight=" +
+                screenHeight +
+                ", newY=" +
+                y
               );
             }
           }
-          
+
           Log.d(
             TAG,
             "calculatePreviewLayoutParams: Applied aspect ratio " +
@@ -447,7 +526,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       layoutParams.topMargin = y;
       Log.d(
         TAG,
-        "calculatePreviewLayoutParams: Centered/Full-screen mode - keeping position without insets. isCentered=" + sessionConfig.isCentered()
+        "calculatePreviewLayoutParams: Centered/Full-screen mode - keeping position without insets. isCentered=" +
+        sessionConfig.isCentered()
       );
     } else {
       layoutParams.leftMargin = x + webViewLeftInset;
@@ -488,7 +568,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       layoutParams.leftMargin +
       " topMargin:" +
       layoutParams.topMargin +
-      " (WebView insets: left=" + webViewLeftInset + ", top=" + webViewTopInset + ")"
+      " (WebView insets: left=" +
+      webViewLeftInset +
+      ", top=" +
+      webViewTopInset +
+      ")"
     );
     return layoutParams;
   }
@@ -615,10 +699,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         ResolutionInfo previewResolution = preview.getResolutionInfo();
         if (previewResolution != null) {
           currentPreviewResolution = previewResolution.getResolution();
-          Log.d(
-            TAG,
-            "Preview resolution: " + currentPreviewResolution
-          );
+          Log.d(TAG, "Preview resolution: " + currentPreviewResolution);
         }
         ResolutionInfo imageCaptureResolution =
           imageCapture.getResolutionInfo();
@@ -645,14 +726,19 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             if (initialZoom < minZoom || initialZoom > maxZoom) {
               if (listener != null) {
                 listener.onCameraStartError(
-                  "Initial zoom level " + initialZoom + " is not available. " +
-                  "Valid range is " + minZoom + " to " + maxZoom
+                  "Initial zoom level " +
+                  initialZoom +
+                  " is not available. " +
+                  "Valid range is " +
+                  minZoom +
+                  " to " +
+                  maxZoom
                 );
                 return;
               }
             }
           }
-          
+
           setZoomInternal(initialZoom);
         }
 
@@ -667,15 +753,19 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             int actualHeight = getPreviewHeight();
             int actualX = getPreviewX();
             int actualY = getPreviewY();
-              
+
             Log.d(
               TAG,
-              "onCameraStarted callback - actualX=" + actualX + 
-              ", actualY=" + actualY + 
-              ", actualWidth=" + actualWidth + 
-              ", actualHeight=" + actualHeight
+              "onCameraStarted callback - actualX=" +
+              actualX +
+              ", actualY=" +
+              actualY +
+              ", actualWidth=" +
+              actualWidth +
+              ", actualHeight=" +
+              actualHeight
             );
-            
+
             listener.onCameraStarted(
               actualWidth,
               actualHeight,
@@ -1459,7 +1549,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       currentFocusFuture.cancel(true);
     }
 
-
     int viewWidth = previewView.getWidth();
     int viewHeight = previewView.getHeight();
     float indicatorX = x * viewWidth;
@@ -1467,7 +1556,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     showFocusIndicator(indicatorX, indicatorY);
 
     if (viewWidth <= 0 || viewHeight <= 0) {
-      throw new Exception("Preview view has invalid dimensions: " + viewWidth + "x" + viewHeight);
+      throw new Exception(
+        "Preview view has invalid dimensions: " + viewWidth + "x" + viewHeight
+      );
     }
 
     // Create MeteringPoint using the preview view
@@ -1493,10 +1584,21 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             FocusMeteringResult result = currentFocusFuture.get();
           } catch (Exception e) {
             // Handle cancellation gracefully - this is expected when rapid taps occur
-            if (e.getMessage() != null && (e.getMessage().contains("Cancelled by another startFocusAndMetering") ||
+            if (
+              e.getMessage() != null &&
+              (e
+                  .getMessage()
+                  .contains("Cancelled by another startFocusAndMetering") ||
                 e.getMessage().contains("OperationCanceledException") ||
-                e.getClass().getSimpleName().contains("OperationCanceledException"))) {
-              Log.d(TAG, "Focus operation was cancelled by a newer focus request");
+                e
+                  .getClass()
+                  .getSimpleName()
+                  .contains("OperationCanceledException"))
+            ) {
+              Log.d(
+                TAG,
+                "Focus operation was cancelled by a newer focus request"
+              );
             } else {
               Log.e(TAG, "Error during focus: " + e.getMessage());
             }
@@ -1524,7 +1626,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     // Check if container has been laid out
     if (previewContainer.getWidth() == 0 || previewContainer.getHeight() == 0) {
-      Log.w(TAG, "showFocusIndicator: previewContainer not laid out yet, posting to run after layout");
+      Log.w(
+        TAG,
+        "showFocusIndicator: previewContainer not laid out yet, posting to run after layout"
+      );
       previewContainer.post(() -> showFocusIndicator(x, y));
       return;
     }
@@ -1544,13 +1649,22 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     int containerWidth = previewContainer.getWidth();
     int containerHeight = previewContainer.getHeight();
 
-    params.leftMargin = Math.max(0, Math.min((int) (x - size / 2), containerWidth - size));
-    params.topMargin = Math.max(0, Math.min((int) (y - size / 2), containerHeight - size));
+    params.leftMargin = Math.max(
+      0,
+      Math.min((int) (x - size / 2), containerWidth - size)
+    );
+    params.topMargin = Math.max(
+      0,
+      Math.min((int) (y - size / 2), containerHeight - size)
+    );
 
     // Create an elegant focus ring - white stroke with transparent center
     GradientDrawable drawable = new GradientDrawable();
     drawable.setShape(GradientDrawable.OVAL);
-    drawable.setStroke((int) (2 * context.getResources().getDisplayMetrics().density), Color.WHITE); // 2dp white stroke
+    drawable.setStroke(
+      (int) (2 * context.getResources().getDisplayMetrics().density),
+      Color.WHITE
+    ); // 2dp white stroke
     drawable.setColor(Color.TRANSPARENT); // Transparent center
     container.setBackground(drawable);
 
@@ -1567,7 +1681,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     container.setFocusable(false);
 
     // Ensure the focus indicator has a high elevation for visibility
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+    if (
+      android.os.Build.VERSION.SDK_INT >=
+      android.os.Build.VERSION_CODES.LOLLIPOP
+    ) {
       focusIndicatorView.setElevation(10f);
     }
 
@@ -1580,92 +1697,127 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     // Force a layout pass to ensure the view is properly positioned
     previewContainer.requestLayout();
 
-
     // Smooth scale down animation with easing (no fade needed since we start visible)
     ScaleAnimation scaleAnimation = new ScaleAnimation(
-      1.8f, 1.0f, 1.8f, 1.0f,
-      Animation.RELATIVE_TO_SELF, 0.5f,
-      Animation.RELATIVE_TO_SELF, 0.5f
+      1.8f,
+      1.0f,
+      1.8f,
+      1.0f,
+      Animation.RELATIVE_TO_SELF,
+      0.5f,
+      Animation.RELATIVE_TO_SELF,
+      0.5f
     );
     scaleAnimation.setDuration(300);
-    scaleAnimation.setInterpolator(new android.view.animation.OvershootInterpolator(1.2f));
+    scaleAnimation.setInterpolator(
+      new android.view.animation.OvershootInterpolator(1.2f)
+    );
 
     // Start the animation
     focusIndicatorView.startAnimation(scaleAnimation);
 
     // Schedule fade out and removal with smoother timing
-    focusIndicatorView.postDelayed(new Runnable() {
-      @Override
-      public void run() {
-        if (focusIndicatorView != null) {
-          // Smooth fade to semi-transparent
-          AlphaAnimation fadeToTransparent = new AlphaAnimation(1f, 0.4f);
-          fadeToTransparent.setDuration(400);
-          fadeToTransparent.setInterpolator(new android.view.animation.AccelerateInterpolator());
+    focusIndicatorView.postDelayed(
+      new Runnable() {
+        @Override
+        public void run() {
+          if (focusIndicatorView != null) {
+            // Smooth fade to semi-transparent
+            AlphaAnimation fadeToTransparent = new AlphaAnimation(1f, 0.4f);
+            fadeToTransparent.setDuration(400);
+            fadeToTransparent.setInterpolator(
+              new android.view.animation.AccelerateInterpolator()
+            );
 
-          fadeToTransparent.setAnimationListener(new Animation.AnimationListener() {
-
-              @Override
-              public void onAnimationStart(Animation animation) {
-                Log.d(TAG, "showFocusIndicator: Fade to transparent started");
-              }
-
-              @Override
-              public void onAnimationEnd(Animation animation) {
-                Log.d(TAG, "showFocusIndicator: Fade to transparent ended, starting final fade out");
-                // Final smooth fade out and scale down
-                if (focusIndicatorView != null) {
-                  AnimationSet finalAnimation = new AnimationSet(false);
-
-                  AlphaAnimation finalFadeOut = new AlphaAnimation(0.4f, 0f);
-                  finalFadeOut.setDuration(500);
-                  finalFadeOut.setStartOffset(300);
-                  finalFadeOut.setInterpolator(new android.view.animation.AccelerateInterpolator());
-
-                  ScaleAnimation finalScaleDown = new ScaleAnimation(
-                    1.0f, 0.9f, 1.0f, 0.9f,
-                    Animation.RELATIVE_TO_SELF, 0.5f,
-                    Animation.RELATIVE_TO_SELF, 0.5f
-                  );
-                  finalScaleDown.setDuration(500);
-                  finalScaleDown.setStartOffset(300);
-                  finalScaleDown.setInterpolator(new android.view.animation.AccelerateInterpolator());
-
-                  finalAnimation.addAnimation(finalFadeOut);
-                  finalAnimation.addAnimation(finalScaleDown);
-
-                  finalAnimation.setAnimationListener(new Animation.AnimationListener() {
-                    @Override
-                    public void onAnimationStart(Animation animation) {
-                      Log.d(TAG, "showFocusIndicator: Final animation started");
-                    }
-
-                    @Override
-                    public void onAnimationEnd(Animation animation) {
-                      Log.d(TAG, "showFocusIndicator: Final animation ended, removing indicator");
-                      // Remove the focus indicator
-                      if (focusIndicatorView != null && previewContainer != null) {
-                        previewContainer.removeView(focusIndicatorView);
-                        focusIndicatorView = null;
-                      }
-                    }
-
-                    @Override
-                    public void onAnimationRepeat(Animation animation) {}
-                  });
-
-                  focusIndicatorView.startAnimation(finalAnimation);
+            fadeToTransparent.setAnimationListener(
+              new Animation.AnimationListener() {
+                @Override
+                public void onAnimationStart(Animation animation) {
+                  Log.d(TAG, "showFocusIndicator: Fade to transparent started");
                 }
+
+                @Override
+                public void onAnimationEnd(Animation animation) {
+                  Log.d(
+                    TAG,
+                    "showFocusIndicator: Fade to transparent ended, starting final fade out"
+                  );
+                  // Final smooth fade out and scale down
+                  if (focusIndicatorView != null) {
+                    AnimationSet finalAnimation = new AnimationSet(false);
+
+                    AlphaAnimation finalFadeOut = new AlphaAnimation(0.4f, 0f);
+                    finalFadeOut.setDuration(500);
+                    finalFadeOut.setStartOffset(300);
+                    finalFadeOut.setInterpolator(
+                      new android.view.animation.AccelerateInterpolator()
+                    );
+
+                    ScaleAnimation finalScaleDown = new ScaleAnimation(
+                      1.0f,
+                      0.9f,
+                      1.0f,
+                      0.9f,
+                      Animation.RELATIVE_TO_SELF,
+                      0.5f,
+                      Animation.RELATIVE_TO_SELF,
+                      0.5f
+                    );
+                    finalScaleDown.setDuration(500);
+                    finalScaleDown.setStartOffset(300);
+                    finalScaleDown.setInterpolator(
+                      new android.view.animation.AccelerateInterpolator()
+                    );
+
+                    finalAnimation.addAnimation(finalFadeOut);
+                    finalAnimation.addAnimation(finalScaleDown);
+
+                    finalAnimation.setAnimationListener(
+                      new Animation.AnimationListener() {
+                        @Override
+                        public void onAnimationStart(Animation animation) {
+                          Log.d(
+                            TAG,
+                            "showFocusIndicator: Final animation started"
+                          );
+                        }
+
+                        @Override
+                        public void onAnimationEnd(Animation animation) {
+                          Log.d(
+                            TAG,
+                            "showFocusIndicator: Final animation ended, removing indicator"
+                          );
+                          // Remove the focus indicator
+                          if (
+                            focusIndicatorView != null &&
+                            previewContainer != null
+                          ) {
+                            previewContainer.removeView(focusIndicatorView);
+                            focusIndicatorView = null;
+                          }
+                        }
+
+                        @Override
+                        public void onAnimationRepeat(Animation animation) {}
+                      }
+                    );
+
+                    focusIndicatorView.startAnimation(finalAnimation);
+                  }
+                }
+
+                @Override
+                public void onAnimationRepeat(Animation animation) {}
               }
+            );
 
-            @Override
-            public void onAnimationRepeat(Animation animation) {}
-          });
-
-          focusIndicatorView.startAnimation(fadeToTransparent);
+            focusIndicatorView.startAnimation(fadeToTransparent);
+          }
         }
-              }
-      }, 800); // Optimal timing for smooth focus feedback
+      },
+      800
+    ); // Optimal timing for smooth focus feedback
   }
 
   public static List<Size> getSupportedPictureSizes(String facing) {
@@ -2130,23 +2282,26 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
   public int getPreviewX() {
     if (previewContainer == null) return 0;
-    
+
     // Get the container position
     ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
     if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
       int containerX = ((ViewGroup.MarginLayoutParams) layoutParams).leftMargin;
-      
+
       // Get the actual camera bounds within the container
       Rect cameraBounds = getActualCameraBounds();
       int actualX = containerX + cameraBounds.left;
-      
+
       Log.d(
         TAG,
-        "getPreviewX: containerX=" + containerX + 
-        ", cameraBounds.left=" + cameraBounds.left + 
-        ", actualX=" + actualX
+        "getPreviewX: containerX=" +
+        containerX +
+        ", cameraBounds.left=" +
+        cameraBounds.left +
+        ", actualX=" +
+        actualX
       );
-      
+
       return actualX;
     }
     return previewContainer.getLeft();
@@ -2154,23 +2309,26 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
   public int getPreviewY() {
     if (previewContainer == null) return 0;
-    
+
     // Get the container position
     ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
     if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
       int containerY = ((ViewGroup.MarginLayoutParams) layoutParams).topMargin;
-      
+
       // Get the actual camera bounds within the container
       Rect cameraBounds = getActualCameraBounds();
       int actualY = containerY + cameraBounds.top;
-      
+
       Log.d(
         TAG,
-        "getPreviewY: containerY=" + containerY + 
-        ", cameraBounds.top=" + cameraBounds.top + 
-        ", actualY=" + actualY
+        "getPreviewY: containerY=" +
+        containerY +
+        ", cameraBounds.top=" +
+        cameraBounds.top +
+        ", actualY=" +
+        actualY
       );
-      
+
       return actualY;
     }
     return previewContainer.getTop();
@@ -2181,47 +2339,69 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     if (previewView == null || previewContainer == null) {
       return new Rect(0, 0, 0, 0);
     }
-    
+
     // Get the container bounds
     int containerWidth = previewContainer.getWidth();
     int containerHeight = previewContainer.getHeight();
-    
+
     // Get the preview transformation info to understand how the camera is scaled/positioned
     // For FIT_CENTER, the camera content is scaled to fit within the container
     // This might create letterboxing (black bars) on top/bottom or left/right
-    
+
     // Get the actual preview resolution
     if (currentPreviewResolution == null) {
       // If we don't have the resolution yet, assume the container is filled
       return new Rect(0, 0, containerWidth, containerHeight);
     }
-    
+
     // The preview is rotated 90 degrees for portrait mode
     // So we swap the dimensions
     int cameraWidth = currentPreviewResolution.getHeight();
     int cameraHeight = currentPreviewResolution.getWidth();
-    
+
     // Calculate the scaling factor to fit the camera in the container
     float widthScale = (float) containerWidth / cameraWidth;
     float heightScale = (float) containerHeight / cameraHeight;
     float scale = Math.min(widthScale, heightScale); // FIT_CENTER uses min scale
-    
+
     // Calculate the actual size of the camera content after scaling
     int scaledWidth = Math.round(cameraWidth * scale);
     int scaledHeight = Math.round(cameraHeight * scale);
-    
+
     // Calculate the offset to center the content
     int offsetX = (containerWidth - scaledWidth) / 2;
     int offsetY = (containerHeight - scaledHeight) / 2;
-    
-    Log.d(TAG, "getActualCameraBounds: container=" + containerWidth + "x" + containerHeight + 
-          ", camera=" + cameraWidth + "x" + cameraHeight +
-          ", scale=" + scale + 
-          ", scaled=" + scaledWidth + "x" + scaledHeight +
-          ", offset=(" + offsetX + "," + offsetY + ")");
-    
+
+    Log.d(
+      TAG,
+      "getActualCameraBounds: container=" +
+      containerWidth +
+      "x" +
+      containerHeight +
+      ", camera=" +
+      cameraWidth +
+      "x" +
+      cameraHeight +
+      ", scale=" +
+      scale +
+      ", scaled=" +
+      scaledWidth +
+      "x" +
+      scaledHeight +
+      ", offset=(" +
+      offsetX +
+      "," +
+      offsetY +
+      ")"
+    );
+
     // Return the bounds relative to the container
-    return new Rect(offsetX, offsetY, offsetX + scaledWidth, offsetY + scaledHeight);
+    return new Rect(
+      offsetX,
+      offsetY,
+      offsetX + scaledWidth,
+      offsetY + scaledHeight
+    );
   }
 
   public int getPreviewWidth() {
@@ -2652,18 +2832,35 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       .build();
 
     try {
-      currentFocusFuture = camera.getCameraControl().startFocusAndMetering(action);
+      currentFocusFuture = camera
+        .getCameraControl()
+        .startFocusAndMetering(action);
       currentFocusFuture.addListener(
         () -> {
           try {
             FocusMeteringResult result = currentFocusFuture.get();
-            Log.d(TAG, "triggerAutoFocus: Focus completed successfully: " + result.isFocusSuccessful());
+            Log.d(
+              TAG,
+              "triggerAutoFocus: Focus completed successfully: " +
+              result.isFocusSuccessful()
+            );
           } catch (Exception e) {
             // Handle cancellation gracefully - this is expected when rapid operations occur
-            if (e.getMessage() != null && (e.getMessage().contains("Cancelled by another startFocusAndMetering") ||
+            if (
+              e.getMessage() != null &&
+              (e
+                  .getMessage()
+                  .contains("Cancelled by another startFocusAndMetering") ||
                 e.getMessage().contains("OperationCanceledException") ||
-                e.getClass().getSimpleName().contains("OperationCanceledException"))) {
-              Log.d(TAG, "triggerAutoFocus: Auto-focus was cancelled by a newer focus request");
+                e
+                  .getClass()
+                  .getSimpleName()
+                  .contains("OperationCanceledException"))
+            ) {
+              Log.d(
+                TAG,
+                "triggerAutoFocus: Auto-focus was cancelled by a newer focus request"
+              );
             } else {
               Log.e(TAG, "triggerAutoFocus: Error during focus", e);
             }

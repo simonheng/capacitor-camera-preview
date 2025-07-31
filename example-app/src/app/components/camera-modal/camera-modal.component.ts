@@ -276,17 +276,17 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     try {
       const nativeResult = await this.#cameraViewService.start(startOptions);
 
-              // Store native-returned position
-        this.nativePreviewX.set(nativeResult.x);
-        this.nativePreviewY.set(nativeResult.y);
-        this.nativePreviewWidth.set(nativeResult.width);
-        this.nativePreviewHeight.set(nativeResult.height);
+      // Store native-returned position
+      this.nativePreviewX.set(nativeResult.x);
+      this.nativePreviewY.set(nativeResult.y);
+      this.nativePreviewWidth.set(nativeResult.width);
+      this.nativePreviewHeight.set(nativeResult.height);
 
-        // Also update current preview position with native result initially
-        this.currentPreviewX.set(nativeResult.x);
-        this.currentPreviewY.set(nativeResult.y);
-        this.currentPreviewWidth.set(nativeResult.width);
-        this.currentPreviewHeight.set(nativeResult.height);
+      // Also update current preview position with native result initially
+      this.currentPreviewX.set(nativeResult.x);
+      this.currentPreviewY.set(nativeResult.y);
+      this.currentPreviewWidth.set(nativeResult.width);
+      this.currentPreviewHeight.set(nativeResult.height);
 
       await Promise.all([
         this.#initializeZoomLimits(),
@@ -814,34 +814,38 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   public async handleTouchEnd(event?: TouchEvent) {
-      // Handle pinch-to-zoom end
-      if (this.#touchStartDistance > 0) {
-          // Ensure final zoom level is set on native side
-          this.setZoom(this.currentZoomFactor(), true);
-          this.#touchStartDistance = 0;
-          return;
-      }
-
-      // Handle tap-to-focus
-      if (event && event.changedTouches.length === 1 && this.#touchStartTime > 0) {
-          const touchEndTime = Date.now();
-          const touchDuration = touchEndTime - this.#touchStartTime;
-
-          // Check if it's a tap (not a long press or drag)
-          if (touchDuration < 300) {
-              const touch = event.changedTouches[0];
-              const deltaX = Math.abs(touch.clientX - this.#touchStartX);
-              const deltaY = Math.abs(touch.clientY - this.#touchStartY);
-
-              // Check if finger didn't move much (not a swipe)
-              if (deltaX < 10 && deltaY < 10) {
-                  await this.setFocusAtPoint(touch.clientX, touch.clientY);
-              }
-          }
-      }
-
-      this.#touchStartTime = 0;
+    // Handle pinch-to-zoom end
+    if (this.#touchStartDistance > 0) {
+      // Ensure final zoom level is set on native side
+      this.setZoom(this.currentZoomFactor(), true);
+      this.#touchStartDistance = 0;
+      return;
     }
+
+    // Handle tap-to-focus
+    if (
+      event &&
+      event.changedTouches.length === 1 &&
+      this.#touchStartTime > 0
+    ) {
+      const touchEndTime = Date.now();
+      const touchDuration = touchEndTime - this.#touchStartTime;
+
+      // Check if it's a tap (not a long press or drag)
+      if (touchDuration < 300) {
+        const touch = event.changedTouches[0];
+        const deltaX = Math.abs(touch.clientX - this.#touchStartX);
+        const deltaY = Math.abs(touch.clientY - this.#touchStartY);
+
+        // Check if finger didn't move much (not a swipe)
+        if (deltaX < 10 && deltaY < 10) {
+          await this.setFocusAtPoint(touch.clientX, touch.clientY);
+        }
+      }
+    }
+
+    this.#touchStartTime = 0;
+  }
 
   protected getDisplayLenses(device: CameraDevice): CameraLens[] {
     return device.lenses;
@@ -875,22 +879,30 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   private async setFocusAtPoint(clientX: number, clientY: number) {
     try {
-        // Get the camera view element bounds
-        const cameraView = document.getElementById('cameraView');
-        if (!cameraView) return;
+      // Get the camera view element bounds
+      const cameraView = document.getElementById('cameraView');
+      if (!cameraView) return;
 
-        const rect = cameraView.getBoundingClientRect();
+      const rect = cameraView.getBoundingClientRect();
 
-        // Calculate normalized coordinates (0-1)
-        const normalizedX = (clientX - rect.left) / rect.width;
-        const normalizedY = (clientY - rect.top) / rect.height;
+      // Calculate normalized coordinates (0-1)
+      const normalizedX = (clientX - rect.left) / rect.width;
+      const normalizedY = (clientY - rect.top) / rect.height;
 
-        // Ensure coordinates are within bounds
-        if (normalizedX >= 0 && normalizedX <= 1 && normalizedY >= 0 && normalizedY <= 1) {
-            await this.#cameraViewService.setFocus({ x: normalizedX, y: normalizedY });
-        }
+      // Ensure coordinates are within bounds
+      if (
+        normalizedX >= 0 &&
+        normalizedX <= 1 &&
+        normalizedY >= 0 &&
+        normalizedY <= 1
+      ) {
+        await this.#cameraViewService.setFocus({
+          x: normalizedX,
+          y: normalizedY,
+        });
+      }
     } catch (error) {
-        // Silently fail if focus is not supported
+      // Silently fail if focus is not supported
     }
-}
+  }
 }

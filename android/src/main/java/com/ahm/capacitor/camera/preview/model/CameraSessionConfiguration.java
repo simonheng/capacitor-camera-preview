@@ -156,11 +156,11 @@ public class CameraSessionConfiguration {
   public boolean getDisableAudio() {
     return disableAudio;
   }
-  
+
   public boolean isCentered() {
     return isCentered;
   }
-  
+
   public void setCentered(boolean centered) {
     isCentered = centered;
   }

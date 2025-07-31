@@ -695,9 +695,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                 guard let image = image,
                       let imageDataWithExif = self.createImageDataWithExif(
-                          from: image,
-                          quality: Int(quality),
-                          location: withExifLocation ? self.currentLocation : nil
+                        from: image,
+                        quality: Int(quality),
+                        location: withExifLocation ? self.currentLocation : nil
                       )
                 else {
                     print("[CameraPreview] Failed to create image data with EXIF")
@@ -1334,7 +1334,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             // Only override dimensions if aspect ratio is provided and no explicit dimensions given
             if let aspectRatio = self.aspectRatio, width == UIScreen.main.bounds.size.width && height == UIScreen.main.bounds.size.height {
                 finalWidth = webViewWidth
-                
+
                 // Calculate height based on aspect ratio
                 let ratioParts = aspectRatio.split(separator: ":").compactMap { Double($0) }
                 if ratioParts.count == 2 {
