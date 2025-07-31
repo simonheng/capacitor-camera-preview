@@ -22,6 +22,7 @@ public class CameraSessionConfiguration {
   private final String aspectRatio;
   private final String gridMode;
   private float targetZoom = 1.0f;
+  private boolean isCentered = false;
 
   public CameraSessionConfiguration(
     String deviceId,
@@ -154,5 +155,13 @@ public class CameraSessionConfiguration {
 
   public boolean getDisableAudio() {
     return disableAudio;
+  }
+  
+  public boolean isCentered() {
+    return isCentered;
+  }
+  
+  public void setCentered(boolean centered) {
+    isCentered = centered;
   }
 }

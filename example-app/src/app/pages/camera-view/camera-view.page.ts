@@ -232,8 +232,8 @@ export class CameraViewPage implements OnInit {
         deviceId: this.deviceId(),
         position: this.position(),
         quality: this.quality(),
-        x: this.previewX(),
-        y: this.previewY(),
+        x: this.previewX() === 0 ? undefined : this.previewX(),
+        y: this.previewY() === 0 ? undefined : this.previewY(),
         width: this.previewWidth(),
         height: this.previewHeight(),
         aspectRatio:

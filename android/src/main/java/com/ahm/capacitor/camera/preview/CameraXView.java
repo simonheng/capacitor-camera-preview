@@ -1,27 +1,22 @@
 package com.ahm.capacitor.camera.preview;
 
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.location.Location;
 import android.media.MediaScannerConnection;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.util.Rational;
 import android.util.Size;
 import android.view.ViewGroup;
-import android.view.ViewGroup;
 import android.webkit.WebView;
-import android.widget.FrameLayout;
 import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
@@ -32,15 +27,11 @@ import androidx.camera.core.Camera;
 import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.FocusMeteringAction;
-import androidx.camera.core.FocusMeteringAction;
-import androidx.camera.core.FocusMeteringResult;
 import androidx.camera.core.FocusMeteringResult;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.MeteringPoint;
-import androidx.camera.core.MeteringPoint;
-import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
 import androidx.camera.core.ResolutionInfo;
@@ -56,7 +47,6 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
-import androidx.lifecycle.OnLifecycleEvent;
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
@@ -66,7 +56,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -112,6 +101,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private final Executor mainExecutor;
   private ExecutorService cameraExecutor;
   private boolean isRunning = false;
+  private Size currentPreviewResolution = null;
 
   public CameraXView(Context context, WebView webView) {
     this.context = context;
@@ -195,6 +185,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
   public void stopSession() {
     isRunning = false;
+    currentPreviewResolution = null; // Clear stored resolution
     mainExecutor.execute(() -> {
       if (cameraProvider != null) {
         cameraProvider.unbindAll();
@@ -271,6 +262,27 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       FrameLayout.LayoutParams layoutParams = calculatePreviewLayoutParams();
       parent.addView(previewContainer, layoutParams);
       if (sessionConfig.isToBack()) webView.bringToFront();
+      
+      // Log the actual position after layout
+      previewContainer.post(() -> {
+        Log.d(TAG, "========================");
+        Log.d(TAG, "ACTUAL CAMERA VIEW POSITION (after layout):");
+        Log.d(TAG, "Container position - Left: " + previewContainer.getLeft() + 
+              ", Top: " + previewContainer.getTop() + 
+              ", Right: " + previewContainer.getRight() + 
+              ", Bottom: " + previewContainer.getBottom());
+        Log.d(TAG, "Container size - Width: " + previewContainer.getWidth() + 
+              ", Height: " + previewContainer.getHeight());
+        
+        // Get parent info
+        ViewGroup containerParent = (ViewGroup) previewContainer.getParent();
+        if (containerParent != null) {
+          Log.d(TAG, "Parent class: " + containerParent.getClass().getSimpleName());
+          Log.d(TAG, "Parent size - Width: " + containerParent.getWidth() + 
+                ", Height: " + containerParent.getHeight());
+        }
+        Log.d(TAG, "========================");
+      });
     }
   }
 
@@ -315,8 +327,39 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             optimalWidth = (int) (height * ratio);
           }
 
+          // Store the old dimensions to check if we need to recenter
+          int oldWidth = width;
+          int oldHeight = height;
           width = optimalWidth;
           height = optimalHeight;
+          
+          // If we're centered and dimensions changed, recalculate position
+          if (sessionConfig.isCentered()) {
+            DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+            
+            if (width != oldWidth) {
+              int screenWidth = metrics.widthPixels;
+              x = (screenWidth - width) / 2;
+              Log.d(
+                TAG,
+                "calculatePreviewLayoutParams: Recentered X after aspect ratio - " +
+                "oldWidth=" + oldWidth + ", newWidth=" + width + 
+                ", screenWidth=" + screenWidth + ", newX=" + x
+              );
+            }
+            
+            if (height != oldHeight) {
+              int screenHeight = metrics.heightPixels;
+              y = (screenHeight - height) / 2;
+              Log.d(
+                TAG,
+                "calculatePreviewLayoutParams: Recentered Y after aspect ratio - " +
+                "oldHeight=" + oldHeight + ", newHeight=" + height + 
+                ", screenHeight=" + screenHeight + ", newY=" + y
+              );
+            }
+          }
+          
           Log.d(
             TAG,
             "calculatePreviewLayoutParams: Applied aspect ratio " +
@@ -337,17 +380,17 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       height
     );
 
-    // Only add insets for positioning coordinates, not for full-screen sizes
+    // Only add insets for positioning coordinates, not for full-screen sizes or centered content
     int webViewTopInset = getWebViewTopInset();
     int webViewLeftInset = getWebViewLeftInset();
 
-    // Don't add insets if this looks like a calculated full-screen coordinate (x=0, y=0)
-    if (x == 0 && y == 0) {
+    // Don't add insets if centered or full-screen
+    if (sessionConfig.isCentered() || (x == 0 && y == 0)) {
       layoutParams.leftMargin = x;
       layoutParams.topMargin = y;
       Log.d(
         TAG,
-        "calculatePreviewLayoutParams: Full-screen mode - keeping position (0,0) without insets"
+        "calculatePreviewLayoutParams: Centered/Full-screen mode - keeping position without insets. isCentered=" + sessionConfig.isCentered()
       );
     } else {
       layoutParams.leftMargin = x + webViewLeftInset;
@@ -360,18 +403,15 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     Log.d(
       TAG,
-      "calculatePreviewLayoutParams: Applied insets - x:" +
+      "calculatePreviewLayoutParams: Position calculation - x:" +
       x +
-      "+" +
-      webViewLeftInset +
-      "=" +
+      " (leftMargin=" +
       layoutParams.leftMargin +
-      ", y:" +
+      "), y:" +
       y +
-      "+" +
-      webViewTopInset +
-      "=" +
-      layoutParams.topMargin
+      " (topMargin=" +
+      layoutParams.topMargin +
+      ")"
     );
 
     Log.d(
@@ -384,6 +424,14 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       width +
       " height:" +
       height
+    );
+    Log.d(
+      TAG,
+      "calculatePreviewLayoutParams: Final margins - leftMargin:" +
+      layoutParams.leftMargin +
+      " topMargin:" +
+      layoutParams.topMargin +
+      " (WebView insets: left=" + webViewLeftInset + ", top=" + webViewTopInset + ")"
     );
     return layoutParams;
   }
@@ -506,9 +554,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         // Log resolution info
         ResolutionInfo previewResolution = preview.getResolutionInfo();
         if (previewResolution != null) {
+          currentPreviewResolution = previewResolution.getResolution();
           Log.d(
             TAG,
-            "Preview resolution: " + previewResolution.getResolution()
+            "Preview resolution: " + currentPreviewResolution
           );
         }
         ResolutionInfo imageCaptureResolution =
@@ -544,7 +593,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             }
           }
           
-          setZoomInternal(initialZoom, false);
+          setZoomInternal(initialZoom);
         }
 
         isRunning = true;
@@ -553,18 +602,20 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           // Post the callback to ensure layout is complete
           previewContainer.post(() -> {
             // Return actual preview container dimensions instead of requested dimensions
-            int actualWidth = previewContainer != null
-              ? previewContainer.getWidth()
-              : sessionConfig.getWidth();
-            int actualHeight = previewContainer != null
-              ? previewContainer.getHeight()
-              : sessionConfig.getHeight();
-            int actualX = previewContainer != null
-              ? previewContainer.getLeft()
-              : sessionConfig.getX();
-            int actualY = previewContainer != null
-              ? previewContainer.getTop()
-              : sessionConfig.getY();
+            // Get the actual camera dimensions and position
+            int actualWidth = getPreviewWidth();
+            int actualHeight = getPreviewHeight();
+            int actualX = getPreviewX();
+            int actualY = getPreviewY();
+              
+            Log.d(
+              TAG,
+              "onCameraStarted callback - actualX=" + actualX + 
+              ", actualY=" + actualY + 
+              ", actualWidth=" + actualWidth + 
+              ", actualHeight=" + actualHeight
+            );
+            
             listener.onCameraStarted(
               actualWidth,
               actualHeight,
@@ -1401,7 +1452,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     return sizes;
   }
 
-  private void setZoomInternal(float zoomRatio, boolean autoFocus) {
+  private void setZoomInternal(float zoomRatio) {
     if (camera != null) {
       try {
         float minZoom = Objects.requireNonNull(
@@ -1458,11 +1509,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                   TAG,
                   "setZoomInternal: CameraX switched to camera: " + newCameraId
                 );
-              }
-              
-              // Trigger autofocus after zoom if requested
-              if (autoFocus) {
-                triggerAutoFocus();
               }
             } catch (Exception e) {
               Log.w(
@@ -1845,54 +1891,110 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
   public int getPreviewX() {
     if (previewContainer == null) return 0;
+    
+    // Get the container position
     ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
     if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
-      // Return position relative to WebView content (subtract insets)
-      int margin = ((ViewGroup.MarginLayoutParams) layoutParams).leftMargin;
-      int leftInset = getWebViewLeftInset();
-      int result = margin - leftInset;
+      int containerX = ((ViewGroup.MarginLayoutParams) layoutParams).leftMargin;
+      
+      // Get the actual camera bounds within the container
+      Rect cameraBounds = getActualCameraBounds();
+      int actualX = containerX + cameraBounds.left;
+      
       Log.d(
         TAG,
-        "getPreviewX: leftMargin=" +
-        margin +
-        ", leftInset=" +
-        leftInset +
-        ", result=" +
-        result
+        "getPreviewX: containerX=" + containerX + 
+        ", cameraBounds.left=" + cameraBounds.left + 
+        ", actualX=" + actualX
       );
-      return result;
+      
+      return actualX;
     }
     return previewContainer.getLeft();
   }
 
   public int getPreviewY() {
     if (previewContainer == null) return 0;
+    
+    // Get the container position
     ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
     if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
-      // Return position relative to WebView content (subtract insets)
-      int margin = ((ViewGroup.MarginLayoutParams) layoutParams).topMargin;
-      int topInset = getWebViewTopInset();
-      int result = margin - topInset;
+      int containerY = ((ViewGroup.MarginLayoutParams) layoutParams).topMargin;
+      
+      // Get the actual camera bounds within the container
+      Rect cameraBounds = getActualCameraBounds();
+      int actualY = containerY + cameraBounds.top;
+      
       Log.d(
         TAG,
-        "getPreviewY: topMargin=" +
-        margin +
-        ", topInset=" +
-        topInset +
-        ", result=" +
-        result
+        "getPreviewY: containerY=" + containerY + 
+        ", cameraBounds.top=" + cameraBounds.top + 
+        ", actualY=" + actualY
       );
-      return result;
+      
+      return actualY;
     }
     return previewContainer.getTop();
   }
 
+  // Get the actual camera content bounds within the PreviewView
+  private Rect getActualCameraBounds() {
+    if (previewView == null || previewContainer == null) {
+      return new Rect(0, 0, 0, 0);
+    }
+    
+    // Get the container bounds
+    int containerWidth = previewContainer.getWidth();
+    int containerHeight = previewContainer.getHeight();
+    
+    // Get the preview transformation info to understand how the camera is scaled/positioned
+    // For FIT_CENTER, the camera content is scaled to fit within the container
+    // This might create letterboxing (black bars) on top/bottom or left/right
+    
+    // Get the actual preview resolution
+    if (currentPreviewResolution == null) {
+      // If we don't have the resolution yet, assume the container is filled
+      return new Rect(0, 0, containerWidth, containerHeight);
+    }
+    
+    // The preview is rotated 90 degrees for portrait mode
+    // So we swap the dimensions
+    int cameraWidth = currentPreviewResolution.getHeight();
+    int cameraHeight = currentPreviewResolution.getWidth();
+    
+    // Calculate the scaling factor to fit the camera in the container
+    float widthScale = (float) containerWidth / cameraWidth;
+    float heightScale = (float) containerHeight / cameraHeight;
+    float scale = Math.min(widthScale, heightScale); // FIT_CENTER uses min scale
+    
+    // Calculate the actual size of the camera content after scaling
+    int scaledWidth = Math.round(cameraWidth * scale);
+    int scaledHeight = Math.round(cameraHeight * scale);
+    
+    // Calculate the offset to center the content
+    int offsetX = (containerWidth - scaledWidth) / 2;
+    int offsetY = (containerHeight - scaledHeight) / 2;
+    
+    Log.d(TAG, "getActualCameraBounds: container=" + containerWidth + "x" + containerHeight + 
+          ", camera=" + cameraWidth + "x" + cameraHeight +
+          ", scale=" + scale + 
+          ", scaled=" + scaledWidth + "x" + scaledHeight +
+          ", offset=(" + offsetX + "," + offsetY + ")");
+    
+    // Return the bounds relative to the container
+    return new Rect(offsetX, offsetY, offsetX + scaledWidth, offsetY + scaledHeight);
+  }
+
   public int getPreviewWidth() {
-    return previewContainer != null ? previewContainer.getWidth() : 0;
+    if (previewContainer == null) return 0;
+    Rect bounds = getActualCameraBounds();
+    return bounds.width();
   }
 
   public int getPreviewHeight() {
-    return previewContainer != null ? previewContainer.getHeight() : 0;
+    if (previewContainer == null) return 0;
+    Rect bounds = getActualCameraBounds();
+    return bounds.height();
   }
 
   public void setPreviewSize(int x, int y, int width, int height) {
@@ -2210,15 +2312,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     } catch (NumberFormatException e) {
       Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
     }
-  }
-
-  private void updatePreviewLayout() {
-    if (previewContainer == null || sessionConfig == null) return;
-
-    String aspectRatio = sessionConfig.getAspectRatio();
-    if (aspectRatio == null) return;
-
-    updatePreviewLayoutForAspectRatio(aspectRatio);
   }
 
   private int getWebViewTopInset() {

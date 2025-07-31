@@ -1336,10 +1336,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         // Handle auto-centering when position is -1
         if posX == -1 || posY == -1 {
-            finalWidth = webViewWidth
-
-            // Calculate height based on aspect ratio or use provided height
-            if let aspectRatio = self.aspectRatio {
+            // Only override dimensions if aspect ratio is provided and no explicit dimensions given
+            if let aspectRatio = self.aspectRatio, width == UIScreen.main.bounds.size.width && height == UIScreen.main.bounds.size.height {
+                finalWidth = webViewWidth
+                
+                // Calculate height based on aspect ratio
                 let ratioParts = aspectRatio.split(separator: ":").compactMap { Double($0) }
                 if ratioParts.count == 2 {
                     // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
@@ -1348,11 +1349,21 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 }
             }
 
-            finalX = posX == -1 ? 0 : posX
+            // Center horizontally if x is -1
+            if posX == -1 {
+                finalX = (webViewWidth - finalWidth) / 2
+            } else {
+                finalX = posX
+            }
 
+            // Center vertically if y is -1
             if posY == -1 {
-                let availableHeight = webViewHeight - paddingBottom
-                finalY = finalHeight < availableHeight ? (availableHeight - finalHeight) / 2 : 0
+                // Use full screen height for centering
+                let screenHeight = UIScreen.main.bounds.size.height
+                finalY = (screenHeight - finalHeight) / 2
+                print("[CameraPreview] Centering vertically: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
+            } else {
+                finalY = posY
             }
         }
 

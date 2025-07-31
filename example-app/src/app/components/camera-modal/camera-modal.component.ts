@@ -69,8 +69,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly quality = input<number>(85);
   public readonly useTripleCameraIfAvailable = input<boolean>(false);
   public readonly initialZoomFactor = input<number>(1.0);
-  public readonly x = input<number>(0);
-  public readonly y = input<number>(0);
+  public readonly x = input<number | null>(null);
+  public readonly y = input<number | null>(null);
   public readonly width = input<number>(0);
   public readonly height = input<number>(0);
   public readonly aspectRatio = input<'4:3' | '16:9' | 'custom' | undefined>(
@@ -135,6 +135,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   });
 
   protected readonly isWeb = Capacitor.getPlatform() === 'web';
+  protected readonly window = window;
 
   protected readonly isUsingCustomSize = computed(() => {
     return this.width() > 0 && this.height() > 0;
@@ -236,16 +237,23 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async startCamera(): Promise<void> {
     const startOptions: any = {
+      parent: 'cameraView',
       deviceId: this.deviceId(),
       position: this.position(),
-      x: this.x(),
-      y: this.y(),
       enableZoom: this.enableZoom(),
       disableAudio: this.disableAudio(),
       lockAndroidOrientation: this.lockAndroidOrientation(),
       toBack: true,
       gridMode: this.gridMode(),
     };
+
+    // Only add x and y if they are not null
+    if (this.x() !== null) {
+      startOptions.x = this.x();
+    }
+    if (this.y() !== null) {
+      startOptions.y = this.y();
+    }
 
     // Initialize aspect ratio based on input or custom size usage
     if (this.aspectRatio()) {
@@ -265,11 +273,17 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     try {
       const nativeResult = await this.#cameraViewService.start(startOptions);
 
-      // Store native-returned position
-      this.nativePreviewX.set(nativeResult.x);
-      this.nativePreviewY.set(nativeResult.y);
-      this.nativePreviewWidth.set(nativeResult.width);
-      this.nativePreviewHeight.set(nativeResult.height);
+              // Store native-returned position
+        this.nativePreviewX.set(nativeResult.x);
+        this.nativePreviewY.set(nativeResult.y);
+        this.nativePreviewWidth.set(nativeResult.width);
+        this.nativePreviewHeight.set(nativeResult.height);
+
+        // Also update current preview position with native result initially
+        this.currentPreviewX.set(nativeResult.x);
+        this.currentPreviewY.set(nativeResult.y);
+        this.currentPreviewWidth.set(nativeResult.width);
+        this.currentPreviewHeight.set(nativeResult.height);
 
       await Promise.all([
         this.#initializeZoomLimits(),
@@ -822,8 +836,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.warn('Failed to get current preview size', error);
       // Fallback to input values
-      this.currentPreviewX.set(this.x());
-      this.currentPreviewY.set(this.y());
+      this.currentPreviewX.set(this.x() ?? 0);
+      this.currentPreviewY.set(this.y() ?? 0);
       this.currentPreviewWidth.set(this.width());
       this.currentPreviewHeight.set(this.height());
     }

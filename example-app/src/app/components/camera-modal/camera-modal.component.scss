@@ -29,6 +29,42 @@ ion-content::part(background) {
   z-index: 998; // Slightly lower than red boundary so both are visible when overlapping
 }
 
+// Camera mask - black background around preview
+.camera-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5; // Above camera but below controls
+}
+
+.mask-segment {
+  position: absolute;
+  background-color: rgba(0, 0, 0, 0.8); // Semi-transparent black
+  pointer-events: none;
+}
+
+.mask-top {
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.mask-bottom {
+  left: 0;
+  width: 100%;
+}
+
+.mask-left {
+  left: 0;
+}
+
+.mask-right {
+  top: 0;
+}
+
 // Camera elements
 #cameraView {
   position: relative;

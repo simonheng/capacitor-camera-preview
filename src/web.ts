@@ -72,23 +72,48 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     this.videoElement.playsInline = true;
     this.videoElement.muted = true;
     this.videoElement.autoplay = true;
+    // Remove objectFit as we'll match camera's native aspect ratio
+    this.videoElement.style.backgroundColor = "transparent";
+    // Reset any default margins that might interfere
+    this.videoElement.style.margin = "0";
+    this.videoElement.style.padding = "0";
 
     container.appendChild(this.videoElement);
     if (options.toBack) {
       this.videoElement.style.zIndex = "-1";
     }
 
+    // Default to 16:9 vertical (9:16 for portrait) if no aspect ratio or size specified
+    const useDefaultAspectRatio = !options.aspectRatio && !options.width && !options.height;
+    const effectiveAspectRatio = options.aspectRatio || (useDefaultAspectRatio ? "16:9" : null);
+
     if (options.width) {
       this.videoElement.width = options.width;
+      this.videoElement.style.width = `${options.width}px`;
     }
 
     if (options.height) {
       this.videoElement.height = options.height;
+      this.videoElement.style.height = `${options.height}px`;
     }
 
-    if (options.x) {
+    // Handle positioning - center if x or y not provided
+    const centerX = options.x === undefined;
+    const centerY = options.y === undefined;
+    
+    // Always set position to absolute for proper positioning
+    this.videoElement.style.position = "absolute";
+    
+    console.log('Initial positioning flags:', { centerX, centerY, x: options.x, y: options.y });
+    
+    if (options.x !== undefined) {
       this.videoElement.style.left = `${options.x}px`;
     }
+    
+    if (options.y !== undefined) {
+      this.videoElement.style.top = `${options.y}px`;
+    }
+    
     // Create and add grid overlay if needed
     if (gridMode !== "none") {
       const gridOverlay = this.createGridOverlay(gridMode);
@@ -96,29 +121,17 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       parent?.appendChild(gridOverlay);
     }
 
-    if (options.y) {
-      this.videoElement.style.top = `${options.y}px`;
-    }
+    // Aspect ratio handling is now done after getting camera stream
+    
+    // Store centering flags for later use
+    const needsCenterX = centerX;
+    const needsCenterY = centerY;
+    
+    console.log('Centering flags stored:', { needsCenterX, needsCenterY });
 
-    if (options.aspectRatio) {
-      const [widthRatio, heightRatio] = options.aspectRatio
-        .split(":")
-        .map(Number);
-      const ratio = widthRatio / heightRatio;
-
-      if (options.width) {
-        this.videoElement.height = options.width / ratio;
-      } else if (options.height) {
-        this.videoElement.width = options.height * ratio;
-      }
-    } else {
-      this.videoElement.style.objectFit = "cover";
-    }
-
+    // First get the camera stream with basic constraints
     const constraints: MediaStreamConstraints = {
       video: {
-        width: { ideal: this.videoElement.width || 640 },
-        height: { ideal: this.videoElement.height || window.innerHeight },
         facingMode: this.isBackCamera ? "environment" : "user",
       },
     };
@@ -130,6 +143,111 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     if (!this.videoElement) {
       throw new Error("video element not found");
     }
+    
+    // Get the actual camera dimensions from the video track
+    const videoTrack = stream.getVideoTracks()[0];
+    const settings = videoTrack.getSettings();
+    const cameraWidth = settings.width || 640;
+    const cameraHeight = settings.height || 480;
+    const cameraAspectRatio = cameraWidth / cameraHeight;
+    
+    console.log('Camera native dimensions:', { 
+      width: cameraWidth, 
+      height: cameraHeight, 
+      aspectRatio: cameraAspectRatio 
+    });
+    
+    console.log('Container dimensions:', {
+      width: container.offsetWidth,
+      height: container.offsetHeight,
+      id: container.id
+    });
+    
+    // Now adjust video element size based on camera's native aspect ratio
+    if (!options.width && !options.height && !options.aspectRatio) {
+      // No size specified, fit camera view within container bounds
+      const containerWidth = container.offsetWidth || window.innerWidth;
+      const containerHeight = container.offsetHeight || window.innerHeight;
+      
+      // Calculate dimensions that fit within container while maintaining camera aspect ratio
+      let targetWidth, targetHeight;
+      
+      // Try fitting to container width first
+      targetWidth = containerWidth;
+      targetHeight = targetWidth / cameraAspectRatio;
+      
+      // If height exceeds container, fit to height instead
+      if (targetHeight > containerHeight) {
+        targetHeight = containerHeight;
+        targetWidth = targetHeight * cameraAspectRatio;
+      }
+      
+      console.log('Video element dimensions:', { 
+        width: targetWidth, 
+        height: targetHeight,
+        container: { width: containerWidth, height: containerHeight }
+      });
+      
+      this.videoElement.width = targetWidth;
+      this.videoElement.height = targetHeight;
+      this.videoElement.style.width = `${targetWidth}px`;
+      this.videoElement.style.height = `${targetHeight}px`;
+      
+      // Center the video element within its parent container
+      if (needsCenterX || options.x === undefined) {
+        const x = Math.round((containerWidth - targetWidth) / 2);
+        this.videoElement.style.left = `${x}px`;
+      }
+      if (needsCenterY || options.y === undefined) {
+        const y = Math.round((window.innerHeight - targetHeight) / 2);
+        this.videoElement.style.setProperty('top', `${y}px`, 'important');
+        // Force a style recalculation
+        this.videoElement.offsetHeight;
+        console.log('Centering video:', { 
+          viewportHeight: window.innerHeight, 
+          targetHeight, 
+          calculatedY: y,
+          actualTop: this.videoElement.style.top,
+          position: this.videoElement.style.position
+        });
+      }
+    } else if (effectiveAspectRatio && !options.width && !options.height) {
+      // Aspect ratio specified but no size
+      const [widthRatio, heightRatio] = effectiveAspectRatio.split(":").map(Number);
+      const targetRatio = widthRatio / heightRatio;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      let targetWidth, targetHeight;
+      
+      // Try fitting to viewport width first
+      targetWidth = viewportWidth;
+      targetHeight = targetWidth / targetRatio;
+      
+      // If height exceeds viewport, fit to height instead
+      if (targetHeight > viewportHeight) {
+        targetHeight = viewportHeight;
+        targetWidth = targetHeight * targetRatio;
+      }
+      
+      this.videoElement.width = targetWidth;
+      this.videoElement.height = targetHeight;
+      this.videoElement.style.width = `${targetWidth}px`;
+      this.videoElement.style.height = `${targetHeight}px`;
+      
+      // Center the video element within its parent container
+      if (needsCenterX || options.x === undefined) {
+        const parentWidth = container.offsetWidth || viewportWidth;
+        const x = Math.round((parentWidth - targetWidth) / 2);
+        this.videoElement.style.left = `${x}px`;
+      }
+      if (needsCenterY || options.y === undefined) {
+        const parentHeight = container.offsetHeight || viewportHeight;
+        const y = Math.round((parentHeight - targetHeight) / 2);
+        this.videoElement.style.top = `${y}px`;
+      }
+    }
+    
     this.videoElement.srcObject = stream;
     if (!this.isBackCamera) {
       this.videoElement.style.transform = "scaleX(-1)";
@@ -137,7 +255,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     
     // Set initial zoom level if specified and supported
     if (options.initialZoomLevel && options.initialZoomLevel !== 1.0) {
-      const videoTrack = stream.getVideoTracks()[0];
+      // videoTrack already declared above
       if (videoTrack) {
         const capabilities = videoTrack.getCapabilities() as any;
         
@@ -164,11 +282,60 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
     
     this.isStarted = true;
+    
+    // Wait for video to be ready and get actual dimensions
+    await new Promise<void>((resolve) => {
+      if (this.videoElement!.readyState >= 2) {
+        resolve();
+      } else {
+        this.videoElement!.addEventListener('loadeddata', () => resolve(), { once: true });
+      }
+    });
+    
+    // Ensure centering is applied after DOM updates
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    
+    console.log('About to re-center, flags:', { needsCenterX, needsCenterY });
+    
+    // Re-apply centering with correct parent dimensions
+    if (needsCenterX) {
+      const parentWidth = container.offsetWidth;
+      const x = Math.round((parentWidth - this.videoElement.offsetWidth) / 2);
+      this.videoElement.style.left = `${x}px`;
+      console.log('Re-centering X:', { parentWidth, videoWidth: this.videoElement.offsetWidth, x });
+    }
+    if (needsCenterY) {
+      const y = Math.round((window.innerHeight - this.videoElement.offsetHeight) / 2);
+      this.videoElement.style.setProperty('top', `${y}px`, 'important');
+      console.log('Re-centering Y:', { 
+        viewportHeight: window.innerHeight, 
+        videoHeight: this.videoElement.offsetHeight, 
+        y,
+        position: this.videoElement.style.position,
+        top: this.videoElement.style.top
+      });
+    }
+    
+    // Get the actual rendered dimensions after video is loaded
+    const rect = this.videoElement.getBoundingClientRect();
+    const computedStyle = window.getComputedStyle(this.videoElement);
+    
+    console.log('Final video element state:', {
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      style: {
+        position: computedStyle.position,
+        left: computedStyle.left,
+        top: computedStyle.top,
+        width: computedStyle.width,
+        height: computedStyle.height
+      }
+    });
+    
     return {
-      width: this.videoElement.width,
-      height: this.videoElement.height,
-      x: this.videoElement.getBoundingClientRect().x,
-      y: this.videoElement.getBoundingClientRect().y,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
     };
   }
 
@@ -676,20 +843,26 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       video.style.top = `${y}px`;
       video.style.position = "absolute";
 
+      const offsetX = newWidth / 8;
+      const offsetY = newHeight / 8;
+
       return {
         width: Math.round(newWidth),
         height: Math.round(newHeight),
-        x: Math.round(x),
-        y: Math.round(y),
+        x: Math.round(x + offsetX),
+        y: Math.round(y + offsetY),
       };
     } else {
       video.style.objectFit = "cover";
       const rect = video.getBoundingClientRect();
+      const offsetX = rect.width / 8;
+      const offsetY = rect.height / 8;
+      
       return {
         width: Math.round(rect.width),
         height: Math.round(rect.height),
-        x: Math.round(rect.left),
-        y: Math.round(rect.top),
+        x: Math.round(rect.left + offsetX),
+        y: Math.round(rect.top + offsetY),
       };
     }
   }
@@ -770,9 +943,12 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     if (!video) {
       throw new Error("camera is not running");
     }
+    const offsetX = video.width / 8;
+    const offsetY = video.height / 8;
+    
     return {
-      x: video.offsetLeft,
-      y: video.offsetTop,
+      x: video.offsetLeft + offsetX,
+      y: video.offsetTop + offsetY,
       width: video.width,
       height: video.height,
     };
@@ -797,11 +973,14 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     video.width = options.width;
     video.height = options.height;
 
+    const offsetX = options.width / 8;
+    const offsetY = options.height / 8;
+
     return {
       width: options.width,
       height: options.height,
-      x: options.x,
-      y: options.y,
+      x: options.x + offsetX,
+      y: options.y + offsetY,
     };
   }
 
