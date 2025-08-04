@@ -399,15 +399,55 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       if (video && video.videoWidth > 0 && video.videoHeight > 0) {
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        
+        // Calculate capture dimensions
+        let captureWidth = video.videoWidth;
+        let captureHeight = video.videoHeight;
+        let sourceX = 0;
+        let sourceY = 0;
+        
+              // Check for conflicting parameters
+      if (options.aspectRatio && (options.width || options.height)) {
+        reject(new Error("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start."));
+        return;
+      }
+      
+      // Handle aspect ratio if no width/height specified
+      if (!options.width && !options.height && options.aspectRatio) {
+        const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
+        if (widthRatio && heightRatio) {
+          // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
+          const isPortrait = video.videoHeight > video.videoWidth;
+          const targetAspectRatio = isPortrait ? heightRatio / widthRatio : widthRatio / heightRatio;
+          const videoAspectRatio = video.videoWidth / video.videoHeight;
+          
+          if (videoAspectRatio > targetAspectRatio) {
+            // Video is wider than target - crop sides
+            captureWidth = video.videoHeight * targetAspectRatio;
+            captureHeight = video.videoHeight;
+            sourceX = (video.videoWidth - captureWidth) / 2;
+          } else {
+            // Video is taller than target - crop top/bottom
+            captureWidth = video.videoWidth;
+            captureHeight = video.videoWidth / targetAspectRatio;
+            sourceY = (video.videoHeight - captureHeight) / 2;
+          }
+        }
+      } else if (options.width || options.height) {
+        // If width or height is specified, use them
+        if (options.width) captureWidth = options.width;
+        if (options.height) captureHeight = options.height;
+      }
+        
+        canvas.width = captureWidth;
+        canvas.height = captureHeight;
 
         // flip horizontally back camera isn't used
         if (!this.isBackCamera) {
-          context?.translate(video.videoWidth, 0);
+          context?.translate(captureWidth, 0);
           context?.scale(-1, 1);
         }
-        context?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+        context?.drawImage(video, sourceX, sourceY, captureWidth, captureHeight, 0, 0, captureWidth, captureHeight);
 
         if (options.saveToGallery) {
           // saveToGallery is not supported on web

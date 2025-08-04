@@ -663,11 +663,19 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         let withExifLocation = call.getBool("withExifLocation", false)
         let width = call.getInt("width")
         let height = call.getInt("height")
+        let aspectRatio = call.getString("aspectRatio")
 
-        print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1)")
+        // Check for conflicting parameters
+        if aspectRatio != nil && (width != nil || height != nil) {
+            print("[CameraPreview] Error: Cannot set both aspectRatio and size (width/height)")
+            call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
+            return
+        }
+
+        print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil")")
         print("[CameraPreview] Current location: \(self.currentLocation?.description ?? "nil")")
 
-        self.cameraController.captureImage(width: width, height: height, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
+        self.cameraController.captureImage(width: width, height: height, aspectRatio: aspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
             print("[CameraPreview] captureImage callback received")
             DispatchQueue.main.async {
                 print("[CameraPreview] Processing capture on main thread")

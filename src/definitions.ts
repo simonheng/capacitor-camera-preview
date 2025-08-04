@@ -207,6 +207,13 @@ export interface CameraPreviewPictureOptions {
   /** The desired width of the picture in pixels. If not provided, the device default is used. */
   width?: number;
   /**
+   * The desired aspect ratio of the captured image (e.g., '4:3', '16:9').
+   * If specified without width/height, captures the largest possible image with this ratio.
+   * Cannot be used together with width or height - the capture will be rejected with an error.
+   * @since 7.7.0
+   */
+  aspectRatio?: string;
+  /**
    * The quality of the captured image, from 0 to 100.
    * Does not apply to `png` format.
    * @default 85

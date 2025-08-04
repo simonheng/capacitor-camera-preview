@@ -87,7 +87,8 @@ extension CameraController {
     }
 
     private func ensureCamerasDiscovered() {
-        guard allDiscoveredDevices.isEmpty else { return }
+        // Rediscover cameras if the array is empty OR if the camera pointers are nil
+        guard allDiscoveredDevices.isEmpty || (rearCamera == nil && frontCamera == nil) else { return }
         discoverAndConfigureCameras()
     }
 
@@ -664,7 +665,7 @@ extension CameraController {
         self.updateVideoOrientation()
     }
 
-    func captureImage(width: Int?, height: Int?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
+    func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
         guard let photoOutput = self.photoOutput else {
             completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
             return
@@ -707,12 +708,38 @@ extension CameraController {
                 self.addGPSMetadata(to: image, location: location)
             }
 
-            if let width = width, let height = height {
-                let resizedImage = self.resizeImage(image: image, to: CGSize(width: width, height: height))
-                completion(resizedImage, nil)
-            } else {
-                completion(image, nil)
+            var finalImage = image
+            
+            // Handle aspect ratio if no width/height specified
+            if width == nil && height == nil, let aspectRatio = aspectRatio {
+                let components = aspectRatio.split(separator: ":").compactMap { Double($0) }
+                if components.count == 2 {
+                    // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
+                    let isPortrait = image.size.height > image.size.width
+                    let targetAspectRatio = isPortrait ? components[1] / components[0] : components[0] / components[1]
+                    let imageSize = image.size
+                    let originalAspectRatio = imageSize.width / imageSize.height
+                    
+                    var targetSize = imageSize
+                    
+                    if originalAspectRatio > targetAspectRatio {
+                        // Original is wider than target - fit by height
+                        targetSize.width = imageSize.height * CGFloat(targetAspectRatio)
+                    } else {
+                        // Original is taller than target - fit by width
+                        targetSize.height = imageSize.width / CGFloat(targetAspectRatio)
+                    }
+                    
+                    // Center crop the image
+                    if let croppedImage = self.cropImageToAspectRatio(image: image, targetSize: targetSize) {
+                        finalImage = croppedImage
+                    }
+                }
+            } else if let width = width, let height = height {
+                finalImage = self.resizeImage(image: image, to: CGSize(width: width, height: height))!
             }
+            
+            completion(finalImage, nil)
         }
 
         photoOutput.capturePhoto(with: settings, delegate: self)
@@ -753,6 +780,23 @@ extension CameraController {
             image.draw(in: CGRect(origin: .zero, size: size))
         }
         return resizedImage
+    }
+    
+    func cropImageToAspectRatio(image: UIImage, targetSize: CGSize) -> UIImage? {
+        let imageSize = image.size
+        
+        // Calculate the crop rect - center crop
+        let xOffset = (imageSize.width - targetSize.width) / 2
+        let yOffset = (imageSize.height - targetSize.height) / 2
+        let cropRect = CGRect(x: xOffset, y: yOffset, width: targetSize.width, height: targetSize.height)
+        
+        // Create the cropped image
+        guard let cgImage = image.cgImage,
+              let croppedCGImage = cgImage.cropping(to: cropRect) else {
+            return nil
+        }
+        
+        return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
     }
 
     func captureSample(completion: @escaping (UIImage?, Error?) -> Void) {
@@ -1257,6 +1301,7 @@ extension CameraController {
         self.frontCamera = nil
         self.rearCamera = nil
         self.audioDevice = nil
+        self.allDiscoveredDevices = []
 
         self.dataOutput = nil
         self.photoOutput = nil

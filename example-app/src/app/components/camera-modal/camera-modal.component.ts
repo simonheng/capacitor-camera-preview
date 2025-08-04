@@ -397,6 +397,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
             height: this.pictureHeight(),
           },
         };
+      } else if (this.currentAspectRatio() !== 'custom') {
+        // Use aspectRatio for capture when not using custom size
+        captureOptions = {
+          ...captureOptions,
+          aspectRatio: this.currentAspectRatio(),
+        };
       }
 
       const { value, exif } = await this.#cameraViewService.capture(
@@ -407,7 +413,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       await this.#modalController.dismiss({
         photo: value,
         exif: exif,
-        options: captureOptions,
+        options: {
+          ...captureOptions,
+          actualAspectRatio: this.currentAspectRatio() !== 'custom' && !this.useCustomSize() ? this.currentAspectRatio() : undefined,
+        },
         type: 'capture',
       });
     } catch (error) {

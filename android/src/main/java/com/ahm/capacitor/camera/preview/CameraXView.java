@@ -824,9 +824,18 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     final boolean saveToGallery,
     Integer width,
     Integer height,
+    String aspectRatio,
     Location location
   ) {
-    Log.d(TAG, "capturePhoto: Starting photo capture with quality: " + quality);
+    Log.d(TAG, "capturePhoto: Starting photo capture with quality: " + quality + ", aspectRatio: " + aspectRatio);
+
+    // Check for conflicting parameters
+    if (aspectRatio != null && (width != null || height != null)) {
+      if (listener != null) {
+        listener.onPictureTakenError("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.");
+      }
+      return;
+    }
 
     if (imageCapture == null) {
       if (listener != null) {
@@ -874,7 +883,63 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
             JSONObject exifData = getExifData(exifInterface);
 
-            if (width != null && height != null) {
+            // Handle aspect ratio if no width/height specified
+            if (width == null && height == null && aspectRatio != null && !aspectRatio.isEmpty()) {
+              // Get the original image dimensions
+              Bitmap originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+              int originalWidth = originalBitmap.getWidth();
+              int originalHeight = originalBitmap.getHeight();
+              
+              // Parse aspect ratio
+              String[] ratios = aspectRatio.split(":");
+              if (ratios.length == 2) {
+                try {
+                  float widthRatio = Float.parseFloat(ratios[0]);
+                  float heightRatio = Float.parseFloat(ratios[1]);
+                  
+                  // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
+                  boolean isPortrait = originalHeight > originalWidth;
+                  float targetAspectRatio = isPortrait ? heightRatio / widthRatio : widthRatio / heightRatio;
+                  float originalAspectRatio = (float) originalWidth / originalHeight;
+                  
+                  int targetWidth, targetHeight;
+                  
+                  if (originalAspectRatio > targetAspectRatio) {
+                    // Original is wider than target - fit by height
+                    targetHeight = originalHeight;
+                    targetWidth = (int) (targetHeight * targetAspectRatio);
+                  } else {
+                    // Original is taller than target - fit by width
+                    targetWidth = originalWidth;
+                    targetHeight = (int) (targetWidth / targetAspectRatio);
+                  }
+                  
+                  // Center crop the image
+                  int xOffset = (originalWidth - targetWidth) / 2;
+                  int yOffset = (originalHeight - targetHeight) / 2;
+                  
+                  Bitmap croppedBitmap = Bitmap.createBitmap(
+                    originalBitmap,
+                    xOffset,
+                    yOffset,
+                    targetWidth,
+                    targetHeight
+                  );
+                  
+                  ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                  croppedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream);
+                  bytes = stream.toByteArray();
+                  
+                  // Write EXIF data back to cropped image
+                  bytes = writeExifToImageBytes(bytes, exifInterface);
+                  
+                  originalBitmap.recycle();
+                  croppedBitmap.recycle();
+                } catch (NumberFormatException e) {
+                  Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
+                }
+              }
+            } else if (width != null && height != null) {
               Bitmap bitmap = BitmapFactory.decodeByteArray(
                 bytes,
                 0,

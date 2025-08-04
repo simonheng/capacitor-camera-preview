@@ -172,8 +172,9 @@ public class CameraPreview
     final boolean saveToGallery = call.getBoolean("saveToGallery", false);
     Integer width = call.getInt("width");
     Integer height = call.getInt("height");
+    String aspectRatio = call.getString("aspectRatio");
 
-    cameraXView.capturePhoto(quality, saveToGallery, width, height, location);
+    cameraXView.capturePhoto(quality, saveToGallery, width, height, aspectRatio, location);
   }
 
   @PluginMethod

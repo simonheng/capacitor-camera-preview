@@ -292,6 +292,47 @@
             }
           </ion-list>
 
+          <ion-item-divider>Aspect Ratio Capture</ion-item-divider>
+          <div class="ion-padding-bottom">
+            <p class="ion-text-center"><strong>Test capture with aspect ratios (no custom size)</strong></p>
+            <div class="ion-text-center ion-margin-bottom">
+              <ion-button
+                (click)="testAspectRatioFeature()"
+                fill="solid"
+                size="small"
+                color="success"
+              >
+                <ion-icon name="information-circle" slot="start"></ion-icon>
+                Test Aspect Ratio Info
+              </ion-button>
+            </div>
+            <ion-grid>
+              <ion-row class="ion-justify-content-around">
+                <ion-col size="auto">
+                  <ion-button
+                    fill="outline"
+                    size="small"
+                    color="tertiary"
+                    (click)="quickTestAspectRatioCapture('4:3')"
+                  >
+                    4:3 Capture
+                  </ion-button>
+                </ion-col>
+                <ion-col size="auto">
+                  <ion-button
+                    fill="outline"
+                    size="small"
+                    color="tertiary"
+                    (click)="quickTestAspectRatioCapture('16:9')"
+                  >
+                    16:9 Capture
+                  </ion-button>
+                </ion-col>
+
+              </ion-row>
+            </ion-grid>
+          </div>
+
           <ion-item-divider>Capture Size Presets</ion-item-divider>
           <ion-grid>
             <ion-row class="ion-justify-content-around">
