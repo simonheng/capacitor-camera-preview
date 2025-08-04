@@ -3,6 +3,7 @@ package com.ahm.capacitor.camera.preview;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -10,6 +11,7 @@ public class GridOverlayView extends View {
 
   private Paint gridPaint;
   private String gridMode = "none";
+  private Rect cameraBounds = null;
 
   public GridOverlayView(Context context) {
     super(context);
@@ -38,6 +40,11 @@ public class GridOverlayView extends View {
     gridPaint.setAntiAlias(true);
   }
 
+  public void setCameraBounds(Rect bounds) {
+    this.cameraBounds = bounds;
+    invalidate();
+  }
+
   public void setGridMode(String mode) {
     String previousMode = this.gridMode;
     this.gridMode = mode != null ? mode : "none";
@@ -62,34 +69,44 @@ public class GridOverlayView extends View {
       return;
     }
 
+    // Use camera bounds if available, otherwise use full view bounds
+    int left = 0;
+    int top = 0;
     int width = getWidth();
     int height = getHeight();
+
+    if (cameraBounds != null) {
+      left = cameraBounds.left;
+      top = cameraBounds.top;
+      width = cameraBounds.width();
+      height = cameraBounds.height();
+    }
 
     if (width <= 0 || height <= 0) {
       return;
     }
 
     if ("3x3".equals(gridMode)) {
-      drawGrid(canvas, width, height, 3);
+      drawGrid(canvas, left, top, width, height, 3);
     } else if ("4x4".equals(gridMode)) {
-      drawGrid(canvas, width, height, 4);
+      drawGrid(canvas, left, top, width, height, 4);
     }
   }
 
-  private void drawGrid(Canvas canvas, int width, int height, int divisions) {
+  private void drawGrid(Canvas canvas, int left, int top, int width, int height, int divisions) {
     float stepX = (float) width / divisions;
     float stepY = (float) height / divisions;
 
     // Draw vertical lines
     for (int i = 1; i < divisions; i++) {
-      float x = i * stepX;
-      canvas.drawLine(x, 0, x, height, gridPaint);
+      float x = left + (i * stepX);
+      canvas.drawLine(x, top, x, top + height, gridPaint);
     }
 
     // Draw horizontal lines
     for (int i = 1; i < divisions; i++) {
-      float y = i * stepY;
-      canvas.drawLine(0, y, width, y, gridPaint);
+      float y = top + (i * stepY);
+      canvas.drawLine(left, y, left + width, y, gridPaint);
     }
   }
 }

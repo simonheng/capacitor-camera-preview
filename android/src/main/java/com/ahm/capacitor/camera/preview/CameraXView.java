@@ -360,6 +360,14 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       Log.d(TAG, "setupPreviewView: Setting grid mode to: " + currentGridMode);
       gridOverlayView.setGridMode(currentGridMode);
     });
+    
+    // Add a layout listener to update grid bounds when preview view changes size
+    previewView.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+      if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
+        Log.d(TAG, "PreviewView layout changed, updating grid bounds");
+        updateGridOverlayBounds();
+      }
+    });
 
     ViewGroup parent = (ViewGroup) webView.getParent();
     if (parent != null) {
@@ -737,6 +745,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               ", actualHeight=" +
               actualHeight
             );
+
+            // Update grid overlay bounds after camera is started
+            updateGridOverlayBounds();
 
             listener.onCameraStarted(
               actualWidth,
@@ -2621,19 +2632,30 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
             // Wait for camera rebinding to complete, then call callback
             if (callback != null) {
-              previewContainer.post(() -> previewContainer.post(callback));
+              previewContainer.post(() -> {
+                updateGridOverlayBounds();
+                previewContainer.post(callback);
+              });
+            } else {
+              previewContainer.post(() -> updateGridOverlayBounds());
             }
           } else {
             // No camera rebinding needed, wait for layout to complete then call callback
-            if (callback != null) {
-              previewContainer.post(callback);
-            }
+            previewContainer.post(() -> {
+              updateGridOverlayBounds();
+              if (callback != null) {
+                callback.run();
+              }
+            });
           }
         } else {
           // No sessionConfig, just wait for layout then call callback
-          if (callback != null) {
-            previewContainer.post(callback);
-          }
+          previewContainer.post(() -> {
+            updateGridOverlayBounds();
+            if (callback != null) {
+              callback.run();
+            }
+          });
         }
       } else {
         Log.w(
@@ -2772,6 +2794,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           finalY +
           ")"
         );
+        
+        // Update grid overlay bounds after aspect ratio change
+        previewContainer.post(() -> updateGridOverlayBounds());
       }
     } catch (NumberFormatException e) {
       Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
@@ -2840,6 +2865,22 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     int height = (int) (actualHeight / pixelRatio);
 
     return new int[] { x, y, width, height };
+  }
+
+  private void updateGridOverlayBounds() {
+    if (gridOverlayView != null && previewView != null) {
+      // Get the actual camera bounds
+      Rect cameraBounds = getActualCameraBounds();
+      
+      // Update the grid overlay with the camera bounds
+      gridOverlayView.setCameraBounds(cameraBounds);
+      
+      Log.d(
+        TAG,
+        "updateGridOverlayBounds: Updated grid bounds to " +
+        cameraBounds.toString()
+      );
+    }
   }
 
   private void triggerAutoFocus() {
