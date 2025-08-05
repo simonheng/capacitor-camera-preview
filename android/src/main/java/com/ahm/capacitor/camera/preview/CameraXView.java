@@ -2748,10 +2748,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         finalY = Math.max(0, Math.min(finalY, availableHeight - finalHeight));
       } else {
         // Auto-center the view
-        // Calculate size based on aspect ratio, using a reasonable base size
-        // Use 80% of available space to ensure aspect ratio differences are visible
-        int maxAvailableWidth = (int) (availableWidth * 0.8);
-        int maxAvailableHeight = (int) (availableHeight * 0.8);
+        // Use full available space to match iOS behavior
+        int maxAvailableWidth = availableWidth;
+        int maxAvailableHeight = availableHeight;
 
         // Start with width-based calculation
         finalWidth = maxAvailableWidth;
