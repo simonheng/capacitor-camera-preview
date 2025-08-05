@@ -202,13 +202,20 @@ export interface CameraPreviewOptions {
  * Defines the options for capturing a picture.
  */
 export interface CameraPreviewPictureOptions {
-  /** The desired height of the picture in pixels. If not provided, the device default is used. */
+  /** @deprecated,
+   * The desired height of the picture in pixels. 
+   * If not specified and no aspectRatio is provided, the captured image will match the preview's visible area.
+   */
   height?: number;
-  /** The desired width of the picture in pixels. If not provided, the device default is used. */
+  /** @deprecated,
+   * The desired width of the picture in pixels. 
+   * If not specified and no aspectRatio is provided, the captured image will match the preview's visible area.
+   */
   width?: number;
-  /**
+  /** @deprecated,
    * The desired aspect ratio of the captured image (e.g., '4:3', '16:9').
-   * If specified without width/height, captures the largest possible image with this ratio.
+   * If not specified and no width/height is provided, the aspect ratio from the camera start will be used.
+   * If no aspect ratio was set at start, defaults to '4:3'.
    * Cannot be used together with width or height - the capture will be rejected with an error.
    * @since 7.7.0
    */

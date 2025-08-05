@@ -838,7 +838,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     String aspectRatio,
     Location location
   ) {
-    Log.d(TAG, "capturePhoto: Starting photo capture with quality: " + quality + ", aspectRatio: " + aspectRatio);
+    Log.d(TAG, "capturePhoto: Starting photo capture with quality: " + quality + ", width: " + width + ", height: " + height + ", aspectRatio: " + aspectRatio);
 
     // Check for conflicting parameters
     if (aspectRatio != null && (width != null || height != null)) {
@@ -894,15 +894,26 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
             JSONObject exifData = getExifData(exifInterface);
 
+            // Use the stored aspectRatio if none is provided and no width/height is specified
+            String captureAspectRatio = aspectRatio;
+            if (width == null && height == null && aspectRatio == null && sessionConfig != null) {
+              captureAspectRatio = sessionConfig.getAspectRatio();
+              // Default to "4:3" if no aspect ratio was set at all
+              if (captureAspectRatio == null) {
+                captureAspectRatio = "4:3";
+              }
+              Log.d(TAG, "capturePhoto: Using stored aspectRatio: " + captureAspectRatio);
+            }
+            
             // Handle aspect ratio if no width/height specified
-            if (width == null && height == null && aspectRatio != null && !aspectRatio.isEmpty()) {
+            if (width == null && height == null && captureAspectRatio != null && !captureAspectRatio.isEmpty()) {
               // Get the original image dimensions
               Bitmap originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
               int originalWidth = originalBitmap.getWidth();
               int originalHeight = originalBitmap.getHeight();
               
               // Parse aspect ratio
-              String[] ratios = aspectRatio.split(":");
+              String[] ratios = captureAspectRatio.split(":");
               if (ratios.length == 2) {
                 try {
                   float widthRatio = Float.parseFloat(ratios[0]);
@@ -947,7 +958,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                   originalBitmap.recycle();
                   croppedBitmap.recycle();
                 } catch (NumberFormatException e) {
-                  Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
+                  Log.e(TAG, "Invalid aspect ratio format: " + captureAspectRatio, e);
                 }
               }
             } else if (width != null && height != null) {

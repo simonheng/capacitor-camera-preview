@@ -672,10 +672,18 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil")")
+        // Use the stored aspectRatio if none is provided and no width/height is specified
+        // If no aspectRatio was set at all, use "4:3" as default (matching getAspectRatio behavior)
+        let captureAspectRatio: String? = if width == nil && height == nil && aspectRatio == nil {
+            self.aspectRatio ?? "4:3"
+        } else {
+            aspectRatio
+        }
+        
+        print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil"), using aspectRatio: \(captureAspectRatio ?? "nil")")
         print("[CameraPreview] Current location: \(self.currentLocation?.description ?? "nil")")
 
-        self.cameraController.captureImage(width: width, height: height, aspectRatio: aspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
+        self.cameraController.captureImage(width: width, height: height, aspectRatio: captureAspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
             print("[CameraPreview] captureImage callback received")
             DispatchQueue.main.async {
                 print("[CameraPreview] Processing capture on main thread")

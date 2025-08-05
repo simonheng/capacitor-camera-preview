@@ -665,7 +665,7 @@ extension CameraController {
         self.updateVideoOrientation()
     }
 
-    func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
+        func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
         guard let photoOutput = self.photoOutput else {
             completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
             return
@@ -710,8 +710,10 @@ extension CameraController {
 
             var finalImage = image
             
-            // Handle aspect ratio if no width/height specified
-            if width == nil && height == nil, let aspectRatio = aspectRatio {
+            // When no dimensions are specified, crop to match what's visible in preview
+            if width == nil && height == nil {
+                // If aspectRatio is specified, use it to crop
+                if let aspectRatio = aspectRatio {
                 let components = aspectRatio.split(separator: ":").compactMap { Double($0) }
                 if components.count == 2 {
                     // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
@@ -732,6 +734,15 @@ extension CameraController {
                     
                     // Center crop the image
                     if let croppedImage = self.cropImageToAspectRatio(image: image, targetSize: targetSize) {
+                        finalImage = croppedImage
+                    }
+                }
+                } else {
+                    // No aspectRatio specified but we need to crop to match preview
+                    // Since preview uses resizeAspectFill, we need to crop the captured image
+                    // to match what's visible in the preview
+                    if let previewLayer = self.previewLayer,
+                       let croppedImage = self.cropImageToMatchPreview(image: image, previewLayer: previewLayer) {
                         finalImage = croppedImage
                     }
                 }
@@ -789,6 +800,40 @@ extension CameraController {
         let xOffset = (imageSize.width - targetSize.width) / 2
         let yOffset = (imageSize.height - targetSize.height) / 2
         let cropRect = CGRect(x: xOffset, y: yOffset, width: targetSize.width, height: targetSize.height)
+        
+        // Create the cropped image
+        guard let cgImage = image.cgImage,
+              let croppedCGImage = cgImage.cropping(to: cropRect) else {
+            return nil
+        }
+        
+        return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
+    }
+    
+    func cropImageToMatchPreview(image: UIImage, previewLayer: AVCaptureVideoPreviewLayer) -> UIImage? {
+        // Get the dimensions of the preview layer
+        let previewBounds = previewLayer.bounds
+        let previewAspectRatio = previewBounds.width / previewBounds.height
+        
+        // Get the dimensions of the captured image
+        let imageSize = image.size
+        let imageAspectRatio = imageSize.width / imageSize.height
+        
+        // Since we're using resizeAspectFill, we need to calculate what portion of the image
+        // is visible in the preview
+        var cropRect: CGRect
+        
+        if imageAspectRatio > previewAspectRatio {
+            // Image is wider than preview - crop horizontally
+            let visibleWidth = imageSize.height * previewAspectRatio
+            let xOffset = (imageSize.width - visibleWidth) / 2
+            cropRect = CGRect(x: xOffset, y: 0, width: visibleWidth, height: imageSize.height)
+        } else {
+            // Image is taller than preview - crop vertically
+            let visibleHeight = imageSize.width / previewAspectRatio
+            let yOffset = (imageSize.height - visibleHeight) / 2
+            cropRect = CGRect(x: 0, y: yOffset, width: imageSize.width, height: visibleHeight)
+        }
         
         // Create the cropped image
         guard let cgImage = image.cgImage,
