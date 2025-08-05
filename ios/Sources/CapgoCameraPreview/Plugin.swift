@@ -502,12 +502,29 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.isInitializing = false
         self.isInitialized = true
 
-        var returnedObject = JSObject()
-        returnedObject["width"] = self.previewView.frame.width as any JSValue
-        returnedObject["height"] = self.previewView.frame.height as any JSValue
-        returnedObject["x"] = self.previewView.frame.origin.x as any JSValue
-        returnedObject["y"] = self.previewView.frame.origin.y as any JSValue
-        call.resolve(returnedObject)
+        // Set up callback to wait for first frame before resolving
+        self.cameraController.firstFrameReadyCallback = { [weak self] in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                var returnedObject = JSObject()
+                returnedObject["width"] = self.previewView.frame.width as any JSValue
+                returnedObject["height"] = self.previewView.frame.height as any JSValue
+                returnedObject["x"] = self.previewView.frame.origin.x as any JSValue
+                returnedObject["y"] = self.previewView.frame.origin.y as any JSValue
+                call.resolve(returnedObject)
+            }
+        }
+        
+        // If already received first frame (unlikely but possible), resolve immediately
+        if self.cameraController.hasReceivedFirstFrame {
+            var returnedObject = JSObject()
+            returnedObject["width"] = self.previewView.frame.width as any JSValue
+            returnedObject["height"] = self.previewView.frame.height as any JSValue
+            returnedObject["x"] = self.previewView.frame.origin.x as any JSValue
+            returnedObject["y"] = self.previewView.frame.origin.y as any JSValue
+            call.resolve(returnedObject)
+        }
     }
 
     @objc func flip(_ call: CAPPluginCall) {

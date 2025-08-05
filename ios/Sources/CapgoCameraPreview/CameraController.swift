@@ -36,6 +36,10 @@ class CameraController: NSObject {
     var photoCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
 
     var sampleBufferCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
+    
+    // Add callback for detecting when first frame is ready
+    var firstFrameReadyCallback: (() -> Void)?
+    var hasReceivedFirstFrame = false
 
     var audioDevice: AVCaptureDevice?
     var audioInput: AVCaptureDeviceInput?
@@ -266,13 +270,24 @@ extension CameraController {
 
                 print("[CameraPreview] Fast prepare - using pre-initialized session")
 
-                // Pre-create outputs asynchronously to avoid blocking camera opening
-                outputPreparationQueue.async { [weak self] in
-                    self?.prepareOutputs()
-                }
+                // Ensure outputs are prepared synchronously before starting session
+                self.prepareOutputs()
+                self.waitForOutputsToBeReady()
 
-                // // Configure device inputs for the requested camera
+                // Configure device inputs for the requested camera
                 try self.configureDeviceInputs(cameraPosition: cameraPosition, deviceId: deviceId, disableAudio: disableAudio)
+                
+                // Add data output early to detect first frame
+                captureSession.beginConfiguration()
+                if let dataOutput = self.dataOutput, captureSession.canAddOutput(dataOutput) {
+                    captureSession.addOutput(dataOutput)
+                    // Set delegate to detect first frame
+                    dataOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
+                }
+                captureSession.commitConfiguration()
+                
+                // Reset first frame detection
+                self.hasReceivedFirstFrame = false
 
                 // Start the session on background thread (AVCaptureSession.startRunning() is thread-safe)
                 captureSession.startRunning()
@@ -293,13 +308,10 @@ extension CameraController {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                         guard let self = self else { return }
 
-                        // Wait for outputs to be prepared before proceeding
-                        self.waitForOutputsToBeReady()
-
-                        // Add outputs to session and apply user settings
+                        // Add remaining outputs to session and apply user settings
                         do {
-                            try self.addOutputsToSession(cameraMode: cameraMode, aspectRatio: aspectRatio)
-                            print("[CameraPreview] Outputs successfully added to session")
+                            try self.addRemainingOutputsToSession(cameraMode: cameraMode, aspectRatio: aspectRatio)
+                            print("[CameraPreview] Remaining outputs successfully added to session")
                         } catch {
                             print("[CameraPreview] Error adding outputs to session: \(error)")
                         }
@@ -411,7 +423,7 @@ extension CameraController {
         }
     }
 
-    private func addOutputsToSession(cameraMode: Bool, aspectRatio: String?) throws {
+        private func addRemainingOutputsToSession(cameraMode: Bool, aspectRatio: String?) throws {
         guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
 
         // Begin configuration to batch all changes
@@ -451,6 +463,50 @@ extension CameraController {
         // Add video output only if camera mode is enabled
         if cameraMode, let videoOutput = self.fileVideoOutput, captureSession.canAddOutput(videoOutput) {
             captureSession.addOutput(videoOutput)
+        }
+        // Data output was already added in prepare() to detect first frame
+    }
+    
+    private func addOutputsToSession(cameraMode: Bool, aspectRatio: String?) throws {
+        guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
+
+        // Begin configuration to batch all changes
+        captureSession.beginConfiguration()
+        defer { captureSession.commitConfiguration() }
+
+        // Update session preset based on aspect ratio if needed
+        var targetPreset: AVCaptureSession.Preset = .high // Default to high quality
+
+        if let aspectRatio = aspectRatio {
+            switch aspectRatio {
+            case "16:9":
+                targetPreset = captureSession.canSetSessionPreset(.hd1920x1080) ? .hd1920x1080 : .high
+            case "4:3":
+                targetPreset = captureSession.canSetSessionPreset(.photo) ? .photo : .high
+            default:
+                targetPreset = .high
+            }
+        }
+
+        // Always try to set the best preset available
+        if captureSession.canSetSessionPreset(targetPreset) {
+            captureSession.sessionPreset = targetPreset
+            print("[CameraPreview] Updated preset to \(targetPreset) for aspect ratio: \(aspectRatio ?? "default")")
+        } else if captureSession.canSetSessionPreset(.high) {
+            // Fallback to high if target preset not available
+            captureSession.sessionPreset = .high
+            print("[CameraPreview] Fallback to high preset")
+        }
+
+        // Add photo output (already created in prepareOutputs)
+        if let photoOutput = self.photoOutput, captureSession.canAddOutput(photoOutput) {
+            photoOutput.isHighResolutionCaptureEnabled = true
+            captureSession.addOutput(photoOutput)
+        }
+
+        // Add video output only if camera mode is enabled
+        if cameraMode, let videoOutput = self.fileVideoOutput, captureSession.canAddOutput(videoOutput) {
+captureSession.addOutput(videoOutput)
         }
 
         // Add data output
@@ -1357,6 +1413,10 @@ extension CameraController {
 
         // Reset output preparation status
         self.outputsPrepared = false
+        
+        // Reset first frame detection
+        self.hasReceivedFirstFrame = false
+        self.firstFrameReadyCallback = nil
     }
 
     func captureVideo() throws {
@@ -1571,6 +1631,17 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
 
 extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // Check if we're waiting for the first frame
+        if !hasReceivedFirstFrame, let firstFrameCallback = firstFrameReadyCallback {
+            hasReceivedFirstFrame = true
+            firstFrameCallback()
+            firstFrameReadyCallback = nil
+            // If no capture is in progress, we can return early
+            if sampleBufferCaptureCompletionBlock == nil {
+                return
+            }
+        }
+        
         guard let completion = sampleBufferCaptureCompletionBlock else { return }
 
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
