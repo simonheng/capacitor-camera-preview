@@ -367,13 +367,14 @@ export class CameraViewPage implements OnInit {
 
   protected async testAspectRatioFeature(): Promise<void> {
     let results = '=== Aspect Ratio Capture Test ===\n';
-    results += '\nThis test verifies aspectRatio parameter in capture options\n';
-    
+    results +=
+      '\nThis test verifies aspectRatio parameter in capture options\n';
+
     try {
       // Test supported picture sizes first
       const sizes = await this.#cameraViewService.getSupportedPictureSizes();
       results += `\n✓ Picture sizes available for testing`;
-      
+
       // Test different aspect ratios
       const ratios = ['4:3', '16:9'] as const;
       results += `\n\n📐 Aspect ratios to test: ${ratios.join(', ')}`;
@@ -383,7 +384,7 @@ export class CameraViewPage implements OnInit {
       results += `\n3. Check if the captured image has the correct aspect ratio`;
       results += `\n\nNote: When aspectRatio is set without width/height,`;
       results += `\nthe plugin captures the largest possible image with that ratio.`;
-      
+
       this.testResults.set(results);
     } catch (error) {
       results += `\n✗ Test failed: ${error}`;
@@ -482,17 +483,20 @@ export class CameraViewPage implements OnInit {
     await this.quickTestCaptureSize('square');
   }
 
-  protected async quickTestAspectRatioCapture(ratio: '4:3' | '16:9'): Promise<void> {
+  protected async quickTestAspectRatioCapture(
+    ratio: '4:3' | '16:9',
+  ): Promise<void> {
     // Disable custom size to test aspectRatio
     this.useCustomSize.set(false);
     this.aspectRatio.set(ratio);
     this.pictureFormat.set('jpeg');
     this.pictureQuality.set(85);
-    
+
     // Add to test results
-    const results = this.testResults() + `\n📐 Testing aspect ratio capture: ${ratio}`;
+    const results =
+      this.testResults() + `\n📐 Testing aspect ratio capture: ${ratio}`;
     this.testResults.set(results);
-    
+
     await this.startCamera();
   }
 

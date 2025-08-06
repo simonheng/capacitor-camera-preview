@@ -360,14 +360,21 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       Log.d(TAG, "setupPreviewView: Setting grid mode to: " + currentGridMode);
       gridOverlayView.setGridMode(currentGridMode);
     });
-    
+
     // Add a layout listener to update grid bounds when preview view changes size
-    previewView.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-      if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
-        Log.d(TAG, "PreviewView layout changed, updating grid bounds");
-        updateGridOverlayBounds();
+    previewView.addOnLayoutChangeListener(
+      (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+        if (
+          left != oldLeft ||
+          top != oldTop ||
+          right != oldRight ||
+          bottom != oldBottom
+        ) {
+          Log.d(TAG, "PreviewView layout changed, updating grid bounds");
+          updateGridOverlayBounds();
+        }
       }
-    });
+    );
 
     ViewGroup parent = (ViewGroup) webView.getParent();
     if (parent != null) {
@@ -838,12 +845,24 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     String aspectRatio,
     Location location
   ) {
-    Log.d(TAG, "capturePhoto: Starting photo capture with quality: " + quality + ", width: " + width + ", height: " + height + ", aspectRatio: " + aspectRatio);
+    Log.d(
+      TAG,
+      "capturePhoto: Starting photo capture with quality: " +
+      quality +
+      ", width: " +
+      width +
+      ", height: " +
+      height +
+      ", aspectRatio: " +
+      aspectRatio
+    );
 
     // Check for conflicting parameters
     if (aspectRatio != null && (width != null || height != null)) {
       if (listener != null) {
-        listener.onPictureTakenError("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.");
+        listener.onPictureTakenError(
+          "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start."
+        );
       }
       return;
     }
@@ -896,36 +915,56 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
             // Use the stored aspectRatio if none is provided and no width/height is specified
             String captureAspectRatio = aspectRatio;
-            if (width == null && height == null && aspectRatio == null && sessionConfig != null) {
+            if (
+              width == null &&
+              height == null &&
+              aspectRatio == null &&
+              sessionConfig != null
+            ) {
               captureAspectRatio = sessionConfig.getAspectRatio();
               // Default to "4:3" if no aspect ratio was set at all
               if (captureAspectRatio == null) {
                 captureAspectRatio = "4:3";
               }
-              Log.d(TAG, "capturePhoto: Using stored aspectRatio: " + captureAspectRatio);
+              Log.d(
+                TAG,
+                "capturePhoto: Using stored aspectRatio: " + captureAspectRatio
+              );
             }
-            
+
             // Handle aspect ratio if no width/height specified
-            if (width == null && height == null && captureAspectRatio != null && !captureAspectRatio.isEmpty()) {
+            if (
+              width == null &&
+              height == null &&
+              captureAspectRatio != null &&
+              !captureAspectRatio.isEmpty()
+            ) {
               // Get the original image dimensions
-              Bitmap originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+              Bitmap originalBitmap = BitmapFactory.decodeByteArray(
+                bytes,
+                0,
+                bytes.length
+              );
               int originalWidth = originalBitmap.getWidth();
               int originalHeight = originalBitmap.getHeight();
-              
+
               // Parse aspect ratio
               String[] ratios = captureAspectRatio.split(":");
               if (ratios.length == 2) {
                 try {
                   float widthRatio = Float.parseFloat(ratios[0]);
                   float heightRatio = Float.parseFloat(ratios[1]);
-                  
+
                   // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
                   boolean isPortrait = originalHeight > originalWidth;
-                  float targetAspectRatio = isPortrait ? heightRatio / widthRatio : widthRatio / heightRatio;
-                  float originalAspectRatio = (float) originalWidth / originalHeight;
-                  
+                  float targetAspectRatio = isPortrait
+                    ? heightRatio / widthRatio
+                    : widthRatio / heightRatio;
+                  float originalAspectRatio =
+                    (float) originalWidth / originalHeight;
+
                   int targetWidth, targetHeight;
-                  
+
                   if (originalAspectRatio > targetAspectRatio) {
                     // Original is wider than target - fit by height
                     targetHeight = originalHeight;
@@ -935,11 +974,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                     targetWidth = originalWidth;
                     targetHeight = (int) (targetWidth / targetAspectRatio);
                   }
-                  
+
                   // Center crop the image
                   int xOffset = (originalWidth - targetWidth) / 2;
                   int yOffset = (originalHeight - targetHeight) / 2;
-                  
+
                   Bitmap croppedBitmap = Bitmap.createBitmap(
                     originalBitmap,
                     xOffset,
@@ -947,18 +986,26 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                     targetWidth,
                     targetHeight
                   );
-                  
+
                   ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                  croppedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream);
+                  croppedBitmap.compress(
+                    Bitmap.CompressFormat.JPEG,
+                    quality,
+                    stream
+                  );
                   bytes = stream.toByteArray();
-                  
+
                   // Write EXIF data back to cropped image
                   bytes = writeExifToImageBytes(bytes, exifInterface);
-                  
+
                   originalBitmap.recycle();
                   croppedBitmap.recycle();
                 } catch (NumberFormatException e) {
-                  Log.e(TAG, "Invalid aspect ratio format: " + captureAspectRatio, e);
+                  Log.e(
+                    TAG,
+                    "Invalid aspect ratio format: " + captureAspectRatio,
+                    e
+                  );
                 }
               }
             } else if (width != null && height != null) {
@@ -1616,7 +1663,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     int viewWidth = previewView.getWidth();
     int viewHeight = previewView.getHeight();
-    
+
     if (viewWidth <= 0 || viewHeight <= 0) {
       throw new Exception(
         "Preview view has invalid dimensions: " + viewWidth + "x" + viewHeight
@@ -2804,7 +2851,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           finalY +
           ")"
         );
-        
+
         // Update grid overlay bounds after aspect ratio change
         previewContainer.post(() -> updateGridOverlayBounds());
       }
@@ -2863,14 +2910,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     int webViewTopInset = getWebViewTopInset();
     int webViewLeftInset = getWebViewLeftInset();
 
-    int x = Math.max(
-      0,
-      (int) ((actualX - webViewLeftInset) / pixelRatio)
-    );
-    int y = Math.max(
-      0,
-      (int) ((actualY - webViewTopInset) / pixelRatio)
-    );
+    int x = Math.max(0, (int) ((actualX - webViewLeftInset) / pixelRatio));
+    int y = Math.max(0, (int) ((actualY - webViewTopInset) / pixelRatio));
     int width = (int) (actualWidth / pixelRatio);
     int height = (int) (actualHeight / pixelRatio);
 
@@ -2881,10 +2922,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     if (gridOverlayView != null && previewView != null) {
       // Get the actual camera bounds
       Rect cameraBounds = getActualCameraBounds();
-      
+
       // Update the grid overlay with the camera bounds
       gridOverlayView.setCameraBounds(cameraBounds);
-      
+
       Log.d(
         TAG,
         "updateGridOverlayBounds: Updated grid bounds to " +

@@ -51,6 +51,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     this.isStarted = false;
     const parent = document.getElementById(options?.parent || "");
     const gridMode = options?.gridMode || "none";
+    const positioning = options?.positioning || "top";
 
     if (options.position) {
       this.isBackCamera = options.position === "rear";
@@ -206,11 +207,24 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         this.videoElement.style.left = `${x}px`;
       }
       if (needsCenterY || options.y === undefined) {
-        const y = Math.round((window.innerHeight - targetHeight) / 2);
+        let y: number;
+        switch (positioning) {
+          case "top":
+            y = 0;
+            break;
+          case "bottom":
+            y = window.innerHeight - targetHeight;
+            break;
+          case "center":
+          default:
+            y = Math.round((window.innerHeight - targetHeight) / 2);
+            break;
+        }
         this.videoElement.style.setProperty("top", `${y}px`, "important");
         // Force a style recalculation
         this.videoElement.offsetHeight;
-        console.log("Centering video:", {
+        console.log("Positioning video:", {
+          positioning,
           viewportHeight: window.innerHeight,
           targetHeight,
           calculatedY: y,
@@ -252,7 +266,19 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       }
       if (needsCenterY || options.y === undefined) {
         const parentHeight = container.offsetHeight || viewportHeight;
-        const y = Math.round((parentHeight - targetHeight) / 2);
+        let y: number;
+        switch (positioning) {
+          case "top":
+            y = 0;
+            break;
+          case "bottom":
+            y = parentHeight - targetHeight;
+            break;
+          case "center":
+          default:
+            y = Math.round((parentHeight - targetHeight) / 2);
+            break;
+        }
         this.videoElement.style.top = `${y}px`;
       }
     }
@@ -322,11 +348,24 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       });
     }
     if (needsCenterY) {
-      const y = Math.round(
-        (window.innerHeight - this.videoElement.offsetHeight) / 2,
-      );
+      let y: number;
+      switch (positioning) {
+        case "top":
+          y = 0;
+          break;
+        case "bottom":
+          y = window.innerHeight - this.videoElement.offsetHeight;
+          break;
+        case "center":
+        default:
+          y = Math.round(
+            (window.innerHeight - this.videoElement.offsetHeight) / 2,
+          );
+          break;
+      }
       this.videoElement.style.setProperty("top", `${y}px`, "important");
-      console.log("Re-centering Y:", {
+      console.log("Re-positioning Y:", {
+        positioning,
         viewportHeight: window.innerHeight,
         videoHeight: this.videoElement.offsetHeight,
         y,
@@ -399,46 +438,54 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       if (video && video.videoWidth > 0 && video.videoHeight > 0) {
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d");
-        
+
         // Calculate capture dimensions
         let captureWidth = video.videoWidth;
         let captureHeight = video.videoHeight;
         let sourceX = 0;
         let sourceY = 0;
-        
-              // Check for conflicting parameters
-      if (options.aspectRatio && (options.width || options.height)) {
-        reject(new Error("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start."));
-        return;
-      }
-      
-      // Handle aspect ratio if no width/height specified
-      if (!options.width && !options.height && options.aspectRatio) {
-        const [widthRatio, heightRatio] = options.aspectRatio.split(':').map(Number);
-        if (widthRatio && heightRatio) {
-          // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
-          const isPortrait = video.videoHeight > video.videoWidth;
-          const targetAspectRatio = isPortrait ? heightRatio / widthRatio : widthRatio / heightRatio;
-          const videoAspectRatio = video.videoWidth / video.videoHeight;
-          
-          if (videoAspectRatio > targetAspectRatio) {
-            // Video is wider than target - crop sides
-            captureWidth = video.videoHeight * targetAspectRatio;
-            captureHeight = video.videoHeight;
-            sourceX = (video.videoWidth - captureWidth) / 2;
-          } else {
-            // Video is taller than target - crop top/bottom
-            captureWidth = video.videoWidth;
-            captureHeight = video.videoWidth / targetAspectRatio;
-            sourceY = (video.videoHeight - captureHeight) / 2;
-          }
+
+        // Check for conflicting parameters
+        if (options.aspectRatio && (options.width || options.height)) {
+          reject(
+            new Error(
+              "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.",
+            ),
+          );
+          return;
         }
-      } else if (options.width || options.height) {
-        // If width or height is specified, use them
-        if (options.width) captureWidth = options.width;
-        if (options.height) captureHeight = options.height;
-      }
-        
+
+        // Handle aspect ratio if no width/height specified
+        if (!options.width && !options.height && options.aspectRatio) {
+          const [widthRatio, heightRatio] = options.aspectRatio
+            .split(":")
+            .map(Number);
+          if (widthRatio && heightRatio) {
+            // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
+            const isPortrait = video.videoHeight > video.videoWidth;
+            const targetAspectRatio = isPortrait
+              ? heightRatio / widthRatio
+              : widthRatio / heightRatio;
+            const videoAspectRatio = video.videoWidth / video.videoHeight;
+
+            if (videoAspectRatio > targetAspectRatio) {
+              // Video is wider than target - crop sides
+              captureWidth = video.videoHeight * targetAspectRatio;
+              captureHeight = video.videoHeight;
+              sourceX = (video.videoWidth - captureWidth) / 2;
+            } else {
+              // Video is taller than target - crop top/bottom
+              captureWidth = video.videoWidth;
+              captureHeight = video.videoWidth / targetAspectRatio;
+              sourceY = (video.videoHeight - captureHeight) / 2;
+            }
+          }
+        } else if (options.width || options.height) {
+          // If width or height is specified, use them
+          if (options.width) captureWidth = options.width;
+          if (options.height) captureHeight = options.height;
+        }
+
         canvas.width = captureWidth;
         canvas.height = captureHeight;
 
@@ -447,7 +494,17 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
           context?.translate(captureWidth, 0);
           context?.scale(-1, 1);
         }
-        context?.drawImage(video, sourceX, sourceY, captureWidth, captureHeight, 0, 0, captureWidth, captureHeight);
+        context?.drawImage(
+          video,
+          sourceX,
+          sourceY,
+          captureWidth,
+          captureHeight,
+          0,
+          0,
+          captureWidth,
+          captureHeight,
+        );
 
         if (options.saveToGallery) {
           // saveToGallery is not supported on web

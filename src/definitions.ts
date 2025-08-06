@@ -4,6 +4,8 @@ export type FlashMode = CameraPreviewFlashMode;
 
 export type GridMode = "none" | "3x3" | "4x4";
 
+export type CameraPositioning = "center" | "top" | "bottom";
+
 export enum DeviceType {
   ULTRA_WIDE = "ultraWide",
   WIDE_ANGLE = "wideAngle",
@@ -196,6 +198,13 @@ export interface CameraPreviewOptions {
    * @since 2.2.0
    */
   initialZoomLevel?: number;
+  /**
+   * The vertical positioning of the camera preview.
+   * @default "center"
+   * @platform android, ios, web
+   * @since 2.3.0
+   */
+  positioning?: CameraPositioning;
 }
 
 /**
@@ -203,12 +212,12 @@ export interface CameraPreviewOptions {
  */
 export interface CameraPreviewPictureOptions {
   /** @deprecated,
-   * The desired height of the picture in pixels. 
+   * The desired height of the picture in pixels.
    * If not specified and no aspectRatio is provided, the captured image will match the preview's visible area.
    */
   height?: number;
   /** @deprecated,
-   * The desired width of the picture in pixels. 
+   * The desired width of the picture in pixels.
    * If not specified and no aspectRatio is provided, the captured image will match the preview's visible area.
    */
   width?: number;

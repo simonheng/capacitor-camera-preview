@@ -93,7 +93,14 @@ public class GridOverlayView extends View {
     }
   }
 
-  private void drawGrid(Canvas canvas, int left, int top, int width, int height, int divisions) {
+  private void drawGrid(
+    Canvas canvas,
+    int left,
+    int top,
+    int width,
+    int height,
+    int divisions
+  ) {
     float stepX = (float) width / divisions;
     float stepY = (float) height / divisions;
 

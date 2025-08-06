@@ -194,7 +194,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         this.nativePreviewY.set(nativeResult.y);
         this.nativePreviewWidth.set(nativeResult.width);
         this.nativePreviewHeight.set(nativeResult.height);
-        
+
         // Log the difference for debugging
         console.log('Preview Size Difference:', {
           requested: newSize,
@@ -203,8 +203,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
             x: nativeResult.x - newSize.x,
             y: nativeResult.y - newSize.y,
             width: nativeResult.width - newSize.width,
-            height: nativeResult.height - newSize.height
-          }
+            height: nativeResult.height - newSize.height,
+          },
         });
       } else {
         // Go to small centered preview (200x200 in center)
@@ -226,7 +226,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         this.nativePreviewY.set(nativeResult.y);
         this.nativePreviewWidth.set(nativeResult.width);
         this.nativePreviewHeight.set(nativeResult.height);
-        
+
         // Log the difference for debugging
         console.log('Preview Size Difference:', {
           requested: newSize,
@@ -235,8 +235,8 @@ export class CameraModalComponent implements OnInit, OnDestroy {
             x: nativeResult.x - newSize.x,
             y: nativeResult.y - newSize.y,
             width: nativeResult.width - newSize.width,
-            height: nativeResult.height - newSize.height
-          }
+            height: nativeResult.height - newSize.height,
+          },
         });
       }
     } catch (error) {
@@ -311,28 +311,28 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.currentPreviewY.set(nativeResult.y);
       this.currentPreviewWidth.set(nativeResult.width);
       this.currentPreviewHeight.set(nativeResult.height);
-      
+
       // Log the difference for debugging
       const expectedX = startOptions.x ?? 0;
       const expectedY = startOptions.y ?? 0;
       const expectedWidth = startOptions.width ?? window.innerWidth;
       const expectedHeight = startOptions.height ?? window.innerHeight;
-      
+
       console.log('Camera Start Difference:', {
-        requested: { 
-          x: expectedX, 
-          y: expectedY, 
-          width: expectedWidth, 
+        requested: {
+          x: expectedX,
+          y: expectedY,
+          width: expectedWidth,
           height: expectedHeight,
-          aspectRatio: startOptions.aspectRatio
+          aspectRatio: startOptions.aspectRatio,
         },
         returned: nativeResult,
         difference: {
           x: nativeResult.x - expectedX,
           y: nativeResult.y - expectedY,
           width: nativeResult.width - expectedWidth,
-          height: nativeResult.height - expectedHeight
-        }
+          height: nativeResult.height - expectedHeight,
+        },
       });
 
       await Promise.all([
@@ -415,7 +415,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         exif: exif,
         options: {
           ...captureOptions,
-          actualAspectRatio: this.currentAspectRatio() !== 'custom' && !this.useCustomSize() ? this.currentAspectRatio() : undefined,
+          actualAspectRatio:
+            this.currentAspectRatio() !== 'custom' && !this.useCustomSize()
+              ? this.currentAspectRatio()
+              : undefined,
         },
         type: 'capture',
       });

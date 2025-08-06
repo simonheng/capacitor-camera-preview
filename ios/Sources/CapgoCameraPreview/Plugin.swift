@@ -89,6 +89,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     var currentLocation: CLLocation?
     private var aspectRatio: String?
     private var gridMode: String = "none"
+    private var positioning: String = "center"
     private var permissionCallID: String?
     private var waitingForLocation: Bool = false
 
@@ -435,6 +436,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.disableAudio = call.getBool("disableAudio") ?? true
         self.aspectRatio = call.getString("aspectRatio")
         self.gridMode = call.getString("gridMode") ?? "none"
+        self.positioning = call.getString("positioning") ?? "top"
         let initialZoomLevel = call.getFloat("initialZoomLevel") ?? 1.0
         if self.aspectRatio != nil && (call.getInt("width") != nil || call.getInt("height") != nil) {
             call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
@@ -471,7 +473,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     private func completeStartCamera(call: CAPPluginCall) {
         // Create and configure the preview view first
         self.updateCameraFrame()
-        
+
         print("[CameraPreview] completeStartCamera - Preview frame after updateCameraFrame: \(self.previewView.frame)")
 
         // Make webview transparent - comprehensive approach
@@ -507,7 +509,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Set up callback to wait for first frame before resolving
         self.cameraController.firstFrameReadyCallback = { [weak self] in
             guard let self = self else { return }
-            
+
             DispatchQueue.main.async {
                 var returnedObject = JSObject()
                 returnedObject["width"] = self.previewView.frame.width as any JSValue
@@ -517,7 +519,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 call.resolve(returnedObject)
             }
         }
-        
+
         // If already received first frame (unlikely but possible), resolve immediately
         if self.cameraController.hasReceivedFirstFrame {
             var returnedObject = JSObject()
@@ -685,7 +687,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         let width = call.getInt("width")
         let height = call.getInt("height")
         let aspectRatio = call.getString("aspectRatio")
-        
+
         print("[CameraPreview] Raw parameter values - width: \(String(describing: width)), height: \(String(describing: height)), aspectRatio: \(String(describing: aspectRatio))")
 
         // Check for conflicting parameters
@@ -699,11 +701,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Don't pass aspectRatio in this case - let the capture method handle preview matching
         print("[CameraPreview] Capture decision - width: \(width == nil), height: \(height == nil), aspectRatio param: \(aspectRatio == nil)")
         print("[CameraPreview] Stored aspectRatio: \(self.aspectRatio ?? "nil")")
-        
+
         // Only pass aspectRatio if explicitly provided in the capture call
         // Never use the stored aspectRatio when capturing without dimensions
         let captureAspectRatio: String? = aspectRatio
-        
+
         print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil"), using aspectRatio: \(captureAspectRatio ?? "nil")")
         print("[CameraPreview] Current location: \(self.currentLocation?.description ?? "nil")")
         print("[CameraPreview] Preview dimensions: \(self.previewView.frame.width)x\(self.previewView.frame.height)")
@@ -1352,9 +1354,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Handle auto-centering when position is -1
         if currentX == -1 || currentY == -1 {
             // Only override dimensions if aspect ratio is provided and no explicit dimensions given
-            if let ratio = currentAspectRatio, 
-               currentWidth == UIScreen.main.bounds.size.width && 
-               currentHeight == UIScreen.main.bounds.size.height {
+            if let ratio = currentAspectRatio,
+               currentWidth == UIScreen.main.bounds.size.width &&
+                currentHeight == UIScreen.main.bounds.size.height {
                 finalWidth = webViewWidth
 
                 // Calculate height based on aspect ratio
@@ -1373,12 +1375,21 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 finalX = currentX
             }
 
-            // Center vertically if y is -1
+            // Position vertically if y is -1
             if currentY == -1 {
-                // Use full screen height for centering
+                // Use full screen height for positioning
                 let screenHeight = UIScreen.main.bounds.size.height
-                finalY = (screenHeight - finalHeight) / 2
-                print("[CameraPreview] Centering vertically: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
+                switch self.positioning {
+                case "top":
+                    finalY = 0
+                    print("[CameraPreview] Positioning at top: finalY=0")
+                case "bottom":
+                    finalY = screenHeight - finalHeight
+                    print("[CameraPreview] Positioning at bottom: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
+                default: // "center"
+                    finalY = (screenHeight - finalHeight) / 2
+                    print("[CameraPreview] Centering vertically: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
+                }
             } else {
                 finalY = currentY
             }

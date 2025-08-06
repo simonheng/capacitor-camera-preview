@@ -28,7 +28,7 @@ class CameraController: NSObject {
     var photoCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
 
     var sampleBufferCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
-    
+
     // Add callback for detecting when first frame is ready
     var firstFrameReadyCallback: (() -> Void)?
     var hasReceivedFirstFrame = false
@@ -268,7 +268,7 @@ extension CameraController {
 
                 // Configure device inputs for the requested camera
                 try self.configureDeviceInputs(cameraPosition: cameraPosition, deviceId: deviceId, disableAudio: disableAudio)
-                
+
                 // Add data output early to detect first frame
                 captureSession.beginConfiguration()
                 if let dataOutput = self.dataOutput, captureSession.canAddOutput(dataOutput) {
@@ -277,7 +277,7 @@ extension CameraController {
                     dataOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
                 }
                 captureSession.commitConfiguration()
-                
+
                 // Reset first frame detection
                 self.hasReceivedFirstFrame = false
 
@@ -415,7 +415,7 @@ extension CameraController {
         }
     }
 
-        private func addRemainingOutputsToSession(cameraMode: Bool, aspectRatio: String?) throws {
+    private func addRemainingOutputsToSession(cameraMode: Bool, aspectRatio: String?) throws {
         guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
 
         // Begin configuration to batch all changes
@@ -458,7 +458,7 @@ extension CameraController {
         }
         // Data output was already added in prepare() to detect first frame
     }
-    
+
     private func addOutputsToSession(cameraMode: Bool, aspectRatio: String?) throws {
         guard let captureSession = self.captureSession else { throw CameraControllerError.captureSessionIsMissing }
 
@@ -498,7 +498,7 @@ extension CameraController {
 
         // Add video output only if camera mode is enabled
         if cameraMode, let videoOutput = self.fileVideoOutput, captureSession.canAddOutput(videoOutput) {
-captureSession.addOutput(videoOutput)
+            captureSession.addOutput(videoOutput)
         }
 
         // Add data output
@@ -715,7 +715,7 @@ captureSession.addOutput(videoOutput)
 
     func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
         print("[CameraPreview] captureImage called - width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil")")
-        
+
         guard let photoOutput = self.photoOutput else {
             completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
             return
@@ -759,7 +759,7 @@ captureSession.addOutput(videoOutput)
             }
 
             var finalImage = image
-            
+
             // Determine what to do based on parameters
             if let width = width, let height = height {
                 // Specific dimensions requested - resize to exact size
@@ -774,11 +774,11 @@ captureSession.addOutput(videoOutput)
                     let targetAspectRatio = isPortrait ? components[1] / components[0] : components[0] / components[1]
                     let imageSize = image.size
                     let originalAspectRatio = imageSize.width / imageSize.height
-                    
+
                     // Only crop if the aspect ratios don't match
                     if abs(originalAspectRatio - targetAspectRatio) > 0.01 {
                         var targetSize = imageSize
-                        
+
                         if originalAspectRatio > targetAspectRatio {
                             // Original is wider than target - fit by height
                             targetSize.width = imageSize.height * CGFloat(targetAspectRatio)
@@ -786,7 +786,7 @@ captureSession.addOutput(videoOutput)
                             // Original is taller than target - fit by width
                             targetSize.height = imageSize.width / CGFloat(targetAspectRatio)
                         }
-                        
+
                         // Center crop the image
                         if let croppedImage = self.cropImageToAspectRatio(image: image, targetSize: targetSize) {
                             finalImage = croppedImage
@@ -803,7 +803,7 @@ captureSession.addOutput(videoOutput)
                     print("[CameraPreview] Cropped to match preview: \(finalImage.size.width)x\(finalImage.size.height)")
                 }
             }
-            
+
             completion(finalImage, nil)
         }
 
@@ -846,42 +846,42 @@ captureSession.addOutput(videoOutput)
         }
         return resizedImage
     }
-    
+
     func cropImageToAspectRatio(image: UIImage, targetSize: CGSize) -> UIImage? {
         let imageSize = image.size
-        
+
         // Calculate the crop rect - center crop
         let xOffset = (imageSize.width - targetSize.width) / 2
         let yOffset = (imageSize.height - targetSize.height) / 2
         let cropRect = CGRect(x: xOffset, y: yOffset, width: targetSize.width, height: targetSize.height)
-        
+
         // Create the cropped image
         guard let cgImage = image.cgImage,
               let croppedCGImage = cgImage.cropping(to: cropRect) else {
             return nil
         }
-        
+
         return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
     }
-    
+
     func cropImageToMatchPreview(image: UIImage, previewLayer: AVCaptureVideoPreviewLayer) -> UIImage? {
         // When using resizeAspectFill, the preview layer shows a cropped portion of the video
         // We need to calculate what portion of the captured image corresponds to what's visible
-        
+
         let previewBounds = previewLayer.bounds
         let previewAspectRatio = previewBounds.width / previewBounds.height
-        
+
         // Get the dimensions of the captured image
         let imageSize = image.size
         let imageAspectRatio = imageSize.width / imageSize.height
-        
+
         print("[CameraPreview] cropImageToMatchPreview - Preview bounds: \(previewBounds.width)x\(previewBounds.height) (ratio: \(previewAspectRatio))")
         print("[CameraPreview] cropImageToMatchPreview - Image size: \(imageSize.width)x\(imageSize.height) (ratio: \(imageAspectRatio))")
-        
+
         // Since we're using resizeAspectFill, we need to calculate what portion of the image
         // is visible in the preview
         var cropRect: CGRect
-        
+
         if imageAspectRatio > previewAspectRatio {
             // Image is wider than preview - crop horizontally
             let visibleWidth = imageSize.height * previewAspectRatio
@@ -895,19 +895,19 @@ captureSession.addOutput(videoOutput)
             cropRect = CGRect(x: 0, y: yOffset, width: imageSize.width, height: visibleHeight)
             print("[CameraPreview] cropImageToMatchPreview - Cropping vertically: visible height = \(visibleHeight), offset = \(yOffset)")
         }
-        
+
         print("[CameraPreview] cropImageToMatchPreview - Crop rect: \(cropRect)")
-        
+
         // Create the cropped image
         guard let cgImage = image.cgImage,
               let croppedCGImage = cgImage.cropping(to: cropRect) else {
             print("[CameraPreview] cropImageToMatchPreview - Failed to crop image")
             return nil
         }
-        
+
         let result = UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
         print("[CameraPreview] cropImageToMatchPreview - Result size: \(result.size.width)x\(result.size.height)")
-        
+
         return result
     }
 
@@ -1424,7 +1424,7 @@ captureSession.addOutput(videoOutput)
 
         // Reset output preparation status
         self.outputsPrepared = false
-        
+
         // Reset first frame detection
         self.hasReceivedFirstFrame = false
         self.firstFrameReadyCallback = nil
@@ -1652,7 +1652,7 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
                 return
             }
         }
-        
+
         guard let completion = sampleBufferCaptureCompletionBlock else { return }
 
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
