@@ -471,6 +471,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     private func completeStartCamera(call: CAPPluginCall) {
         // Create and configure the preview view first
         self.updateCameraFrame()
+        
+        print("[CameraPreview] completeStartCamera - Preview frame after updateCameraFrame: \(self.previewView.frame)")
 
         // Make webview transparent - comprehensive approach
         self.makeWebViewTransparent()
@@ -601,6 +603,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     @objc func capture(_ call: CAPPluginCall) {
+        print("[CameraPreview] capture called with options: \(call.options)")
         let withExifLocation = call.getBool("withExifLocation", false)
         print("[CameraPreview] capture called, withExifLocation: \(withExifLocation)")
 
@@ -675,12 +678,15 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
     private func performCapture(call: CAPPluginCall) {
         print("[CameraPreview] performCapture called")
+        print("[CameraPreview] Call parameters: \(call.options)")
         let quality = call.getFloat("quality", 85)
         let saveToGallery = call.getBool("saveToGallery", false)
         let withExifLocation = call.getBool("withExifLocation", false)
         let width = call.getInt("width")
         let height = call.getInt("height")
         let aspectRatio = call.getString("aspectRatio")
+        
+        print("[CameraPreview] Raw parameter values - width: \(String(describing: width)), height: \(String(describing: height)), aspectRatio: \(String(describing: aspectRatio))")
 
         // Check for conflicting parameters
         if aspectRatio != nil && (width != nil || height != nil) {
@@ -689,16 +695,18 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        // Use the stored aspectRatio if none is provided and no width/height is specified
-        // If no aspectRatio was set at all, use "4:3" as default (matching getAspectRatio behavior)
-        let captureAspectRatio: String? = if width == nil && height == nil && aspectRatio == nil {
-            self.aspectRatio ?? "4:3"
-        } else {
-            aspectRatio
-        }
+        // When no dimensions are specified, we should capture exactly what's visible in the preview
+        // Don't pass aspectRatio in this case - let the capture method handle preview matching
+        print("[CameraPreview] Capture decision - width: \(width == nil), height: \(height == nil), aspectRatio param: \(aspectRatio == nil)")
+        print("[CameraPreview] Stored aspectRatio: \(self.aspectRatio ?? "nil")")
+        
+        // Only pass aspectRatio if explicitly provided in the capture call
+        // Never use the stored aspectRatio when capturing without dimensions
+        let captureAspectRatio: String? = aspectRatio
         
         print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil"), using aspectRatio: \(captureAspectRatio ?? "nil")")
         print("[CameraPreview] Current location: \(self.currentLocation?.description ?? "nil")")
+        print("[CameraPreview] Preview dimensions: \(self.previewView.frame.width)x\(self.previewView.frame.height)")
 
         self.cameraController.captureImage(width: width, height: height, aspectRatio: captureAspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
             print("[CameraPreview] captureImage callback received")

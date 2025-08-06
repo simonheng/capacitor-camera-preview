@@ -1,11 +1,3 @@
-//
-//  CameraController.swift
-//  Plugin
-//
-//  Created by Ariel Hernandez Musa on 7/14/19.
-//  Copyright © 2019 Max Lynch. All rights reserved.
-//
-
 import AVFoundation
 import UIKit
 import CoreLocation
@@ -721,7 +713,9 @@ captureSession.addOutput(videoOutput)
         self.updateVideoOrientation()
     }
 
-        func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
+    func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
+        print("[CameraPreview] captureImage called - width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil")")
+        
         guard let photoOutput = self.photoOutput else {
             completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
             return
@@ -766,10 +760,13 @@ captureSession.addOutput(videoOutput)
 
             var finalImage = image
             
-            // When no dimensions are specified, crop to match what's visible in preview
-            if width == nil && height == nil {
-                // If aspectRatio is specified, use it to crop
-                if let aspectRatio = aspectRatio {
+            // Determine what to do based on parameters
+            if let width = width, let height = height {
+                // Specific dimensions requested - resize to exact size
+                finalImage = self.resizeImage(image: image, to: CGSize(width: width, height: height))!
+                print("[CameraPreview] Resized to exact dimensions: \(finalImage.size.width)x\(finalImage.size.height)")
+            } else if let aspectRatio = aspectRatio {
+                // Aspect ratio specified - crop to that ratio
                 let components = aspectRatio.split(separator: ":").compactMap { Double($0) }
                 if components.count == 2 {
                     // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
@@ -778,32 +775,33 @@ captureSession.addOutput(videoOutput)
                     let imageSize = image.size
                     let originalAspectRatio = imageSize.width / imageSize.height
                     
-                    var targetSize = imageSize
-                    
-                    if originalAspectRatio > targetAspectRatio {
-                        // Original is wider than target - fit by height
-                        targetSize.width = imageSize.height * CGFloat(targetAspectRatio)
-                    } else {
-                        // Original is taller than target - fit by width
-                        targetSize.height = imageSize.width / CGFloat(targetAspectRatio)
-                    }
-                    
-                    // Center crop the image
-                    if let croppedImage = self.cropImageToAspectRatio(image: image, targetSize: targetSize) {
-                        finalImage = croppedImage
-                    }
-                }
-                } else {
-                    // No aspectRatio specified but we need to crop to match preview
-                    // Since preview uses resizeAspectFill, we need to crop the captured image
-                    // to match what's visible in the preview
-                    if let previewLayer = self.previewLayer,
-                       let croppedImage = self.cropImageToMatchPreview(image: image, previewLayer: previewLayer) {
-                        finalImage = croppedImage
+                    // Only crop if the aspect ratios don't match
+                    if abs(originalAspectRatio - targetAspectRatio) > 0.01 {
+                        var targetSize = imageSize
+                        
+                        if originalAspectRatio > targetAspectRatio {
+                            // Original is wider than target - fit by height
+                            targetSize.width = imageSize.height * CGFloat(targetAspectRatio)
+                        } else {
+                            // Original is taller than target - fit by width
+                            targetSize.height = imageSize.width / CGFloat(targetAspectRatio)
+                        }
+                        
+                        // Center crop the image
+                        if let croppedImage = self.cropImageToAspectRatio(image: image, targetSize: targetSize) {
+                            finalImage = croppedImage
+                            print("[CameraPreview] Applied aspect ratio crop: \(finalImage.size.width)x\(finalImage.size.height)")
+                        }
                     }
                 }
-            } else if let width = width, let height = height {
-                finalImage = self.resizeImage(image: image, to: CGSize(width: width, height: height))!
+            } else {
+                // No parameters specified - crop to match what's visible in the preview
+                // This ensures we capture exactly what the user sees
+                if let previewLayer = self.previewLayer,
+                   let previewCroppedImage = self.cropImageToMatchPreview(image: image, previewLayer: previewLayer) {
+                    finalImage = previewCroppedImage
+                    print("[CameraPreview] Cropped to match preview: \(finalImage.size.width)x\(finalImage.size.height)")
+                }
             }
             
             completion(finalImage, nil)
@@ -867,13 +865,18 @@ captureSession.addOutput(videoOutput)
     }
     
     func cropImageToMatchPreview(image: UIImage, previewLayer: AVCaptureVideoPreviewLayer) -> UIImage? {
-        // Get the dimensions of the preview layer
+        // When using resizeAspectFill, the preview layer shows a cropped portion of the video
+        // We need to calculate what portion of the captured image corresponds to what's visible
+        
         let previewBounds = previewLayer.bounds
         let previewAspectRatio = previewBounds.width / previewBounds.height
         
         // Get the dimensions of the captured image
         let imageSize = image.size
         let imageAspectRatio = imageSize.width / imageSize.height
+        
+        print("[CameraPreview] cropImageToMatchPreview - Preview bounds: \(previewBounds.width)x\(previewBounds.height) (ratio: \(previewAspectRatio))")
+        print("[CameraPreview] cropImageToMatchPreview - Image size: \(imageSize.width)x\(imageSize.height) (ratio: \(imageAspectRatio))")
         
         // Since we're using resizeAspectFill, we need to calculate what portion of the image
         // is visible in the preview
@@ -884,20 +887,28 @@ captureSession.addOutput(videoOutput)
             let visibleWidth = imageSize.height * previewAspectRatio
             let xOffset = (imageSize.width - visibleWidth) / 2
             cropRect = CGRect(x: xOffset, y: 0, width: visibleWidth, height: imageSize.height)
+            print("[CameraPreview] cropImageToMatchPreview - Cropping horizontally: visible width = \(visibleWidth), offset = \(xOffset)")
         } else {
             // Image is taller than preview - crop vertically
             let visibleHeight = imageSize.width / previewAspectRatio
             let yOffset = (imageSize.height - visibleHeight) / 2
             cropRect = CGRect(x: 0, y: yOffset, width: imageSize.width, height: visibleHeight)
+            print("[CameraPreview] cropImageToMatchPreview - Cropping vertically: visible height = \(visibleHeight), offset = \(yOffset)")
         }
+        
+        print("[CameraPreview] cropImageToMatchPreview - Crop rect: \(cropRect)")
         
         // Create the cropped image
         guard let cgImage = image.cgImage,
               let croppedCGImage = cgImage.cropping(to: cropRect) else {
+            print("[CameraPreview] cropImageToMatchPreview - Failed to crop image")
             return nil
         }
         
-        return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
+        let result = UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
+        print("[CameraPreview] cropImageToMatchPreview - Result size: \(result.size.width)x\(result.size.height)")
+        
+        return result
     }
 
     func captureSample(completion: @escaping (UIImage?, Error?) -> Void) {
