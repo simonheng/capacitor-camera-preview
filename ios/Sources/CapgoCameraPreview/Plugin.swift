@@ -231,7 +231,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 self.height = maxHeightByWidth
             }
 
-            print("[CameraPreview] Aspect ratio changed to \(newAspectRatio), new size: \(self.width!)x\(self.height!)")
+
 
             self.updateCameraFrame()
 
@@ -384,6 +384,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     @objc func start(_ call: CAPPluginCall) {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        print("[CameraPreview] 🚀 START CALLED at \(Date())")
+
         if self.isInitializing {
             call.reject("camera initialization in progress")
             return
@@ -440,17 +443,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         let userProvidedZoom = call.getFloat("initialZoomLevel")
         let initialZoomLevel = userProvidedZoom ?? 1.5
-        print("[CameraPreview] Initial zoom level: \(initialZoomLevel)")
+
         if self.aspectRatio != nil && (call.getInt("width") != nil || call.getInt("height") != nil) {
             call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
             return
         }
 
-        print("[CameraPreview] Camera start parameters - aspectRatio: \(String(describing: self.aspectRatio)), gridMode: \(self.gridMode)")
-        print("[CameraPreview] Screen dimensions: \(UIScreen.main.bounds.size)")
-        print("[CameraPreview] Final frame dimensions - width: \(String(describing: self.width)), height: \(String(describing: self.height)), x: \(String(describing: self.posX)), y: \(String(describing: self.posY))")
-
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
+
             guard granted else {
                 call.reject("permission failed")
                 return
@@ -476,8 +476,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     private func completeStartCamera(call: CAPPluginCall) {
         // Create and configure the preview view first
         self.updateCameraFrame()
-
-        print("[CameraPreview] completeStartCamera - Preview frame after updateCameraFrame: \(self.previewView.frame)")
 
         // Make webview transparent - comprehensive approach
         self.makeWebViewTransparent()
@@ -632,21 +630,17 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             // Ensure location manager setup happens on main thread
             DispatchQueue.main.async {
                 if self.locationManager == nil {
-                    print("[CameraPreview] Creating location manager on main thread")
                     self.locationManager = CLLocationManager()
                     self.locationManager?.delegate = self
                     self.locationManager?.desiredAccuracy = kCLLocationAccuracyBest
-                    print("[CameraPreview] Location manager created, delegate set to: \(self)")
                 }
 
                 // Check current authorization status
                 let currentStatus = self.locationManager?.authorizationStatus ?? .notDetermined
-                print("[CameraPreview] Current authorization status: \(currentStatus.rawValue)")
 
                 switch currentStatus {
                 case .authorizedWhenInUse, .authorizedAlways:
                     // Already authorized, get location and capture
-                    print("[CameraPreview] Already authorized, getting location immediately")
                     self.getCurrentLocation { _ in
                         self.performCapture(call: call)
                     }

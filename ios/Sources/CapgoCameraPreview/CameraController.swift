@@ -60,7 +60,6 @@ extension CameraController {
         guard self.captureSession == nil else { return }
 
         self.captureSession = AVCaptureSession()
-        print("[CameraPreview] Session created via prepareFullSession (legacy)")
     }
 
     private func ensureCamerasDiscovered() {
@@ -69,7 +68,7 @@ extension CameraController {
         discoverAndConfigureCameras()
     }
 
-    private func discoverAndConfigureCameras() {
+        private func discoverAndConfigureCameras() {
         let deviceTypes: [AVCaptureDevice.DeviceType] = [
             .builtInWideAngleCamera,
             .builtInUltraWideCamera,
@@ -83,14 +82,16 @@ extension CameraController {
         let session = AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: AVMediaType.video, position: .unspecified)
         let cameras = session.devices.compactMap { $0 }
 
+
+
         // Store all discovered devices for fast lookup later
         self.allDiscoveredDevices = cameras
 
         // Log all found devices for debugging
-        print("[CameraPreview] Found \(cameras.count) devices:")
+
         for camera in cameras {
             let constituentCount = camera.isVirtualDevice ? camera.constituentDevices.count : 1
-            print("[CameraPreview] - \(camera.localizedName) (Position: \(camera.position.rawValue), Virtual: \(camera.isVirtualDevice), Lenses: \(constituentCount), DeviceType: \(camera.deviceType.rawValue))")
+
         }
 
                 // Set front camera (usually just one option)
@@ -104,29 +105,24 @@ extension CameraController {
             $0.deviceType == .builtInTripleCamera
         }) {
             self.rearCamera = tripleCamera
-            print("[CameraPreview] Selected triple camera for multi-lens support: \(tripleCamera.localizedName)")
         } else if let dualWideCamera = rearCameras.first(where: {
             $0.deviceType == .builtInDualWideCamera
         }) {
             // Fallback to dual wide camera
-            self.rearCamera = dualWideCamera
-            print("[CameraPreview] Selected dual wide camera: \(dualWideCamera.localizedName)")
+            self.rearCamera = dualWideCamer
         } else if let dualCamera = rearCameras.first(where: {
             $0.deviceType == .builtInDualCamera
         }) {
             // Fallback to dual camera
             self.rearCamera = dualCamera
-            print("[CameraPreview] Selected dual camera: \(dualCamera.localizedName)")
         } else if let wideAngleCamera = rearCameras.first(where: {
             $0.deviceType == .builtInWideAngleCamera
         }) {
             // Fallback to wide angle camera
             self.rearCamera = wideAngleCamera
-            print("[CameraPreview] Selected wide angle camera: \(wideAngleCamera.localizedName)")
         } else if let firstRearCamera = rearCameras.first {
             // Final fallback to any rear camera
             self.rearCamera = firstRearCamera
-            print("[CameraPreview] No multi-lens camera found. Selected: \(firstRearCamera.localizedName)")
         }
 
         // Pre-configure focus modes
@@ -166,12 +162,18 @@ extension CameraController {
         ]
         self.dataOutput?.alwaysDiscardsLateVideoFrames = true
 
+        // Pre-create preview layer to avoid delay later
+        if self.previewLayer == nil {
+            self.previewLayer = AVCaptureVideoPreviewLayer()
+        }
+
         // Mark as prepared
         self.outputsPrepared = true
-        print("[CameraPreview] Outputs created")
     }
 
     func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float = 1.0, completionHandler: @escaping (Error?) -> Void) {
+        print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? "nil"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? "nil"), zoom: \(initialZoomLevel)")
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
                 DispatchQueue.main.async {
@@ -202,16 +204,7 @@ extension CameraController {
                 // Configure device inputs
                 try self.configureDeviceInputs(cameraPosition: cameraPosition, deviceId: deviceId, disableAudio: disableAudio)
 
-                // Add all outputs
-                if let photoOutput = self.photoOutput, captureSession.canAddOutput(photoOutput) {
-                    photoOutput.isHighResolutionCaptureEnabled = true
-                    captureSession.addOutput(photoOutput)
-                }
-
-                if cameraMode, let fileVideoOutput = self.fileVideoOutput, captureSession.canAddOutput(fileVideoOutput) {
-                    captureSession.addOutput(fileVideoOutput)
-                }
-
+                // Add data output BEFORE starting session for faster first frame
                 if let dataOutput = self.dataOutput, captureSession.canAddOutput(dataOutput) {
                     captureSession.addOutput(dataOutput)
                     dataOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
@@ -219,12 +212,32 @@ extension CameraController {
 
                 captureSession.commitConfiguration()
 
-                // Start the session
-                captureSession.startRunning()
-                print("[CameraPreview] Session started successfully")
-
                 // Set initial zoom
                 self.setInitialZoom(level: initialZoomLevel)
+
+                // Start the session
+                captureSession.startRunning()
+
+                // Defer adding photo/video outputs to avoid blocking
+                // These aren't needed immediately for preview
+                DispatchQueue.global(qos: .utility).async { [weak self] in
+                    guard let self = self else { return }
+
+                    captureSession.beginConfiguration()
+
+                    // Add photo output
+                    if let photoOutput = self.photoOutput, captureSession.canAddOutput(photoOutput) {
+                        photoOutput.isHighResolutionCaptureEnabled = true
+                        captureSession.addOutput(photoOutput)
+                    }
+
+                    // Add video output if needed
+                    if cameraMode, let fileVideoOutput = self.fileVideoOutput, captureSession.canAddOutput(fileVideoOutput) {
+                        captureSession.addOutput(fileVideoOutput)
+                    }
+
+                    captureSession.commitConfiguration()
+                }
 
                 // Success callback
                 DispatchQueue.main.async {
@@ -238,7 +251,7 @@ extension CameraController {
         }
     }
 
-        private func configureSessionPreset(for aspectRatio: String?) {
+    private func configureSessionPreset(for aspectRatio: String?) {
         guard let captureSession = self.captureSession else { return }
 
         var targetPreset: AVCaptureSession.Preset = .high
@@ -256,7 +269,6 @@ extension CameraController {
 
         if captureSession.canSetSessionPreset(targetPreset) {
             captureSession.sessionPreset = targetPreset
-            print("[CameraPreview] Set session preset to \(targetPreset) for aspect ratio: \(aspectRatio ?? "default")")
         }
     }
 
@@ -272,8 +284,6 @@ extension CameraController {
 
         let adjustedLevel = level
 
-        print("[CameraPreview] Setting initial zoom - Device: \(device.localizedName), Virtual: \(device.isVirtualDevice), Min: \(minZoom), Max: \(maxZoom), Requested: \(level), Adjusted: \(adjustedLevel)")
-
         guard CGFloat(adjustedLevel) >= minZoom && CGFloat(adjustedLevel) <= maxZoom else {
             print("[CameraPreview] Initial zoom level \(adjustedLevel) out of range (\(minZoom)-\(maxZoom))")
             return
@@ -284,7 +294,6 @@ extension CameraController {
             device.videoZoomFactor = CGFloat(adjustedLevel)
             device.unlockForConfiguration()
             self.zoomFactor = CGFloat(adjustedLevel)
-            print("[CameraPreview] Successfully set initial zoom to \(adjustedLevel), actual zoom factor: \(device.videoZoomFactor)")
         } catch {
             print("[CameraPreview] Failed to set initial zoom: \(error)")
         }
@@ -302,7 +311,6 @@ extension CameraController {
         if let deviceId = deviceId {
             selectedDevice = self.allDiscoveredDevices.first(where: { $0.uniqueID == deviceId })
             guard selectedDevice != nil else {
-                print("[CameraPreview] ERROR: Device with ID \(deviceId) not found in discovered devices")
                 throw CameraControllerError.noCamerasAvailable
             }
         } else {
@@ -315,11 +323,9 @@ extension CameraController {
         }
 
         guard let finalDevice = selectedDevice else {
-            print("[CameraPreview] ERROR: No camera device selected for position: \(cameraPosition)")
             throw CameraControllerError.noCamerasAvailable
         }
 
-        print("[CameraPreview] Configuring device: \(finalDevice.localizedName)")
         let deviceInput = try AVCaptureDeviceInput(device: finalDevice)
 
         if captureSession.canAddInput(deviceInput) {
@@ -353,36 +359,33 @@ extension CameraController {
     }
 
     func displayPreview(on view: UIView) throws {
-        guard let captureSession = self.captureSession, captureSession.isRunning else { throw CameraControllerError.captureSessionIsMissing }
+        guard let captureSession = self.captureSession, captureSession.isRunning else {
+            throw CameraControllerError.captureSessionIsMissing
+        }
 
-        print("[CameraPreview] displayPreview called with view frame: \(view.frame)")
+        // Create or reuse preview layer
+        let previewLayer: AVCaptureVideoPreviewLayer
+        if let existingLayer = self.previewLayer {
+            // Always reuse if we have one - just update the session if needed
+            previewLayer = existingLayer
+            if existingLayer.session != captureSession {
+                existingLayer.session = captureSession
+            }
+        } else {
+            // Create layer with minimal properties to speed up creation
+            previewLayer = AVCaptureVideoPreviewLayer()
+            previewLayer.session = captureSession
+        }
 
-        // Create and configure preview layer in one go
-        let previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-
-        // Batch all layer configuration to avoid multiple redraws
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-
-        previewLayer.videoGravity = AVLayerVideoGravity.resizeAspectFill
-        previewLayer.connection?.videoOrientation = .portrait
-        previewLayer.isOpaque = true
-        previewLayer.contentsScale = UIScreen.main.scale
+        // Fast configuration without CATransaction overhead
+        previewLayer.videoGravity = .resizeAspectFill
         previewLayer.frame = view.bounds
 
-        // Insert layer and store reference
-        view.layer.insertSublayer(previewLayer, at: 0)
-        self.previewLayer = previewLayer
-
-        CATransaction.commit()
-
-        print("[CameraPreview] Set preview layer frame to view bounds: \(view.bounds)")
-        print("[CameraPreview] Session preset: \(captureSession.sessionPreset.rawValue)")
-
-        // Update video orientation asynchronously to avoid blocking
-        DispatchQueue.main.async { [weak self] in
-            self?.updateVideoOrientation()
+        // Insert layer immediately (only if new)
+        if previewLayer.superlayer != view.layer {
+            view.layer.insertSublayer(previewLayer, at: 0)
         }
+        self.previewLayer = previewLayer
     }
 
     func addGridOverlay(to view: UIView, gridMode: String) {
@@ -728,26 +731,26 @@ extension CameraController {
             let visibleWidth = imageSize.height * previewAspectRatio
             let xOffset = (imageSize.width - visibleWidth) / 2
             cropRect = CGRect(x: xOffset, y: 0, width: visibleWidth, height: imageSize.height)
-            print("[CameraPreview] cropImageToMatchPreview - Cropping horizontally: visible width = \(visibleWidth), offset = \(xOffset)")
+
         } else {
             // Image is taller than preview - crop vertically
             let visibleHeight = imageSize.width / previewAspectRatio
             let yOffset = (imageSize.height - visibleHeight) / 2
             cropRect = CGRect(x: 0, y: yOffset, width: imageSize.width, height: visibleHeight)
-            print("[CameraPreview] cropImageToMatchPreview - Cropping vertically: visible height = \(visibleHeight), offset = \(yOffset)")
+
         }
 
-        print("[CameraPreview] cropImageToMatchPreview - Crop rect: \(cropRect)")
+
 
         // Create the cropped image
         guard let cgImage = image.cgImage,
               let croppedCGImage = cgImage.cropping(to: cropRect) else {
-            print("[CameraPreview] cropImageToMatchPreview - Failed to crop image")
+
             return nil
         }
 
         let result = UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
-        print("[CameraPreview] cropImageToMatchPreview - Result size: \(result.size.width)x\(result.size.height)")
+
 
         return result
     }
@@ -959,9 +962,9 @@ extension CameraController {
             self.zoomFactor = zoomLevel
 
             // Trigger autofocus after zoom if requested
-            if autoFocus {
-                self.triggerAutoFocus()
-            }
+            // if autoFocus {
+            //     self.triggerAutoFocus()
+            // }
         } catch {
             throw CameraControllerError.invalidOperation
         }
