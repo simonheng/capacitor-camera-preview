@@ -437,7 +437,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.aspectRatio = call.getString("aspectRatio")
         self.gridMode = call.getString("gridMode") ?? "none"
         self.positioning = call.getString("positioning") ?? "top"
-        let initialZoomLevel = call.getFloat("initialZoomLevel") ?? 1.0
+
+        let userProvidedZoom = call.getFloat("initialZoomLevel")
+        let initialZoomLevel = userProvidedZoom ?? 1.5
+        print("[CameraPreview] Initial zoom level: \(initialZoomLevel)")
         if self.aspectRatio != nil && (call.getInt("width") != nil || call.getInt("height") != nil) {
             call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
             return
