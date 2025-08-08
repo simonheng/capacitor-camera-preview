@@ -231,8 +231,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 self.height = maxHeightByWidth
             }
 
-
-
             self.updateCameraFrame()
 
             // Return the actual preview bounds

@@ -68,7 +68,7 @@ extension CameraController {
         discoverAndConfigureCameras()
     }
 
-        private func discoverAndConfigureCameras() {
+    private func discoverAndConfigureCameras() {
         let deviceTypes: [AVCaptureDevice.DeviceType] = [
             .builtInWideAngleCamera,
             .builtInUltraWideCamera,
@@ -82,8 +82,6 @@ extension CameraController {
         let session = AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: AVMediaType.video, position: .unspecified)
         let cameras = session.devices.compactMap { $0 }
 
-
-
         // Store all discovered devices for fast lookup later
         self.allDiscoveredDevices = cameras
 
@@ -94,7 +92,7 @@ extension CameraController {
 
         }
 
-                // Set front camera (usually just one option)
+        // Set front camera (usually just one option)
         self.frontCamera = cameras.first(where: { $0.position == .front })
 
         // Find rear camera - prefer tripleCamera for multi-lens support
@@ -740,8 +738,6 @@ extension CameraController {
 
         }
 
-
-
         // Create the cropped image
         guard let cgImage = image.cgImage,
               let croppedCGImage = cgImage.cropping(to: cropRect) else {
@@ -750,7 +746,6 @@ extension CameraController {
         }
 
         let result = UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
-
 
         return result
     }
