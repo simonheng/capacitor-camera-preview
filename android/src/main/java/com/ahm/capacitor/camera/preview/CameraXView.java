@@ -1040,12 +1040,39 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               saveImageToGallery(bytes);
             }
 
-            String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+            String resultValue;
+            boolean returnFileUri = sessionConfig != null && sessionConfig.isStoreToFile();
+            if (returnFileUri) {
+              // Persist processed image to a file and return its URI to avoid heavy base64 bridging
+              try {
+                String fileName =
+                  "cpcp_" +
+                  new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(
+                    new java.util.Date()
+                  ) +
+                  ".jpg";
+                File outDir = context.getCacheDir();
+                File outFile = new File(outDir, fileName);
+                FileOutputStream outFos = new FileOutputStream(outFile);
+                outFos.write(bytes);
+                outFos.close();
+
+                // Return a file path; apps can convert via Capacitor.convertFileSrc on JS side
+                resultValue = outFile.getAbsolutePath();
+              } catch (IOException ioEx) {
+                Log.e(TAG, "capturePhoto: Failed to write image file", ioEx);
+                // Fallback to base64 if file write fails
+                resultValue = Base64.encodeToString(bytes, Base64.NO_WRAP);
+              }
+            } else {
+              // Backward-compatible behavior
+              resultValue = Base64.encodeToString(bytes, Base64.NO_WRAP);
+            }
 
             tempFile.delete();
 
             if (listener != null) {
-              listener.onPictureTaken(base64, exifData);
+              listener.onPictureTaken(resultValue, exifData);
             }
           } catch (Exception e) {
             Log.e(TAG, "capturePhoto: Error processing image", e);
