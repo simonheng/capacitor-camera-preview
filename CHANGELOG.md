@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.4](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.3...7.4.0-alpha.4) (2025-08-08)
+
+
+### Bug Fixes
+
+* **android:** improve focus indicator animation handling in CameraXView ([d9a1664](https://github.com/Cap-go/capacitor-camera-preview/commit/d9a166403409ee4e6825a173d09e618ad4403eec))
+* update photo capture completion block to include original photo data and metadata ([d7c516a](https://github.com/Cap-go/capacitor-camera-preview/commit/d7c516a7ec2f992bbc335b6b5ea1f48dd4fb2605))
+
 ## [7.4.0-alpha.3](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.2...7.4.0-alpha.3) (2025-08-08)
 
 ## [7.4.0-alpha.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.1...7.4.0-alpha.2) (2025-08-08)
