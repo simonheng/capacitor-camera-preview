@@ -109,7 +109,7 @@ extension CameraController {
             $0.deviceType == .builtInDualWideCamera
         }) {
             // Fallback to dual wide camera
-            self.rearCamera = dualWideCamer
+            self.rearCamera = dualWideCamera
         } else if let dualCamera = rearCameras.first(where: {
             $0.deviceType == .builtInDualCamera
         }) {

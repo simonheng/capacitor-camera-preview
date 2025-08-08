@@ -19,7 +19,7 @@ let package = Package(
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm")
             ],
-            path: "ios/Sources/CapgoCameraPreview"),
+            path: "ios/Sources/CapgoCameraPreviewPlugin"),
         .testTarget(
             name: "CapgoCameraPreviewTests",
             dependencies: ["CapgoCameraPreview"],
