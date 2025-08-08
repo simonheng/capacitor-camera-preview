@@ -102,6 +102,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private GridOverlayView gridOverlayView;
   private FrameLayout previewContainer;
   private View focusIndicatorView;
+  private long focusIndicatorAnimationId = 0; // Incrementing token to invalidate previous animations
   private CameraSelector currentCameraSelector;
   private String currentDeviceId;
   private int currentFlashMode = ImageCapture.FLASH_MODE_OFF;
@@ -1776,8 +1777,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       return;
     }
 
-    // Remove any existing focus indicator
+    // Remove any existing focus indicator and cancel its animation
     if (focusIndicatorView != null) {
+      try {
+        focusIndicatorView.clearAnimation();
+      } catch (Exception ignore) {}
       previewContainer.removeView(focusIndicatorView);
       focusIndicatorView = null;
     }
@@ -1811,6 +1815,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     container.setBackground(drawable);
 
     focusIndicatorView = container;
+    // Bump animation token; everything after this must validate against this token
+    final long thisAnimationId = ++focusIndicatorAnimationId;
+    final View thisIndicatorView = focusIndicatorView;
 
     // Set initial state for smooth animation
     focusIndicatorView.setAlpha(1f); // Start visible
@@ -1863,7 +1870,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       new Runnable() {
         @Override
         public void run() {
-          if (focusIndicatorView != null) {
+          // Ensure this runnable belongs to the latest indicator
+          if (
+            focusIndicatorView != null &&
+            thisIndicatorView == focusIndicatorView &&
+            thisAnimationId == focusIndicatorAnimationId
+          ) {
             // Smooth fade to semi-transparent
             AlphaAnimation fadeToTransparent = new AlphaAnimation(1f, 0.4f);
             fadeToTransparent.setDuration(400);
@@ -1885,7 +1897,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                     "showFocusIndicator: Fade to transparent ended, starting final fade out"
                   );
                   // Final smooth fade out and scale down
-                  if (focusIndicatorView != null) {
+                  if (
+                    focusIndicatorView != null &&
+                    thisIndicatorView == focusIndicatorView &&
+                    thisAnimationId == focusIndicatorAnimationId
+                  ) {
                     AnimationSet finalAnimation = new AnimationSet(false);
 
                     AlphaAnimation finalFadeOut = new AlphaAnimation(0.4f, 0f);
@@ -1933,8 +1949,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                           // Remove the focus indicator
                           if (
                             focusIndicatorView != null &&
-                            previewContainer != null
+                            previewContainer != null &&
+                            thisIndicatorView == focusIndicatorView &&
+                            thisAnimationId == focusIndicatorAnimationId
                           ) {
+                            try {
+                              focusIndicatorView.clearAnimation();
+                            } catch (Exception ignore) {}
                             previewContainer.removeView(focusIndicatorView);
                             focusIndicatorView = null;
                           }
@@ -1945,7 +1966,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                       }
                     );
 
-                    focusIndicatorView.startAnimation(finalAnimation);
+                    if (
+                      thisIndicatorView == focusIndicatorView &&
+                      thisAnimationId == focusIndicatorAnimationId
+                    ) {
+                      focusIndicatorView.startAnimation(finalAnimation);
+                    }
                   }
                 }
 
@@ -1954,7 +1980,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               }
             );
 
-            focusIndicatorView.startAnimation(fadeToTransparent);
+            if (
+              thisIndicatorView == focusIndicatorView &&
+              thisAnimationId == focusIndicatorAnimationId
+            ) {
+              focusIndicatorView.startAnimation(fadeToTransparent);
+            }
           }
         }
       },
