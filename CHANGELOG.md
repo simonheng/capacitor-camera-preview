@@ -1,6 +1,77 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
+
+## [7.4.0-alpha.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.8...7.4.0-alpha.0) (2025-08-08)
+
+
+### Features
+
+* add aspect ratio support for image capture ([e6ee898](https://github.com/Cap-go/capacitor-camera-preview/commit/e6ee89888bbc5fef81e6d7ba0a9e9921f9ba11ac))
+* add boundary overlay feature and preset position options in camera view ([2bbab47](https://github.com/Cap-go/capacitor-camera-preview/commit/2bbab4710598d968971bf434f7e60eeb29cf8b64))
+* add EXIF data handling and customizable picture settings in camera view ([d2c237d](https://github.com/Cap-go/capacitor-camera-preview/commit/d2c237dba5ea2d7ce02514e8bb92ec89310db3d3))
+* add exposed method to display grid + fix ios ([c81971d](https://github.com/Cap-go/capacitor-camera-preview/commit/c81971d87b28996240419c5edb41caac214f3bde))
+* adding missing features IOS + redo setup ([7a18d05](https://github.com/Cap-go/capacitor-camera-preview/commit/7a18d054b4425dd44ce69657d5a626d90b8b064a))
+* **android:** add a cue when focusing ([c3063d1](https://github.com/Cap-go/capacitor-camera-preview/commit/c3063d10e743404b29a29786737789e5e32ed99a))
+* **android:** enhance grid overlay functionality in CameraXView ([781a740](https://github.com/Cap-go/capacitor-camera-preview/commit/781a7403e4b927b382e84330a5aefee387fa6816))
+* **camera:** add DeviceType enum and update documentation ([fc36fa8](https://github.com/Cap-go/capacitor-camera-preview/commit/fc36fa86d823c21ddbf5c25f060eb857d05a94c6))
+* **camera:** add support for retrieving picture sizes and opacity control ([d509e0e](https://github.com/Cap-go/capacitor-camera-preview/commit/d509e0ee325f57bf2a6c5070361dd5fe698435d7))
+* **camera:** enhance camera device enumeration and UI ([e45965a](https://github.com/Cap-go/capacitor-camera-preview/commit/e45965ae300bcd5a02fef2d5204cde508abeb260))
+* **camera:** enhance camera device model and UI display ([5c2dc44](https://github.com/Cap-go/capacitor-camera-preview/commit/5c2dc4461dc7d4fd7c741d1cffb3a1f727c5ef3a))
+* **camera:** enhance camera functionality with lens support and zoom capabilities ([72045c3](https://github.com/Cap-go/capacitor-camera-preview/commit/72045c3d76b66c5e4490d3d9d43ebc0becf3a87c))
+* **camera:** enhance capture functionality with EXIF data and save to gallery option ([1fad864](https://github.com/Cap-go/capacitor-camera-preview/commit/1fad864ba3f312651691d4880193956d1ca2eeb3))
+* **camera:** enhance logging and zoom functionality in CameraXView ([8e07013](https://github.com/Cap-go/capacitor-camera-preview/commit/8e0701301c704ee04f0c7ff87fd8ef9cc1950653))
+* **camera:** enhance zoom functionality and lens selection logic ([78050de](https://github.com/Cap-go/capacitor-camera-preview/commit/78050de08cc64860c3adc18370071581714c3b70))
+* **camera:** update README and refactor camera methods ([07b0a9f](https://github.com/Cap-go/capacitor-camera-preview/commit/07b0a9f854f6d1ac4f27cb0986dd5944adb1d73c))
+* enhance camera preview functionality and layout ([d635f06](https://github.com/Cap-go/capacitor-camera-preview/commit/d635f06973c7ee58357c2f925bf05851beaf36ec))
+* enhance image capture logging and aspect ratio handling ([9e82da4](https://github.com/Cap-go/capacitor-camera-preview/commit/9e82da45ec7c3e17685bb7d4da0fbb5b005149f3))
+* enhance image capture options and aspect ratio handling ([98ad46e](https://github.com/Cap-go/capacitor-camera-preview/commit/98ad46ed0662c1c4f8e12cd288eb3c20ec4abdbf))
+* **example-app:** handle single touch event to follow focus ([4999f77](https://github.com/Cap-go/capacitor-camera-preview/commit/4999f77fd512400d812349bf2924b02a5992bf8c))
+* implement grid mode (3x3 and 4x4) ([17d07e5](https://github.com/Cap-go/capacitor-camera-preview/commit/17d07e544b906ea2f93113cadc0f593be7ed56df))
+* implement toggle between 4:3 and 16:9 ([b4cd3a6](https://github.com/Cap-go/capacitor-camera-preview/commit/b4cd3a635b316152f9a7cb5c81fb1a01901248cc))
+* **ios:** add a cue for autofocus ([f1a7fb3](https://github.com/Cap-go/capacitor-camera-preview/commit/f1a7fb3313b0120ef64c7ea149ada07999f0566b))
+* **ios:** enhance preview resolution ([d631d5b](https://github.com/Cap-go/capacitor-camera-preview/commit/d631d5b1ee0f9fb5f9c82a1a3b967b07862c5991))
+* **ios:** enhance zoom behavior ([792428a](https://github.com/Cap-go/capacitor-camera-preview/commit/792428a7cd8b76ca38a6be7df385b7a67ee8ae0f))
+* **ios:** implement toggle between 4:3 and 16:9 ([d7ba69c](https://github.com/Cap-go/capacitor-camera-preview/commit/d7ba69c08b42a636b1f0f9edbf00f194a57157f3))
+* **ios:** increase drastically performance when opening camera ([6677ac3](https://github.com/Cap-go/capacitor-camera-preview/commit/6677ac306b8421065dce08584d4c28207b21a648))
+* optimize camera startup performance and add professional loading screen ([765890b](https://github.com/Cap-go/capacitor-camera-preview/commit/765890b83e13dd45f9e47d42d0baf6b2c0115cab))
+* refactor camera preview plugin structure and enhance functionality ([0669b83](https://github.com/Cap-go/capacitor-camera-preview/commit/0669b8397cd7c3782a39a0b33cc94b4fae88b773))
+* update camera preview options to include 'fill' aspect ratio and add grid mode documentation ([d78ac96](https://github.com/Cap-go/capacitor-camera-preview/commit/d78ac96d248279a21ef23c83cf2b006d4ba51de5))
+* **zoom:** change lens during zoom part2 ([d87ad88](https://github.com/Cap-go/capacitor-camera-preview/commit/d87ad8879621f521ae4b134bd41a3c17f696487e))
+* **zoom:** change lens during zoom part3 ([5c2bd92](https://github.com/Cap-go/capacitor-camera-preview/commit/5c2bd925cceaa9e3e253e30524f91df92a567703))
+* **zoom:** change lens for a continuous zoom part1 ([a9a6ae7](https://github.com/Cap-go/capacitor-camera-preview/commit/a9a6ae744d24b107574339e918a20e19653e4793))
+
+
+### Bug Fixes
+
+* add missing feature ([8a55269](https://github.com/Cap-go/capacitor-camera-preview/commit/8a552698e98b70a2389fbf9d7a56c5e1297e6e48))
+* add missing icons ([e46801f](https://github.com/Cap-go/capacitor-camera-preview/commit/e46801fe136ed17ac659428ac67b02bd30245aed))
+* android ([ecb30b4](https://github.com/Cap-go/capacitor-camera-preview/commit/ecb30b4e33fe8d17fcb5ff342a7b44b21355b8e4))
+* android crash + remove all "fill" support in aspect ratio ([ae5df8d](https://github.com/Cap-go/capacitor-camera-preview/commit/ae5df8d212f9dd1e80e83db8de8279bb37382908))
+* **android:** run cameraXView methods on UI thread and restart camera session for aspect ratio changes ([b52301d](https://github.com/Cap-go/capacitor-camera-preview/commit/b52301dbd7fc230ccf508e7b7d85698e5e72cded))
+* better test app ([dd5d09a](https://github.com/Cap-go/capacitor-camera-preview/commit/dd5d09abf4679727335cc4ec7d2ccdab4ba798f5))
+* **camera:** update default behavior for toBack option ([668344c](https://github.com/Cap-go/capacitor-camera-preview/commit/668344ca2651fba2c5f26655829626012f50a64b))
+* disable audi by default ([7cd9d34](https://github.com/Cap-go/capacitor-camera-preview/commit/7cd9d34088f373093c3808786db81a7f2b95f6b0))
+* don't force unwrap cgImage ([5920cdb](https://github.com/Cap-go/capacitor-camera-preview/commit/5920cdb94caa655d616e1f02d2ba159757e50e4b))
+* fallback for telephone without AE ([8e7a8b4](https://github.com/Cap-go/capacitor-camera-preview/commit/8e7a8b4fae4ec9800ae933eaab5e0b4729595849))
+* **flash:** add precatpure sequence to trigger flash for all devices ([c2aeb55](https://github.com/Cap-go/capacitor-camera-preview/commit/c2aeb55e7e5e5a84e2199874ba7299a0a603f889))
+* for ios 26 ([08a8ebc](https://github.com/Cap-go/capacitor-camera-preview/commit/08a8ebc9102e8ea741f0bafaad1964f8156b7b19))
+* improve exif unwrap on iOS ([f2adb88](https://github.com/Cap-go/capacitor-camera-preview/commit/f2adb8824dbaa4ee9f5395a864c6f5c3e0e4f633))
+* ios issue ([2759f2d](https://github.com/Cap-go/capacitor-camera-preview/commit/2759f2d3b16c0cb051e82e0da0352853b063b38b))
+* **ios:** autofocus only display on the preview camera view ([b02101c](https://github.com/Cap-go/capacitor-camera-preview/commit/b02101c915f0794b7c5d9dd8c3f19e75ced58f20))
+* **ios:** build ([98b24f0](https://github.com/Cap-go/capacitor-camera-preview/commit/98b24f0095811b003f17c555a23b94135ff9ece9))
+* **ios:** correct aspect ratio reference in camera preparation ([67fed86](https://github.com/Cap-go/capacitor-camera-preview/commit/67fed86f36b5395d9c3a08eee4f42b03839ed1f6))
+* **ios:** flash mode ([738de32](https://github.com/Cap-go/capacitor-camera-preview/commit/738de3269963f989a3739cb731b41c488c109239))
+* **ios:** zoom by default is 1x ([4b037a6](https://github.com/Cap-go/capacitor-camera-preview/commit/4b037a6f2d44bc55ba1cc5f2b6dd584c46bf4643))
+* make sure it's properly refreshed ([a064565](https://github.com/Cap-go/capacitor-camera-preview/commit/a064565381893025c50cac61eee110f2d676f194))
+* make sure saveImageToGallery doesn't use a deprecated method and add suport for png ([2989b71](https://github.com/Cap-go/capacitor-camera-preview/commit/2989b712d621965d7d4f38db121bf1d42db725eb))
+* missing icons ([8d4df37](https://github.com/Cap-go/capacitor-camera-preview/commit/8d4df37a812d1584efa5e42264516d13dd9451c8))
+* remove not used files ([8d11312](https://github.com/Cap-go/capacitor-camera-preview/commit/8d11312d8094ee857c7f51f03d7d21e0fdafb641))
+* remove useless ([a8d950b](https://github.com/Cap-go/capacitor-camera-preview/commit/a8d950ba3d7a95501544aea3361f2053f46ada63))
+* remove uselss import ([0837914](https://github.com/Cap-go/capacitor-camera-preview/commit/0837914fac897ba3f54cc59bda326381af42b38f))
+* revert b11d4c38bad15599c46205cf941d4c02a484ab25 ([4dd788f](https://github.com/Cap-go/capacitor-camera-preview/commit/4dd788f78ddfa06e341ac9b7ea3bfcfd49fd473b))
+* use camerax to his max ([cfc1a16](https://github.com/Cap-go/capacitor-camera-preview/commit/cfc1a1639af843cc5de945682a922a7c688673f0))
+* zoom level ios ([7a96de2](https://github.com/Cap-go/capacitor-camera-preview/commit/7a96de20782fe87d5a7f64f18b06f5e45dbff4fc))
 
 ### [7.3.8](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.7...7.3.8) (2025-06-23)
 
