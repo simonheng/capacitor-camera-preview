@@ -705,7 +705,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         print("[CameraPreview] Current location: \(self.currentLocation?.description ?? "nil")")
         print("[CameraPreview] Preview dimensions: \(self.previewView.frame.width)x\(self.previewView.frame.height)")
 
-        self.cameraController.captureImage(width: width, height: height, aspectRatio: captureAspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, error) in
+        self.cameraController.captureImage(width: width, height: height, aspectRatio: captureAspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, originalPhotoData, originalMetadata, error) in
             print("[CameraPreview] captureImage callback received")
             DispatchQueue.main.async {
                 print("[CameraPreview] Processing capture on main thread")
@@ -719,7 +719,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                       let imageDataWithExif = self.createImageDataWithExif(
                         from: image,
                         quality: Int(quality),
-                        location: withExifLocation ? self.currentLocation : nil
+                        location: withExifLocation ? self.currentLocation : nil,
+                        originalPhotoData: originalPhotoData
                       )
                 else {
                     print("[CameraPreview] Failed to create image data with EXIF")
@@ -792,23 +793,28 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         return exifData
     }
 
-    private func createImageDataWithExif(from image: UIImage, quality: Int, location: CLLocation?) -> Data? {
-        guard let originalImageData = image.jpegData(compressionQuality: CGFloat(Double(quality) / 100.0)) else {
+    private func createImageDataWithExif(from image: UIImage, quality: Int, location: CLLocation?, originalPhotoData: Data?) -> Data? {
+        guard let jpegDataAtQuality = image.jpegData(compressionQuality: CGFloat(Double(quality) / 100.0)) else {
             return nil
         }
 
-        guard let imageSource = CGImageSourceCreateWithData(originalImageData as CFData, nil),
+        // Prefer metadata from the original AVCapturePhoto file data to preserve lens/EXIF
+        let sourceDataForMetadata = (originalPhotoData ?? jpegDataAtQuality) as CFData
+        guard let imageSource = CGImageSourceCreateWithData(sourceDataForMetadata, nil),
               let imageProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
               let cgImage = image.cgImage else {
-            return originalImageData
+            return jpegDataAtQuality
         }
 
         let mutableData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(mutableData, kUTTypeJPEG, 1, nil) else {
-            return originalImageData
+            return jpegDataAtQuality
         }
 
         var finalProperties = imageProperties
+
+        // Ensure orientation reflects the pixel data (we pass an orientation-fixed UIImage)
+        finalProperties[kCGImagePropertyOrientation as String] = 1
 
         // Add GPS location if available
         if let location = location {
@@ -829,10 +835,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             finalProperties[kCGImagePropertyGPSDictionary as String] = gpsDict
         }
 
-        // Create or update TIFF dictionary for device info
+        // Create or update TIFF dictionary for device info and set orientation to Up
         var tiffDict = finalProperties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
         tiffDict[kCGImagePropertyTIFFMake as String] = "Apple"
         tiffDict[kCGImagePropertyTIFFModel as String] = UIDevice.current.model
+        tiffDict[kCGImagePropertyTIFFOrientation as String] = 1
         finalProperties[kCGImagePropertyTIFFDictionary as String] = tiffDict
 
         CGImageDestinationAddImage(destination, cgImage, finalProperties as CFDictionary)
@@ -841,7 +848,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return mutableData as Data
         }
 
-        return originalImageData
+        return jpegDataAtQuality
     }
 
     @objc func captureSample(_ call: CAPPluginCall) {

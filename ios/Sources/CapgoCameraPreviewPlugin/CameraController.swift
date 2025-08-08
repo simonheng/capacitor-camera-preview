@@ -25,7 +25,7 @@ class CameraController: NSObject {
     var focusIndicatorView: UIView?
 
     var flashMode = AVCaptureDevice.FlashMode.off
-    var photoCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
+    var photoCaptureCompletionBlock: ((UIImage?, Data?, [AnyHashable: Any]?, Error?) -> Void)?
 
     var sampleBufferCaptureCompletionBlock: ((UIImage?, Error?) -> Void)?
 
@@ -555,11 +555,11 @@ extension CameraController {
         self.updateVideoOrientation()
     }
 
-    func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Error?) -> Void) {
+    func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Data?, [AnyHashable: Any]?, Error?) -> Void) {
         print("[CameraPreview] captureImage called - width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil")")
 
         guard let photoOutput = self.photoOutput else {
-            completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
+            completion(nil, nil, nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
             return
         }
 
@@ -585,14 +585,14 @@ extension CameraController {
             }
         }
 
-        self.photoCaptureCompletionBlock = { (image, error) in
+        self.photoCaptureCompletionBlock = { (image, photoData, metadata, error) in
             if let error = error {
-                completion(nil, error)
+                completion(nil, nil, nil, error)
                 return
             }
 
             guard let image = image else {
-                completion(nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to capture image"]))
+                completion(nil, nil, nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to capture image"]))
                 return
             }
 
@@ -646,7 +646,7 @@ extension CameraController {
                 }
             }
 
-            completion(finalImage, nil)
+            completion(finalImage, photoData, metadata, nil)
         }
 
         photoOutput.capturePhoto(with: settings, delegate: self)
@@ -1460,22 +1460,23 @@ extension CameraController: UIGestureRecognizerDelegate {
 extension CameraController: AVCapturePhotoCaptureDelegate {
     public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
-            self.photoCaptureCompletionBlock?(nil, error)
+            self.photoCaptureCompletionBlock?(nil, nil, nil, error)
             return
         }
 
         // Get the photo data using the modern API
         guard let imageData = photo.fileDataRepresentation() else {
-            self.photoCaptureCompletionBlock?(nil, CameraControllerError.unknown)
+            self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
             return
         }
 
         guard let image = UIImage(data: imageData) else {
-            self.photoCaptureCompletionBlock?(nil, CameraControllerError.unknown)
+            self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
             return
         }
 
-        self.photoCaptureCompletionBlock?(image.fixedOrientation(), nil)
+        // Pass through original file data and metadata so callers can preserve EXIF
+        self.photoCaptureCompletionBlock?(image.fixedOrientation(), imageData, photo.metadata, nil)
     }
 }
 
