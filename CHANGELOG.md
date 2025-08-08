@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.1...7.4.0-alpha.2) (2025-08-08)
+
+
+### Features
+
+* **android:** manage to capture image and safe as file (fast capture) ([85c0bc8](https://github.com/Cap-go/capacitor-camera-preview/commit/85c0bc8cd9ca9d959089e377c73071fe59d23248))
+
 ## [7.4.0-alpha.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.0...7.4.0-alpha.1) (2025-08-08)
 
 ## [7.4.0-alpha.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.8...7.4.0-alpha.0) (2025-08-08)
