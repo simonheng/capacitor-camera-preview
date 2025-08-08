@@ -1041,7 +1041,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             }
 
             String resultValue;
-            boolean returnFileUri = sessionConfig != null && sessionConfig.isStoreToFile();
+            boolean returnFileUri =
+              sessionConfig != null && sessionConfig.isStoreToFile();
             if (returnFileUri) {
               // Persist processed image to a file and return its URI to avoid heavy base64 bridging
               try {
