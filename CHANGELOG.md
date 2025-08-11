@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.3.14](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.13...7.3.14) (2025-08-11)
+
+
+### Bug Fixes
+
+* **deps:** update dependency androidx.test.espresso:espresso-core to v3.7.0 ([#207](https://github.com/Cap-go/capacitor-camera-preview/issues/207)) ([d05d5d1](https://github.com/Cap-go/capacitor-camera-preview/commit/d05d5d12b04c9d19b54e30875097b17f830fcf68))
+
 ## [7.3.13](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.12...7.3.13) (2025-08-11)
 
 ### [7.3.12](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.11...7.3.12) (2025-07-21)
