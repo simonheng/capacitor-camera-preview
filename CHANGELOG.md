@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.5](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.4...7.4.0-alpha.5) (2025-08-11)
+
+
+### Features
+
+* add deleteFile method to CameraPreview plugin for file management ([5c1b9a9](https://github.com/Cap-go/capacitor-camera-preview/commit/5c1b9a92e7d51f59800ae56ddb6cc85b5af2329f))
+
 ## [7.4.0-alpha.4](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.3...7.4.0-alpha.4) (2025-08-08)
 
 
