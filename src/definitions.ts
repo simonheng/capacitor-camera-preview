@@ -590,4 +590,12 @@ export interface CameraPreviewPlugin {
    * @since 8.1.0
    */
   setFocus(options: { x: number; y: number }): Promise<void>;
+
+  /**
+   * Deletes a file at the given absolute path on the device.
+   * Use this to quickly clean up temporary images created with `storeToFile`.
+   * On web, this is not supported and will throw.
+   * @since 8.2.0
+   */
+  deleteFile(options: { path: string }): Promise<{ success: boolean }>;
 }
