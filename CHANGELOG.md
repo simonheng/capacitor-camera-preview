@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.6](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.5...7.4.0-alpha.6) (2025-08-11)
+
+
+### Bug Fixes
+
+* landscape mode + race condition ([68131b8](https://github.com/Cap-go/capacitor-camera-preview/commit/68131b80923d09e6b0218815b108095c02ab4b8c))
+
 ## [7.4.0-alpha.5](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.4...7.4.0-alpha.5) (2025-08-11)
 
 
