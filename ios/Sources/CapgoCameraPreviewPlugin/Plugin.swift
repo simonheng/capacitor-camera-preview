@@ -141,23 +141,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Always use the factorized method for consistent positioning
         self.updateCameraFrame()
 
-        if let connection = self.cameraController.fileVideoOutput?.connection(with: .video) {
-            switch UIDevice.current.orientation {
-            case .landscapeRight:
-                connection.videoOrientation = .landscapeLeft
-            case .landscapeLeft:
-                connection.videoOrientation = .landscapeRight
-            case .portrait:
-                connection.videoOrientation = .portrait
-            case .portraitUpsideDown:
-                connection.videoOrientation = .portraitUpsideDown
-            default:
-                connection.videoOrientation = .portrait
-            }
-        }
-
-        cameraController.updateVideoOrientation()
-
+        // Centralize orientation update to use interface orientation consistently
         cameraController.updateVideoOrientation()
 
         // Update grid overlay frame if it exists - no animation
@@ -186,61 +170,68 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
 
         self.aspectRatio = newAspectRatio
-
         DispatchQueue.main.async {
-            // When aspect ratio changes, always auto-center the view
-            // This ensures consistent behavior where changing aspect ratio recenters the view
-            self.posX = -1
-            self.posY = -1
-
-            // Calculate maximum size based on aspect ratio
-            let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
-            let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
-            let paddingBottom = self.paddingBottom ?? 0
-
-            // Calculate available space
-            let availableWidth: CGFloat
-            let availableHeight: CGFloat
-
-            if self.posX == -1 || self.posY == -1 {
-                // Auto-centering mode - use full dimensions
-                availableWidth = webViewWidth
-                availableHeight = webViewHeight - paddingBottom
-            } else {
-                // Manual positioning - calculate remaining space
-                availableWidth = webViewWidth - self.posX!
-                availableHeight = webViewHeight - self.posY! - paddingBottom
-            }
-
-            // Parse aspect ratio - convert to portrait orientation for camera use
-            let ratioParts = newAspectRatio.split(separator: ":").map { Double($0) ?? 1.0 }
-            // For camera, we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-            let ratio = ratioParts[1] / ratioParts[0]
-
-            // Calculate maximum size that fits the aspect ratio in available space
-            let maxWidthByHeight = availableHeight * CGFloat(ratio)
-            let maxHeightByWidth = availableWidth / CGFloat(ratio)
-
-            if maxWidthByHeight <= availableWidth {
-                // Height is the limiting factor
-                self.width = maxWidthByHeight
-                self.height = availableHeight
-            } else {
-                // Width is the limiting factor
-                self.width = availableWidth
-                self.height = maxHeightByWidth
-            }
-
-            self.updateCameraFrame()
-
-            // Return the actual preview bounds
-            var result = JSObject()
-            result["x"] = Double(self.previewView.frame.origin.x)
-            result["y"] = Double(self.previewView.frame.origin.y)
-            result["width"] = Double(self.previewView.frame.width)
-            result["height"] = Double(self.previewView.frame.height)
-            call.resolve(result)
+            call.resolve(self.rawSetAspectRatio())
         }
+    }
+    
+    func rawSetAspectRatio() -> JSObject {
+        // When aspect ratio changes, always auto-center the view
+        // This ensures consistent behavior where changing aspect ratio recenters the view
+        self.posX = -1
+        self.posY = -1
+
+        // Calculate maximum size based on aspect ratio
+        let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
+        let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
+        let paddingBottom = self.paddingBottom ?? 0
+        let isPortrait = self.isPortrait()
+
+        // Calculate available space
+        let availableWidth: CGFloat
+        let availableHeight: CGFloat
+
+        if self.posX == -1 || self.posY == -1 {
+            // Auto-centering mode - use full dimensions
+            availableWidth = webViewWidth
+            availableHeight = webViewHeight - paddingBottom
+        } else {
+            // Manual positioning - calculate remaining space
+            availableWidth = webViewWidth - self.posX!
+            availableHeight = webViewHeight - self.posY! - paddingBottom
+        }
+
+        // Parse aspect ratio - convert to portrait orientation for camera use
+        let ratioParts = self.aspectRatio?.split(separator: ":").map { Double($0) ?? 1.0 } ?? [1.0, 1.0]
+        
+        // For camera (portrait), we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+        let ratio = !isPortrait ? ratioParts[0] / ratioParts[1] : ratioParts[1] / ratioParts[0]
+
+        // Calculate maximum size that fits the aspect ratio in available space
+        let maxWidthByHeight = availableHeight * CGFloat(ratio)
+        let maxHeightByWidth = availableWidth / CGFloat(ratio)
+
+        if maxWidthByHeight <= availableWidth {
+            // Height is the limiting factor
+            self.width = maxWidthByHeight
+            self.height = availableHeight
+        } else {
+            // Width is the limiting factor
+            self.width = availableWidth
+            self.height = maxHeightByWidth
+        }
+
+
+
+        self.updateCameraFrame()
+
+        // Return the actual preview bounds
+        var result = JSObject()
+        result["x"] = Double(self.previewView.frame.origin.x)
+        result["y"] = Double(self.previewView.frame.origin.y)
+        result["width"] = Double(self.previewView.frame.width)
+        result["height"] = Double(self.previewView.frame.height)
+        return result
     }
 
     @objc func getAspectRatio(_ call: CAPPluginCall) {
@@ -463,7 +454,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                         call.reject(error.localizedDescription)
                         return
                     }
+                    
                     DispatchQueue.main.async {
+                        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                        NotificationCenter.default.addObserver(self,
+                                                               selector: #selector(self.handleOrientationChange),
+                                                               name: UIDevice.orientationDidChangeNotification,
+                                                               object: nil)
                         self.completeStartCamera(call: call)
                     }
                 }
@@ -486,6 +483,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         // Display the camera preview on the configured view
         try? self.cameraController.displayPreview(on: self.previewView)
+
+        // Ensure the preview orientation matches the current interface orientation at startup
+        self.cameraController.updateVideoOrientation()
 
         self.cameraController.setupGestures(target: self.previewView, enableZoom: self.enableZoom!)
 
@@ -519,14 +519,16 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             }
         }
 
-        // If already received first frame (unlikely but possible), resolve immediately
+        // If already received first frame (unlikely but possible), resolve immediately on main thread
         if self.cameraController.hasReceivedFirstFrame {
-            var returnedObject = JSObject()
-            returnedObject["width"] = self.previewView.frame.width as any JSValue
-            returnedObject["height"] = self.previewView.frame.height as any JSValue
-            returnedObject["x"] = self.previewView.frame.origin.x as any JSValue
-            returnedObject["y"] = self.previewView.frame.origin.y as any JSValue
-            call.resolve(returnedObject)
+            DispatchQueue.main.async {
+                var returnedObject = JSObject()
+                returnedObject["width"] = self.previewView.frame.width as any JSValue
+                returnedObject["height"] = self.previewView.frame.height as any JSValue
+                returnedObject["x"] = self.previewView.frame.origin.x as any JSValue
+                returnedObject["y"] = self.previewView.frame.origin.y as any JSValue
+                call.resolve(returnedObject)
+            }
         }
     }
 
@@ -588,6 +590,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
             // Remove notification observers
             NotificationCenter.default.removeObserver(self)
+            
+            NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
+            UIDevice.current.endGeneratingDeviceOrientationNotifications()
 
             call.resolve()
         }
@@ -703,7 +708,20 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil"), using aspectRatio: \(captureAspectRatio ?? "nil")")
         print("[CameraPreview] Current location: \(self.currentLocation?.description ?? "nil")")
-        print("[CameraPreview] Preview dimensions: \(self.previewView.frame.width)x\(self.previewView.frame.height)")
+        // Safely read frame from main thread for logging
+        let (previewWidth, previewHeight): (CGFloat, CGFloat) = {
+            if Thread.isMainThread {
+                return (self.previewView.frame.width, self.previewView.frame.height)
+            }
+            var w: CGFloat = 0
+            var h: CGFloat = 0
+            DispatchQueue.main.sync {
+                w = self.previewView.frame.width
+                h = self.previewView.frame.height
+            }
+            return (w, h)
+        }()
+        print("[CameraPreview] Preview dimensions: \(previewWidth)x\(previewHeight)")
 
         self.cameraController.captureImage(width: width, height: height, aspectRatio: captureAspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, originalPhotoData, originalMetadata, error) in
             print("[CameraPreview] captureImage callback received")
@@ -738,11 +756,23 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                         let base64Image = imageDataWithExif.base64EncodedString()
 
                         var result = JSObject()
-                        result["value"] = base64Image
                         result["exif"] = exifData
                         result["gallerySaved"] = success
                         if !success, let error = error {
                             result["galleryError"] = error.localizedDescription
+                        }
+                        
+                        if self.storeToFile == false {
+                            let base64Image = imageDataWithExif.base64EncodedString()
+                            result["value"] = base64Image
+                        } else {
+                            do {
+                                let fileUrl = self.getTempFilePath()
+                                try imageDataWithExif.write(to: fileUrl)
+                                result["value"] = fileUrl.absoluteString
+                            } catch {
+                                call.reject("Error writing image to file")
+                            }
                         }
 
                         print("[CameraPreview] Resolving capture call with gallery save")
@@ -751,14 +781,32 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 } else {
                     print("[CameraPreview] Not saving to gallery, returning image data")
                     let exifData = self.getExifData(from: imageDataWithExif)
-                    let base64Image = imageDataWithExif.base64EncodedString()
+                    
+                    if self.storeToFile == false {
+                        let base64Image = imageDataWithExif.base64EncodedString()
+                        var result = JSObject()
+                        result["value"] = base64Image
+                        result["exif"] = exifData
+                        
+                        print("[CameraPreview] Resolving capture call")
+                        call.resolve(result)
+                    } else {
+                        do {
+                            let fileUrl = self.getTempFilePath()
+                            try imageDataWithExif.write(to: fileUrl)
+                            var result = JSObject()
+                            result["value"] = fileUrl.absoluteString
+                            result["exif"] = exifData
+                            print("[CameraPreview] Resolving capture call")
+                            call.resolve(result)
+                        } catch {
+                            call.reject("Error writing image to file")
+                        }
+                    }
 
-                    var result = JSObject()
-                    result["value"] = base64Image
-                    result["exif"] = exifData
 
-                    print("[CameraPreview] Resolving capture call")
-                    call.resolve(result)
+
+
                 }
             }
         }
@@ -1332,6 +1380,26 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             completion(false, error)
         }
     }
+    
+    private func isPortrait() -> Bool {
+        let orientation = UIDevice.current.orientation
+        if orientation.isValidInterfaceOrientation {
+            return orientation.isPortrait
+        } else {
+            let interfaceOrientation: UIInterfaceOrientation? = {
+                if Thread.isMainThread {
+                    return (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.interfaceOrientation
+                } else {
+                    var value: UIInterfaceOrientation?
+                    DispatchQueue.main.sync {
+                        value = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.interfaceOrientation
+                    }
+                    return value
+                }
+            }()
+            return interfaceOrientation?.isPortrait ?? false
+        }
+    }
 
     private func calculateCameraFrame(x: CGFloat? = nil, y: CGFloat? = nil, width: CGFloat? = nil, height: CGFloat? = nil, aspectRatio: String? = nil) -> CGRect {
         // Use provided values or existing ones
@@ -1347,6 +1415,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Cache webView dimensions for performance
         let webViewWidth = self.webView?.frame.width ?? UIScreen.main.bounds.width
         let webViewHeight = self.webView?.frame.height ?? UIScreen.main.bounds.height
+        
+        let isPortrait = self.isPortrait()
 
         var finalX = currentX
         var finalY = currentY
@@ -1360,13 +1430,21 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                currentWidth == UIScreen.main.bounds.size.width &&
                 currentHeight == UIScreen.main.bounds.size.height {
                 finalWidth = webViewWidth
+                
+                // width: 428.0 height: 926.0 - portrait
+                
+                print("[CameraPreview] width: \(UIScreen.main.bounds.size.width) height: \(UIScreen.main.bounds.size.height)")
 
                 // Calculate height based on aspect ratio
                 let ratioParts = ratio.split(separator: ":").compactMap { Double($0) }
                 if ratioParts.count == 2 {
                     // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
                     let ratioValue = ratioParts[1] / ratioParts[0]
-                    finalHeight = finalWidth / CGFloat(ratioValue)
+                    if (isPortrait) {
+                        finalHeight = finalWidth / CGFloat(ratioValue)
+                    } else {
+                        finalWidth = finalHeight / CGFloat(ratioValue)
+                    }
                 }
             }
 
@@ -1378,9 +1456,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             }
 
             // Position vertically if y is -1
+            // TODO: fix top, bottom for landscape
             if currentY == -1 {
                 // Use full screen height for positioning
                 let screenHeight = UIScreen.main.bounds.size.height
+                let screenWidth = UIScreen.main.bounds.size.width
                 switch self.positioning {
                 case "top":
                     finalY = 0
@@ -1389,8 +1469,12 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     finalY = screenHeight - finalHeight
                     print("[CameraPreview] Positioning at bottom: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
                 default: // "center"
-                    finalY = (screenHeight - finalHeight) / 2
-                    print("[CameraPreview] Centering vertically: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
+                    if (isPortrait) {
+                        finalY = (screenHeight - finalHeight) / 2
+                        print("[CameraPreview] Centering vertically: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
+                    } else {
+                        finalX = (screenWidth - finalWidth) / 2
+                    }
                 }
             } else {
                 finalY = currentY
@@ -1550,6 +1634,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             } catch {
                 call.reject("Failed to set focus: \(error.localizedDescription)")
             }
+        }
+    }
+    
+    @objc private func handleOrientationChange() {
+        DispatchQueue.main.async {
+            let result = self.rawSetAspectRatio()
+            self.notifyListeners("screenResize", data: result)
         }
     }
 }

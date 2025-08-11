@@ -242,6 +242,7 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`getPreviewSize()`](#getpreviewsize)
 * [`setPreviewSize(...)`](#setpreviewsize)
 * [`setFocus(...)`](#setfocus)
+* [`addListener('screenResize', ...)`](#addlistenerscreenresize-)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 * [Enums](#enums)
@@ -683,6 +684,22 @@ Sets the camera focus to a specific point in the preview.
 --------------------
 
 
+### addListener('screenResize', ...)
+
+```typescript
+addListener(eventName: 'screenResize', listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
+```
+
+| Param              | Type                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| **`eventName`**    | <code>'screenResize'</code>                                                              |
+| **`listenerFunc`** | <code>(data: { width: number; height: number; x: number; y: number; }) =&gt; void</code> |
+
+**Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
+
+--------------------
+
+
 ### Interfaces
 
 
@@ -814,6 +831,13 @@ Represents the detailed information of the currently active lens.
 | **`deviceType`**    | <code><a href="#devicetype">DeviceType</a></code> | The device type of the active lens.                              |
 | **`baseZoomRatio`** | <code>number</code>                               | The base zoom ratio of the active lens (e.g., 0.5x, 1.0x).       |
 | **`digitalZoom`**   | <code>number</code>                               | The current digital zoom factor applied on top of the base zoom. |
+
+
+#### PluginListenerHandle
+
+| Prop         | Type                                      |
+| ------------ | ----------------------------------------- |
+| **`remove`** | <code>() =&gt; Promise&lt;void&gt;</code> |
 
 
 ### Type Aliases

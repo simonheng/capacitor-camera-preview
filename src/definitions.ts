@@ -1,3 +1,5 @@
+import { PluginListenerHandle } from "@capacitor/core";
+
 export type CameraPosition = "rear" | "front";
 
 export type FlashMode = CameraPreviewFlashMode;
@@ -590,4 +592,14 @@ export interface CameraPreviewPlugin {
    * @since 8.1.0
    */
   setFocus(options: { x: number; y: number }): Promise<void>;
+
+  addListener(
+    eventName: 'screenResize',
+    listenerFunc: (data: {
+      width: number;
+      height: number;
+      x: number;
+      y: number;
+    }) => void
+  ): Promise<PluginListenerHandle>;
 }
