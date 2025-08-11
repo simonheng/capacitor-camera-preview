@@ -1,6 +1,8 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
+
+## [7.3.13](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.12...7.3.13) (2025-08-11)
 
 ### [7.3.12](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.11...7.3.12) (2025-07-21)
 
