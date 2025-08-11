@@ -65,7 +65,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         CAPPluginMethod(name: "getGridMode", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPreviewSize", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPreviewSize", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setFocus", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "setFocus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "deleteFile", returnType: CAPPluginReturnPromise)
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -723,7 +724,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }()
         print("[CameraPreview] Preview dimensions: \(previewWidth)x\(previewHeight)")
 
-        self.cameraController.captureImage(width: width, height: height, aspectRatio: captureAspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, originalPhotoData, originalMetadata, error) in
+        self.cameraController.captureImage(width: width, height: height, aspectRatio: captureAspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, originalPhotoData, _, error) in
             print("[CameraPreview] captureImage callback received")
             DispatchQueue.main.async {
                 print("[CameraPreview] Processing capture on main thread")
@@ -1641,6 +1642,33 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         DispatchQueue.main.async {
             let result = self.rawSetAspectRatio()
             self.notifyListeners("screenResize", data: result)
+        }
+    }
+
+    @objc func deleteFile(_ call: CAPPluginCall) {
+        guard let path = call.getString("path"), !path.isEmpty else {
+            call.reject("path parameter is required")
+            return
+        }
+        let url: URL?
+        if path.hasPrefix("file://") {
+            url = URL(string: path)
+        } else {
+            url = URL(fileURLWithPath: path)
+        }
+        guard let fileURL = url else {
+            call.reject("Invalid path")
+            return
+        }
+        do {
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+                call.resolve(["success": true])
+            } else {
+                call.resolve(["success": false])
+            }
+        } catch {
+            call.reject("Failed to delete file: \(error.localizedDescription)")
         }
     }
 }

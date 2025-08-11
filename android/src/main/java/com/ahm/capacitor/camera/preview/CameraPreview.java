@@ -1191,4 +1191,22 @@ public class CameraPreview
       call.resolve(ret);
     });
   }
+
+  @PluginMethod
+  public void deleteFile(PluginCall call) {
+    String path = call.getString("path");
+    if (path == null || path.isEmpty()) {
+      call.reject("path parameter is required");
+      return;
+    }
+    try {
+      java.io.File f = new java.io.File(android.net.Uri.parse(path).getPath());
+      boolean deleted = f.exists() && f.delete();
+      JSObject ret = new JSObject();
+      ret.put("success", deleted);
+      call.resolve(ret);
+    } catch (Exception e) {
+      call.reject("Failed to delete file: " + e.getMessage());
+    }
+  }
 }

@@ -1148,4 +1148,8 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       );
     }
   }
+
+  async deleteFile(_options: { path: string }): Promise<{ success: boolean }> {
+    throw new Error("deleteFile not supported under the web platform");
+  }
 }

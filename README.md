@@ -76,6 +76,24 @@ Video and photo taken with the plugin are never removed, so do not forget to rem
 use https://capacitorjs.com/docs/apis/filesystem#deletefile for that
 
 
+## Fast base64 from file path (no bridge)
+
+When using `storeToFile: true`, you can avoid sending large base64 strings over the Capacitor bridge:
+
+```ts
+import { CameraPreview, getBase64FromFilePath } from '@capgo/camera-preview'
+
+// Take a picture and get a file path
+const { value: filePath } = await CameraPreview.capture({ quality: 85, storeToFile: true })
+
+// Convert the file to base64 entirely on the JS side (fast, no bridge)
+const base64 = await getBase64FromFilePath(filePath)
+
+// Optionally cleanup the temp file natively
+await CameraPreview.deleteFile({ path: filePath })
+```
+
+
 # Installation
 
 ```
@@ -243,6 +261,7 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`setPreviewSize(...)`](#setpreviewsize)
 * [`setFocus(...)`](#setfocus)
 * [`addListener('screenResize', ...)`](#addlistenerscreenresize-)
+* [`deleteFile(...)`](#deletefile)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 * [Enums](#enums)
@@ -696,6 +715,27 @@ addListener(eventName: 'screenResize', listenerFunc: (data: { width: number; hei
 | **`listenerFunc`** | <code>(data: { width: number; height: number; x: number; y: number; }) =&gt; void</code> |
 
 **Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
+
+--------------------
+
+
+### deleteFile(...)
+
+```typescript
+deleteFile(options: { path: string; }) => Promise<{ success: boolean; }>
+```
+
+Deletes a file at the given absolute path on the device.
+Use this to quickly clean up temporary images created with `storeToFile`.
+On web, this is not supported and will throw.
+
+| Param         | Type                           |
+| ------------- | ------------------------------ |
+| **`options`** | <code>{ path: string; }</code> |
+
+**Returns:** <code>Promise&lt;{ success: boolean; }&gt;</code>
+
+**Since:** 8.2.0
 
 --------------------
 
