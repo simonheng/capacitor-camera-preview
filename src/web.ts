@@ -322,10 +322,14 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     // Wait for video to be ready and get actual dimensions
     await new Promise<void>((resolve) => {
-      if (this.videoElement!.readyState >= 2) {
+      const videoEl = this.videoElement;
+      if (!videoEl) {
+        throw new Error("video element not found");
+      }
+      if (videoEl.readyState >= 2) {
         resolve();
       } else {
-        this.videoElement!.addEventListener("loadeddata", () => resolve(), {
+        videoEl.addEventListener("loadeddata", () => resolve(), {
           once: true,
         });
       }
@@ -1150,6 +1154,8 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async deleteFile(_options: { path: string }): Promise<{ success: boolean }> {
+    // Mark parameter as intentionally unused to satisfy linter
+    void _options;
     throw new Error("deleteFile not supported under the web platform");
   }
 }
