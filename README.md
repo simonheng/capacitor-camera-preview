@@ -261,7 +261,6 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`setPreviewSize(...)`](#setpreviewsize)
 * [`setFocus(...)`](#setfocus)
 * [`addListener('screenResize', ...)`](#addlistenerscreenresize-)
-* [`deleteFile(...)`](#deletefile)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 * [Enums](#enums)
@@ -715,27 +714,6 @@ addListener(eventName: 'screenResize', listenerFunc: (data: { width: number; hei
 | **`listenerFunc`** | <code>(data: { width: number; height: number; x: number; y: number; }) =&gt; void</code> |
 
 **Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
-
---------------------
-
-
-### deleteFile(...)
-
-```typescript
-deleteFile(filePath: string) => Promise<boolean>
-```
-
-Deletes a file at the given absolute path on the device.
-Use this to quickly clean up temporary images created with `storeToFile`.
-On web, this is not supported and will throw.
-
-| Param         | Type                           |
-| ------------- | ------------------------------ |
-| **`options`** | <code>{ path: string; }</code> |
-
-**Returns:** <code>Promise&lt;{ success: boolean; }&gt;</code>
-
-**Since:** 8.2.0
 
 --------------------
 
