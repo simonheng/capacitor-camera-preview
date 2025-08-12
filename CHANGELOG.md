@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.9](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.8...7.4.0-alpha.9) (2025-08-12)
+
+
+### Bug Fixes
+
+* web.ts to pass lint ([d0cb098](https://github.com/Cap-go/capacitor-camera-preview/commit/d0cb09888df739df5332bd599eea2240b7cb0177))
+
 ## [7.4.0-alpha.8](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.7...7.4.0-alpha.8) (2025-08-12)
 
 
