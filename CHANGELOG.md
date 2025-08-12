@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.7](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.6...7.4.0-alpha.7) (2025-08-12)
+
+
+### Bug Fixes
+
+* **example-app:** use storeToFile and fix gallery implementation ([4540622](https://github.com/Cap-go/capacitor-camera-preview/commit/454062285957bc3cc6f3d14bcbfb232c31d83829))
+
 ## [7.4.0-alpha.6](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.5...7.4.0-alpha.6) (2025-08-11)
 
 
