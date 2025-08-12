@@ -9,6 +9,8 @@ import {
   LensInfo,
   CameraPreviewPlugin,
   GridMode,
+  getBase64FromFilePath,
+  deleteFile,
 } from '@capgo/camera-preview';
 import { BehaviorSubject } from 'rxjs';
 
@@ -281,19 +283,11 @@ export class CapacitorCameraViewService {
     return result.gridMode;
   }
 
-  // /**
-  //  * Check camera permission status
-  //  * @returns The current permission status
-  //  */
-  // async checkPermissions(): Promise<PermissionState> {
-  //   return (await this.#cameraView.checkPermissions()).camera;
-  // }
+  async getBase64FromFilePath(filePath: string): Promise<string> {
+    return getBase64FromFilePath(filePath);
+  }
 
-  // /**
-  //  * Request camera permissions
-  //  * @returns The updated permission status after request
-  //  */
-  // async requestPermissions(): Promise<PermissionState> {
-  //   return (await this.#cameraView.requestPermissions()).camera;
-  // }
+  async deleteFile(filePath: string): Promise<boolean> {
+    return deleteFile(filePath);
+  }
 }

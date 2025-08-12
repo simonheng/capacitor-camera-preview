@@ -272,6 +272,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       lockAndroidOrientation: this.lockAndroidOrientation(),
       toBack: true,
       gridMode: this.gridMode(),
+      storeToFile: true,
     };
 
     // Only add x and y if they are not null

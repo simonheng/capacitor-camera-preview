@@ -78,7 +78,7 @@
   }
 
   <!-- Floating Developer Info Panel -->
-  @if (showOverlay()) {
+  @if (cameraStarted() && showOverlay()) {
     <div class="floating-info-panel">
       <ion-card>
         <ion-card-content>

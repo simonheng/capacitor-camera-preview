@@ -37,7 +37,7 @@ Take into account that this will make transparent all ion-content on application
 ```
 
 If the camera preview is not displaying after applying the above styles, apply transparent background color to the root div element of the parent component
-Ex: VueJS >> App.vue component 
+Ex: VueJS >> App.vue component
 ```html
 <template>
   <ion-app id="app">
@@ -722,7 +722,7 @@ addListener(eventName: 'screenResize', listenerFunc: (data: { width: number; hei
 ### deleteFile(...)
 
 ```typescript
-deleteFile(options: { path: string; }) => Promise<{ success: boolean; }>
+deleteFile(filePath: string) => Promise<boolean>
 ```
 
 Deletes a file at the given absolute path on the device.
