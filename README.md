@@ -262,8 +262,10 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`setPreviewSize(...)`](#setpreviewsize)
 * [`setFocus(...)`](#setfocus)
 * [`addListener('screenResize', ...)`](#addlistenerscreenresize-)
+* [`addListener('orientationChange', ...)`](#addlistenerorientationchange-)
 * [`deleteFile(...)`](#deletefile)
 * [`getSafeAreaInsets()`](#getsafeareainsets)
+* [`getOrientation()`](#getorientation)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 * [Enums](#enums)
@@ -374,7 +376,7 @@ Set the aspect ratio of the camera preview.
 
 **Returns:** <code>Promise&lt;{ width: number; height: number; x: number; y: number; }&gt;</code>
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -389,7 +391,7 @@ Gets the current aspect ratio of the camera preview.
 
 **Returns:** <code>Promise&lt;{ aspectRatio: '4:3' | '16:9'; }&gt;</code>
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -546,7 +548,7 @@ Checks if the camera preview is currently running.
 
 **Returns:** <code>Promise&lt;{ isRunning: boolean; }&gt;</code>
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -561,7 +563,7 @@ Gets all available camera devices.
 
 **Returns:** <code>Promise&lt;{ devices: CameraDevice[]; }&gt;</code>
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -576,7 +578,7 @@ Gets the current zoom state, including min/max and current lens info.
 
 **Returns:** <code>Promise&lt;{ min: number; max: number; current: number; lens: <a href="#lensinfo">LensInfo</a>; }&gt;</code>
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -593,6 +595,8 @@ Returns zoom button values for quick switching.
 
 **Returns:** <code>Promise&lt;{ values: number[]; }&gt;</code>
 
+**Since:** 7.5.0
+
 --------------------
 
 
@@ -608,7 +612,7 @@ Sets the zoom level of the camera.
 | ------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | **`options`** | <code>{ level: number; ramp?: boolean; autoFocus?: boolean; }</code> | - The desired zoom level. `ramp` is currently unused. `autoFocus` defaults to true. |
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -623,7 +627,7 @@ Gets the current flash mode.
 
 **Returns:** <code>Promise&lt;{ flashMode: <a href="#camerapreviewflashmode">CameraPreviewFlashMode</a>; }&gt;</code>
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -636,7 +640,7 @@ removeAllListeners() => Promise<void>
 
 Removes all registered listeners.
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -653,7 +657,7 @@ Switches the active camera to the one with the specified `deviceId`.
 | ------------- | ---------------------------------- | ------------------------------------ |
 | **`options`** | <code>{ deviceId: string; }</code> | - The ID of the device to switch to. |
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -668,7 +672,7 @@ Gets the ID of the currently active camera device.
 
 **Returns:** <code>Promise&lt;{ deviceId: string; }&gt;</code>
 
-**Since:** 7.4.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -682,6 +686,8 @@ getPreviewSize() => Promise<{ x: number; y: number; width: number; height: numbe
 Gets the current preview size and position.
 
 **Returns:** <code>Promise&lt;{ x: number; y: number; width: number; height: number; }&gt;</code>
+
+**Since:** 7.5.0
 
 --------------------
 
@@ -700,6 +706,8 @@ Sets the preview size and position.
 
 **Returns:** <code>Promise&lt;{ width: number; height: number; x: number; y: number; }&gt;</code>
 
+**Since:** 7.5.0
+
 --------------------
 
 
@@ -715,7 +723,7 @@ Sets the camera focus to a specific point in the preview.
 | ------------- | -------------------------------------- | -------------------- |
 | **`options`** | <code>{ x: number; y: number; }</code> | - The focus options. |
 
-**Since:** 8.1.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -726,12 +734,36 @@ Sets the camera focus to a specific point in the preview.
 addListener(eventName: "screenResize", listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
 ```
 
-| Param              | Type                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------- |
-| **`eventName`**    | <code>'screenResize'</code>                                                              |
-| **`listenerFunc`** | <code>(data: { width: number; height: number; x: number; y: number; }) =&gt; void</code> |
+Adds a listener for screen resize events.
+
+| Param              | Type                                                                                     | Description                                         |
+| ------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **`eventName`**    | <code>'screenResize'</code>                                                              | - The event name to listen for.                     |
+| **`listenerFunc`** | <code>(data: { width: number; height: number; x: number; y: number; }) =&gt; void</code> | - The function to call when the event is triggered. |
 
 **Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### addListener('orientationChange', ...)
+
+```typescript
+addListener(eventName: "orientationChange", listenerFunc: (data: { orientation: DeviceOrientation; }) => void) => Promise<PluginListenerHandle>
+```
+
+Adds a listener for orientation change events.
+
+| Param              | Type                                                                                                 | Description                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **`eventName`**    | <code>'orientationChange'</code>                                                                     | - The event name to listen for.                     |
+| **`listenerFunc`** | <code>(data: { orientation: <a href="#deviceorientation">DeviceOrientation</a>; }) =&gt; void</code> | - The function to call when the event is triggered. |
+
+**Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
+
+**Since:** 7.5.0
 
 --------------------
 
@@ -752,7 +784,7 @@ On web, this is not supported and will throw.
 
 **Returns:** <code>Promise&lt;{ success: boolean; }&gt;</code>
 
-**Since:** 8.2.0
+**Since:** 7.5.0
 
 --------------------
 
@@ -767,6 +799,21 @@ Gets the safe area insets for Android devices.
 Returns the top and bottom insets in dp and the current orientation.
 
 **Returns:** <code>Promise&lt;<a href="#safeareainsets">SafeAreaInsets</a>&gt;</code>
+
+--------------------
+
+
+### getOrientation()
+
+```typescript
+getOrientation() => Promise<{ orientation: DeviceOrientation; }>
+```
+
+Gets the current device orientation in a cross-platform format.
+
+**Returns:** <code>Promise&lt;{ orientation: <a href="#deviceorientation">DeviceOrientation</a>; }&gt;</code>
+
+**Since:** 7.5.0
 
 --------------------
 
@@ -957,6 +1004,13 @@ The available flash modes for the camera.
 #### FlashMode
 
 <code><a href="#camerapreviewflashmode">CameraPreviewFlashMode</a></code>
+
+
+#### DeviceOrientation
+
+Canonical device orientation values across platforms.
+
+<code>"portrait" | "landscape" | "landscape-left" | "landscape-right" | "portrait-upside-down" | "unknown"</code>
 
 
 ### Enums
