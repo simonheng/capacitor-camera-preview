@@ -5,6 +5,8 @@ import static android.Manifest.permission.RECORD_AUDIO;
 
 import android.Manifest;
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
+import android.view.OrientationEventListener;
 import android.location.Location;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -12,6 +14,9 @@ import android.util.Size;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import com.ahm.capacitor.camera.preview.model.CameraDevice;
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
@@ -69,6 +74,8 @@ public class CameraPreview
   private CameraXView cameraXView;
   private FusedLocationProviderClient fusedLocationClient;
   private Location lastLocation;
+  private OrientationEventListener orientationListener;
+  private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
 
   @PluginMethod
   public void start(PluginCall call) {
@@ -204,6 +211,13 @@ public class CameraPreview
         getBridge()
           .getActivity()
           .setRequestedOrientation(previousOrientationRequest);
+
+        // Disable and clear orientation listener
+        if (orientationListener != null) {
+          orientationListener.disable();
+          orientationListener = null;
+          lastOrientation = Configuration.ORIENTATION_UNDEFINED;
+        }
 
         if (cameraXView != null && cameraXView.isRunning()) {
           cameraXView.stopSession();
@@ -922,7 +936,52 @@ public class CameraPreview
         bridge.saveCall(call);
         cameraStartCallbackId = call.getCallbackId();
         cameraXView.startSession(config);
+
+        // Setup orientation listener to mirror iOS screenResize emission
+        if (orientationListener != null) {
+          lastOrientation = getContext().getResources().getConfiguration().orientation;
+          orientationListener = new OrientationEventListener(getContext()) {
+            @Override
+            public void onOrientationChanged(int orientation) {
+              if (orientation == ORIENTATION_UNKNOWN) return;
+              int current = getContext().getResources().getConfiguration().orientation;
+              if (orientation != lastOrientation) {
+                lastOrientation = current;
+                handleOrientationChange();
+              }
+            }
+          };
+          if (orientationListener.canDetectOrientation()) {
+            orientationListener.enable();
+          }
+        }
       });
+  }
+
+  private void handleOrientationChange() {
+    if (cameraXView == null || !cameraXView.isRunning()) return;
+    getBridge()
+      .getActivity()
+      .runOnUiThread(
+        () -> {
+          // Reapply current aspect ratio to recompute layout, then emit screenResize
+          String ar = cameraXView.getAspectRatio();
+          cameraXView.setAspectRatio(
+            ar,
+            null,
+            null,
+            () -> {
+              int[] bounds = cameraXView.getCurrentPreviewBounds();
+              JSObject data = new JSObject();
+              data.put("x", bounds[0]);
+              data.put("y", bounds[1]);
+              data.put("width", bounds[2]);
+              data.put("height", bounds[3]);
+              notifyListeners("screenResize", data);
+            }
+          );
+        }
+      );
   }
 
   @Override
@@ -1208,5 +1267,111 @@ public class CameraPreview
     } catch (Exception e) {
       call.reject("Failed to delete file: " + e.getMessage());
     }
+  }
+
+  @PluginMethod
+  public void getSafeAreaInsets(PluginCall call) {
+    JSObject ret = new JSObject();
+    int orientation = getContext().getResources().getConfiguration().orientation;
+
+    int topPx = 0;
+    int bottomPx = 0;
+    try {
+      View webView = getBridge().getWebView();
+      if (webView != null) {
+        DisplayMetrics metrics = getBridge().getActivity().getResources().getDisplayMetrics();
+        int screenHeight = metrics.heightPixels;
+        int[] location = new int[2];
+        webView.getLocationOnScreen(location);
+        int webViewTop = location[1];
+        int webViewBottom = webViewTop + webView.getHeight();
+        int webViewBottomGap = Math.max(0, screenHeight - webViewBottom);
+
+        // System insets (status/navigation/cutout)
+        int systemTop = 0;
+        int systemBottom = 0;
+        View decorView = getBridge().getActivity().getWindow().getDecorView();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
+        if (insets != null) {
+          Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+          Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+          systemTop = Math.max(sysBars.top, cutout.top);
+          systemBottom = Math.max(sysBars.bottom, cutout.bottom);
+        } else {
+          systemTop = getStatusBarHeightPx();
+          systemBottom = getNavigationBarHeightPx();
+        }
+
+        // Top: report the gap between screen and WebView (useful when not edge-to-edge)
+        topPx = Math.max(0, webViewTop);
+
+        // Bottom logic:
+        // - If WebView has a bottom gap equal to the system nav bar height (3-button mode),
+        //   it means layout already accounts for it -> return 0 as requested.
+        // - If WebView has no gap (edge-to-edge or overlay), return system bottom inset.
+        // - Otherwise, default to system bottom inset (avoid counting app UI like tab bars).
+        if (webViewBottomGap > 0 && approxEqualPx(webViewBottomGap, systemBottom)) {
+          bottomPx = 0; // already offset by system nav bar
+        } else if (webViewBottomGap == 0) {
+          bottomPx = systemBottom;
+        } else {
+          bottomPx = systemBottom;
+        }
+      } else {
+        // Fallback if WebView is unavailable
+        View decorView = getBridge().getActivity().getWindow().getDecorView();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
+        if (insets != null) {
+          Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+          Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+          topPx = Math.max(sysBars.top, cutout.top);
+          bottomPx = Math.max(sysBars.bottom, cutout.bottom);
+        } else {
+          topPx = getStatusBarHeightPx();
+          bottomPx = getNavigationBarHeightPx();
+        }
+      }
+    } catch (Exception e) {
+      topPx = getStatusBarHeightPx();
+      bottomPx = getNavigationBarHeightPx();
+    }
+
+    float density = getContext().getResources().getDisplayMetrics().density;
+    ret.put("orientation", orientation);
+    ret.put("top", topPx / density);
+    ret.put("bottom", bottomPx / density);
+    call.resolve(ret);
+  }
+
+  private boolean approxEqualPx(int a, int b) {
+    return Math.abs(a - b) <= 2; // within 2px tolerance
+  }
+
+  private int getStatusBarHeightPx() {
+    int result = 0;
+    int resourceId =
+      getContext().getResources().getIdentifier(
+        "status_bar_height",
+        "dimen",
+        "android"
+      );
+    if (resourceId > 0) {
+      result = getContext().getResources().getDimensionPixelSize(resourceId);
+    }
+    return result;
+  }
+
+  private int getNavigationBarHeightPx() {
+    int result = 0;
+    int resourceId =
+      getContext().getResources().getIdentifier(
+        "navigation_bar_height",
+        "dimen",
+        "android"
+      );
+    if (resourceId > 0) {
+      result = getContext().getResources().getDimensionPixelSize(resourceId);
+    }
+    return result;
   }
 }
