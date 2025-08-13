@@ -288,15 +288,17 @@ public class CameraPreview
       List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(
         getContext()
       );
+      ZoomFactors zoomFactors = cameraXView.getZoomFactors();
       boolean hasUltraWide = false;
       boolean hasTelephoto = false;
       float minUltra = 0.5f;
+
       for (CameraDevice device : devices) {
         for (com.ahm.capacitor.camera.preview.model.LensInfo lens : device.getLenses()) {
           if ("ultraWide".equals(lens.getDeviceType())) {
             hasUltraWide = true;
             // Use overall minZoom for that device as the button value to represent UW
-            minUltra = Math.min(minUltra, device.getMinZoom());
+            minUltra = Math.max(minUltra, zoomFactors.getMin());
           } else if ("telephoto".equals(lens.getDeviceType())) {
             hasTelephoto = true;
           }
@@ -332,9 +334,8 @@ public class CameraPreview
       call.reject("level parameter is required");
       return;
     }
-    Boolean autoFocus = call.getBoolean("autoFocus", true);
     try {
-      cameraXView.setZoom(level, autoFocus);
+      cameraXView.setZoom(level);
       call.resolve();
     } catch (Exception e) {
       call.reject("Failed to set zoom: " + e.getMessage());

@@ -727,7 +727,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             }
           }
 
-          setZoomInternal(initialZoom);
+          setZoom(initialZoom);
         }
 
         isRunning = true;
@@ -1634,7 +1634,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     }
   }
 
-  public void setZoom(float zoomRatio, boolean autoFocus) throws Exception {
+  public void setZoom(float zoomRatio) throws Exception {
     if (camera == null) {
       throw new Exception("Camera not initialized");
     }
@@ -1643,26 +1643,17 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     // Just let CameraX handle everything - it should automatically switch lenses
     try {
-      ListenableFuture<Void> zoomFuture = camera
-        .getCameraControl()
-        .setZoomRatio(zoomRatio);
+      ZoomFactors zoomFactors = getZoomFactors();
 
-      // Add callback to see what actually happened
-      zoomFuture.addListener(
-        () -> {
-          try {
-            zoomFuture.get();
-            Log.d(TAG, "Zoom successfully set to " + zoomRatio);
-            // Trigger autofocus after zoom if requested
-            if (autoFocus) {
-              triggerAutoFocus();
-            }
-          } catch (Exception e) {
-            Log.e(TAG, "Error setting zoom: " + e.getMessage());
-          }
-        },
-        ContextCompat.getMainExecutor(context)
-      );
+      if (zoomRatio < zoomFactors.getMin()) {
+        zoomRatio = zoomFactors.getMin();
+      } else if (zoomRatio > zoomFactors.getMax()) {
+        zoomRatio = zoomFactors.getMax();
+      }
+
+      camera.getCameraControl().setZoomRatio(zoomRatio);
+
+      // Note: autofocus is intentionally not triggered on zoom because it's done by CameraX
     } catch (Exception e) {
       Log.e(TAG, "Failed to set zoom: " + e.getMessage());
       throw e;
@@ -1821,8 +1812,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     // Set initial state for smooth animation
     focusIndicatorView.setAlpha(1f); // Start visible
-    focusIndicatorView.setScaleX(1.8f); // Start larger for scale-in effect
-    focusIndicatorView.setScaleY(1.8f);
+    focusIndicatorView.setScaleX(1.4f); // Start slightly larger for a quick scale-in
+    focusIndicatorView.setScaleY(1.4f);
     focusIndicatorView.setVisibility(View.VISIBLE);
 
     // Ensure container doesn't intercept touch events
@@ -1848,16 +1839,16 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     // Smooth scale down animation with easing (no fade needed since we start visible)
     ScaleAnimation scaleAnimation = new ScaleAnimation(
-      1.8f,
+      1.4f,
       1.0f,
-      1.8f,
+      1.4f,
       1.0f,
       Animation.RELATIVE_TO_SELF,
       0.5f,
       Animation.RELATIVE_TO_SELF,
       0.5f
     );
-    scaleAnimation.setDuration(300);
+    scaleAnimation.setDuration(120);
     scaleAnimation.setInterpolator(
       new android.view.animation.OvershootInterpolator(1.2f)
     );
@@ -1865,7 +1856,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     // Start the animation
     focusIndicatorView.startAnimation(scaleAnimation);
 
-    // Schedule fade out and removal with smoother timing
+    // Schedule fast fade out and removal
     focusIndicatorView.postDelayed(
       new Runnable() {
         @Override
@@ -1876,121 +1867,34 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             thisIndicatorView == focusIndicatorView &&
             thisAnimationId == focusIndicatorAnimationId
           ) {
-            // Smooth fade to semi-transparent
-            AlphaAnimation fadeToTransparent = new AlphaAnimation(1f, 0.4f);
-            fadeToTransparent.setDuration(400);
-            fadeToTransparent.setInterpolator(
-              new android.view.animation.AccelerateInterpolator()
-            );
-
-            fadeToTransparent.setAnimationListener(
-              new Animation.AnimationListener() {
+            focusIndicatorView.animate()
+              .alpha(0f)
+              .scaleX(0.9f)
+              .scaleY(0.9f)
+              .setDuration(180)
+              .setInterpolator(new android.view.animation.AccelerateInterpolator())
+              .withEndAction(new Runnable() {
                 @Override
-                public void onAnimationStart(Animation animation) {
-                  Log.d(TAG, "showFocusIndicator: Fade to transparent started");
-                }
-
-                @Override
-                public void onAnimationEnd(Animation animation) {
-                  Log.d(
-                    TAG,
-                    "showFocusIndicator: Fade to transparent ended, starting final fade out"
-                  );
-                  // Final smooth fade out and scale down
+                public void run() {
                   if (
                     focusIndicatorView != null &&
+                    previewContainer != null &&
                     thisIndicatorView == focusIndicatorView &&
                     thisAnimationId == focusIndicatorAnimationId
                   ) {
-                    AnimationSet finalAnimation = new AnimationSet(false);
-
-                    AlphaAnimation finalFadeOut = new AlphaAnimation(0.4f, 0f);
-                    finalFadeOut.setDuration(500);
-                    finalFadeOut.setStartOffset(300);
-                    finalFadeOut.setInterpolator(
-                      new android.view.animation.AccelerateInterpolator()
-                    );
-
-                    ScaleAnimation finalScaleDown = new ScaleAnimation(
-                      1.0f,
-                      0.9f,
-                      1.0f,
-                      0.9f,
-                      Animation.RELATIVE_TO_SELF,
-                      0.5f,
-                      Animation.RELATIVE_TO_SELF,
-                      0.5f
-                    );
-                    finalScaleDown.setDuration(500);
-                    finalScaleDown.setStartOffset(300);
-                    finalScaleDown.setInterpolator(
-                      new android.view.animation.AccelerateInterpolator()
-                    );
-
-                    finalAnimation.addAnimation(finalFadeOut);
-                    finalAnimation.addAnimation(finalScaleDown);
-
-                    finalAnimation.setAnimationListener(
-                      new Animation.AnimationListener() {
-                        @Override
-                        public void onAnimationStart(Animation animation) {
-                          Log.d(
-                            TAG,
-                            "showFocusIndicator: Final animation started"
-                          );
-                        }
-
-                        @Override
-                        public void onAnimationEnd(Animation animation) {
-                          Log.d(
-                            TAG,
-                            "showFocusIndicator: Final animation ended, removing indicator"
-                          );
-                          // Remove the focus indicator
-                          if (
-                            focusIndicatorView != null &&
-                            previewContainer != null &&
-                            thisIndicatorView == focusIndicatorView &&
-                            thisAnimationId == focusIndicatorAnimationId
-                          ) {
-                            try {
-                              focusIndicatorView.clearAnimation();
-                            } catch (Exception ignore) {}
-                            previewContainer.removeView(focusIndicatorView);
-                            focusIndicatorView = null;
-                          }
-                        }
-
-                        @Override
-                        public void onAnimationRepeat(Animation animation) {}
-                      }
-                    );
-
-                    if (
-                      thisIndicatorView == focusIndicatorView &&
-                      thisAnimationId == focusIndicatorAnimationId
-                    ) {
-                      focusIndicatorView.startAnimation(finalAnimation);
-                    }
+                    try {
+                      focusIndicatorView.clearAnimation();
+                    } catch (Exception ignore) {}
+                    previewContainer.removeView(focusIndicatorView);
+                    focusIndicatorView = null;
                   }
                 }
-
-                @Override
-                public void onAnimationRepeat(Animation animation) {}
-              }
-            );
-
-            if (
-              thisIndicatorView == focusIndicatorView &&
-              thisAnimationId == focusIndicatorAnimationId
-            ) {
-              focusIndicatorView.startAnimation(fadeToTransparent);
-            }
+              });
           }
         }
       },
-      800
-    ); // Optimal timing for smooth focus feedback
+      250
+    ); // Faster feedback
   }
 
   public static List<Size> getSupportedPictureSizes(String facing) {
@@ -2014,89 +1918,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       Log.e(TAG, "Error getting supported picture sizes", e);
     }
     return sizes;
-  }
-
-  private void setZoomInternal(float zoomRatio) {
-    if (camera != null) {
-      try {
-        float minZoom = Objects.requireNonNull(
-          camera.getCameraInfo().getZoomState().getValue()
-        ).getMinZoomRatio();
-        float maxZoom = camera
-          .getCameraInfo()
-          .getZoomState()
-          .getValue()
-          .getMaxZoomRatio();
-        float currentZoom = camera
-          .getCameraInfo()
-          .getZoomState()
-          .getValue()
-          .getZoomRatio();
-
-        Log.d(
-          TAG,
-          "setZoomInternal: Current camera range: " +
-          minZoom +
-          "-" +
-          maxZoom +
-          ", current: " +
-          currentZoom
-        );
-        Log.d(TAG, "setZoomInternal: Requesting zoom: " + zoomRatio);
-
-        // Try to set zoom directly - let CameraX handle lens switching
-        ListenableFuture<Void> zoomFuture = camera
-          .getCameraControl()
-          .setZoomRatio(zoomRatio);
-
-        zoomFuture.addListener(
-          () -> {
-            try {
-              zoomFuture.get(); // Check if zoom was successful
-              float newZoom = Objects.requireNonNull(
-                camera.getCameraInfo().getZoomState().getValue()
-              ).getZoomRatio();
-              Log.d(
-                TAG,
-                "setZoomInternal: Zoom set successfully to " +
-                newZoom +
-                " (requested: " +
-                zoomRatio +
-                ")"
-              );
-
-              // Check if CameraX switched cameras
-              String newCameraId = getCameraId(camera.getCameraInfo());
-              if (!newCameraId.equals(currentDeviceId)) {
-                currentDeviceId = newCameraId;
-                Log.d(
-                  TAG,
-                  "setZoomInternal: CameraX switched to camera: " + newCameraId
-                );
-              }
-            } catch (Exception e) {
-              Log.w(
-                TAG,
-                "setZoomInternal: Zoom operation failed: " + e.getMessage()
-              );
-              // Fallback: clamp to current camera's range
-              float clampedZoom = Math.max(
-                minZoom,
-                Math.min(zoomRatio, maxZoom)
-              );
-              camera.getCameraControl().setZoomRatio(clampedZoom);
-              Log.d(
-                TAG,
-                "setZoomInternal: Fallback - clamped zoom to " + clampedZoom
-              );
-            }
-          },
-          mainExecutor
-        );
-      } catch (Exception e) {
-        Log.e(TAG, "setZoomInternal: Error setting zoom", e);
-      }
-    }
   }
 
   public static List<String> getSupportedFlashModesStatic() {
