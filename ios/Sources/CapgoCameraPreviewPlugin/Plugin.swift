@@ -55,6 +55,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         CAPPluginMethod(name: "isRunning", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getAvailableDevices", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getZoom", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getZoomButtonValues", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setZoom", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getFlashMode", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setDeviceId", returnType: CAPPluginReturnPromise),
@@ -125,6 +126,59 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             webView.setNeedsLayout()
             webView.layoutIfNeeded()
         }
+    }
+
+    @objc func getZoomButtonValues(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+
+        // Determine current device based on active position
+        var currentDevice: AVCaptureDevice?
+        switch self.cameraController.currentCameraPosition {
+        case .front:
+            currentDevice = self.cameraController.frontCamera
+        case .rear:
+            currentDevice = self.cameraController.rearCamera
+        default:
+            currentDevice = nil
+        }
+
+        guard let device = currentDevice else {
+            call.reject("No active camera device")
+            return
+        }
+
+        var hasUltraWide = false
+        var hasWide = false
+        var hasTele = false
+
+        let lenses = device.isVirtualDevice ? device.constituentDevices : [device]
+        for lens in lenses {
+            switch lens.deviceType {
+            case .builtInUltraWideCamera:
+                hasUltraWide = true
+            case .builtInWideAngleCamera:
+                hasWide = true
+            case .builtInTelephotoCamera:
+                hasTele = true
+            default:
+                break
+            }
+        }
+
+        var values: [Float] = []
+        if hasUltraWide { values.append(0.5) }
+        if hasWide {
+            values.append(1.0)
+            values.append(2.0)
+        }
+        if hasTele { values.append(3.0) }
+
+        // Deduplicate and sort
+        let uniqueSorted = Array(Set(values)).sorted()
+        call.resolve(["values": uniqueSorted])
     }
 
     @objc func rotated() {

@@ -511,6 +511,13 @@ export interface CameraPreviewPlugin {
   }>;
 
   /**
+   * Returns zoom button values for quick switching.
+   * - iOS/Android: includes 0.5 if ultra-wide available; 1 and 2 if wide available; 3 if telephoto available
+   * - Web: unsupported
+   */
+  getZoomButtonValues(): Promise<{ values: number[] }>;
+
+  /**
    * Sets the zoom level of the camera.
    *
    * @param {{ level: number; ramp?: boolean; autoFocus?: boolean }} options - The desired zoom level. `ramp` is currently unused. `autoFocus` defaults to true.

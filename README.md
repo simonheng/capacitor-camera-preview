@@ -252,6 +252,7 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`isRunning()`](#isrunning)
 * [`getAvailableDevices()`](#getavailabledevices)
 * [`getZoom()`](#getzoom)
+* [`getZoomButtonValues()`](#getzoombuttonvalues)
 * [`setZoom(...)`](#setzoom)
 * [`getFlashMode()`](#getflashmode)
 * [`removeAllListeners()`](#removealllisteners)
@@ -578,6 +579,22 @@ Gets the current zoom state, including min/max and current lens info.
 --------------------
 
 
+### getZoomButtonValues()
+
+```typescript
+getZoomButtonValues() => Promise<{ values: number[]; }>
+```
+
+Returns zoom button values for quick switching.
+- iOS: includes 0.5 if ultra-wide available; 1 and 2 if wide available; 3 if telephoto available
+- Android: always includes 1 and 2; includes min zoom (often 0.5) if ultra-wide detected
+- Web: unsupported
+
+**Returns:** <code>Promise&lt;{ values: number[]; }&gt;</code>
+
+--------------------
+
+
 ### setZoom(...)
 
 ```typescript
@@ -705,7 +722,7 @@ Sets the camera focus to a specific point in the preview.
 ### addListener('screenResize', ...)
 
 ```typescript
-addListener(eventName: 'screenResize', listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
+addListener(eventName: "screenResize", listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
 ```
 
 | Param              | Type                                                                                     |

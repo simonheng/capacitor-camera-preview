@@ -73,9 +73,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly y = input<number | null>(null);
   public readonly width = input<number>(0);
   public readonly height = input<number>(0);
-  public readonly aspectRatio = input<'4:3' | '16:9' | undefined>(
-    undefined,
-  );
+  public readonly aspectRatio = input<'4:3' | '16:9'>('4:3');
 
   // Picture settings inputs
   public readonly pictureFormat = input<PictureFormat>('jpeg');
@@ -491,7 +489,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
       switch (current) {
         case '4:3':
-          default:
+        default:
           next = '16:9';
           break;
         case '16:9':

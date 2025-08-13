@@ -29,6 +29,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     super();
   }
 
+  async getZoomButtonValues(): Promise<{ values: number[] }> {
+    throw new Error("getZoomButtonValues not supported under the web platform");
+  }
+
   async getSupportedPictureSizes(): Promise<any> {
     throw new Error(
       "getSupportedPictureSizes not supported under the web platform",
@@ -289,7 +293,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
 
     // Set initial zoom level if specified and supported
-    if (options.initialZoomLevel !== undefined && options.initialZoomLevel !== 1.0) {
+    if (
+      options.initialZoomLevel !== undefined &&
+      options.initialZoomLevel !== 1.0
+    ) {
       // videoTrack already declared above
       if (videoTrack) {
         const capabilities = videoTrack.getCapabilities() as any;
