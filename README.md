@@ -37,7 +37,7 @@ Take into account that this will make transparent all ion-content on application
 ```
 
 If the camera preview is not displaying after applying the above styles, apply transparent background color to the root div element of the parent component
-Ex: VueJS >> App.vue component 
+Ex: VueJS >> App.vue component
 ```html
 <template>
   <ion-app id="app">
@@ -252,6 +252,7 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`isRunning()`](#isrunning)
 * [`getAvailableDevices()`](#getavailabledevices)
 * [`getZoom()`](#getzoom)
+* [`getZoomButtonValues()`](#getzoombuttonvalues)
 * [`setZoom(...)`](#setzoom)
 * [`getFlashMode()`](#getflashmode)
 * [`removeAllListeners()`](#removealllisteners)
@@ -580,6 +581,21 @@ Gets the current zoom state, including min/max and current lens info.
 --------------------
 
 
+### getZoomButtonValues()
+
+```typescript
+getZoomButtonValues() => Promise<{ values: number[]; }>
+```
+
+Returns zoom button values for quick switching.
+- iOS/Android: includes 0.5 if ultra-wide available; 1 and 2 if wide available; 3 if telephoto available
+- Web: unsupported
+
+**Returns:** <code>Promise&lt;{ values: number[]; }&gt;</code>
+
+--------------------
+
+
 ### setZoom(...)
 
 ```typescript
@@ -707,7 +723,7 @@ Sets the camera focus to a specific point in the preview.
 ### addListener('screenResize', ...)
 
 ```typescript
-addListener(eventName: 'screenResize', listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
+addListener(eventName: "screenResize", listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
 ```
 
 | Param              | Type                                                                                     |

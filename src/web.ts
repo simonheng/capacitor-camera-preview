@@ -33,6 +33,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     throw new Error("Method not implemented.");
   }
 
+  async getZoomButtonValues(): Promise<{ values: number[] }> {
+    throw new Error("getZoomButtonValues not supported under the web platform");
+  }
+
   async getSupportedPictureSizes(): Promise<any> {
     throw new Error(
       "getSupportedPictureSizes not supported under the web platform",
@@ -88,11 +92,11 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       this.videoElement.style.zIndex = "-1";
     }
 
-    // Default to 16:9 vertical (9:16 for portrait) if no aspect ratio or size specified
+    // Default to 4:3 if no aspect ratio or size specified
     const useDefaultAspectRatio =
       !options.aspectRatio && !options.width && !options.height;
     const effectiveAspectRatio =
-      options.aspectRatio || (useDefaultAspectRatio ? "16:9" : null);
+      options.aspectRatio || (useDefaultAspectRatio ? "4:3" : null);
 
     if (options.width) {
       this.videoElement.width = options.width;
@@ -293,7 +297,10 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
 
     // Set initial zoom level if specified and supported
-    if (options.initialZoomLevel && options.initialZoomLevel !== 1.0) {
+    if (
+      options.initialZoomLevel !== undefined &&
+      options.initialZoomLevel !== 1.0
+    ) {
       // videoTrack already declared above
       if (videoTrack) {
         const capabilities = videoTrack.getCapabilities() as any;
@@ -326,10 +333,14 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
     // Wait for video to be ready and get actual dimensions
     await new Promise<void>((resolve) => {
-      if (this.videoElement!.readyState >= 2) {
+      const videoEl = this.videoElement;
+      if (!videoEl) {
+        throw new Error("video element not found");
+      }
+      if (videoEl.readyState >= 2) {
         resolve();
       } else {
-        this.videoElement!.addEventListener("loadeddata", () => resolve(), {
+        videoEl.addEventListener("loadeddata", () => resolve(), {
           once: true,
         });
       }
@@ -1154,6 +1165,8 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   async deleteFile(_options: { path: string }): Promise<{ success: boolean }> {
+    // Mark parameter as intentionally unused to satisfy linter
+    void _options;
     throw new Error("deleteFile not supported under the web platform");
   }
 }

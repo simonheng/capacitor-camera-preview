@@ -1,4 +1,4 @@
-import { PluginListenerHandle } from "@capacitor/core";
+import type { PluginListenerHandle } from "@capacitor/core";
 
 export type CameraPosition = "rear" | "front";
 
@@ -524,6 +524,13 @@ export interface CameraPreviewPlugin {
   }>;
 
   /**
+   * Returns zoom button values for quick switching.
+   * - iOS/Android: includes 0.5 if ultra-wide available; 1 and 2 if wide available; 3 if telephoto available
+   * - Web: unsupported
+   */
+  getZoomButtonValues(): Promise<{ values: number[] }>;
+
+  /**
    * Sets the zoom level of the camera.
    *
    * @param {{ level: number; ramp?: boolean; autoFocus?: boolean }} options - The desired zoom level. `ramp` is currently unused. `autoFocus` defaults to true.
@@ -607,13 +614,13 @@ export interface CameraPreviewPlugin {
   setFocus(options: { x: number; y: number }): Promise<void>;
 
   addListener(
-    eventName: 'screenResize',
+    eventName: "screenResize",
     listenerFunc: (data: {
       width: number;
       height: number;
       x: number;
       y: number;
-    }) => void
+    }) => void,
   ): Promise<PluginListenerHandle>;
   /**
    * Deletes a file at the given absolute path on the device.

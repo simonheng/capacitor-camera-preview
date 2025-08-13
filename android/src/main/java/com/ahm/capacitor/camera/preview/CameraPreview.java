@@ -291,6 +291,53 @@ public class CameraPreview
   }
 
   @PluginMethod
+  public void getZoomButtonValues(PluginCall call) {
+    // Build a sorted set to dedupe and order ascending
+    java.util.Set<Double> sorted = new java.util.TreeSet<>();
+    sorted.add(1.0);
+    sorted.add(2.0);
+
+    // Try to detect ultra-wide to include its min zoom (often 0.5)
+    try {
+      List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(
+        getContext()
+      );
+      ZoomFactors zoomFactors = cameraXView.getZoomFactors();
+      boolean hasUltraWide = false;
+      boolean hasTelephoto = false;
+      float minUltra = 0.5f;
+
+      for (CameraDevice device : devices) {
+        for (com.ahm.capacitor.camera.preview.model.LensInfo lens : device.getLenses()) {
+          if ("ultraWide".equals(lens.getDeviceType())) {
+            hasUltraWide = true;
+            // Use overall minZoom for that device as the button value to represent UW
+            minUltra = Math.max(minUltra, zoomFactors.getMin());
+          } else if ("telephoto".equals(lens.getDeviceType())) {
+            hasTelephoto = true;
+          }
+        }
+      }
+      if (hasUltraWide) {
+        sorted.add((double) minUltra);
+      }
+      if (hasTelephoto) {
+        sorted.add(3.0);
+      }
+    } catch (Exception ignored) {
+      // Ignore and keep defaults
+    }
+
+    JSObject result = new JSObject();
+    JSArray values = new JSArray();
+    for (Double v : sorted) {
+      values.put(v);
+    }
+    result.put("values", values);
+    call.resolve(result);
+  }
+
+  @PluginMethod
   public void setZoom(PluginCall call) {
     if (cameraXView == null || !cameraXView.isRunning()) {
       call.reject("Camera is not running");
@@ -301,9 +348,8 @@ public class CameraPreview
       call.reject("level parameter is required");
       return;
     }
-    Boolean autoFocus = call.getBoolean("autoFocus", true);
     try {
-      cameraXView.setZoom(level, autoFocus);
+      cameraXView.setZoom(level);
       call.resolve();
     } catch (Exception e) {
       call.reject("Failed to set zoom: " + e.getMessage());
