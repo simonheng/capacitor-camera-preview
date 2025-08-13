@@ -6,11 +6,11 @@ import static android.Manifest.permission.RECORD_AUDIO;
 import android.Manifest;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.view.OrientationEventListener;
 import android.location.Location;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Size;
+import android.view.OrientationEventListener;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
@@ -997,12 +997,18 @@ public class CameraPreview
 
         // Setup orientation listener to mirror iOS screenResize emission
         if (orientationListener == null) {
-          lastOrientation = getContext().getResources().getConfiguration().orientation;
+          lastOrientation = getContext()
+            .getResources()
+            .getConfiguration()
+            .orientation;
           orientationListener = new OrientationEventListener(getContext()) {
             @Override
             public void onOrientationChanged(int orientation) {
               if (orientation == ORIENTATION_UNKNOWN) return;
-              int current = getContext().getResources().getConfiguration().orientation;
+              int current = getContext()
+                .getResources()
+                .getConfiguration()
+                .orientation;
               if (current != lastOrientation) {
                 lastOrientation = current;
                 handleOrientationChange();
@@ -1020,26 +1026,19 @@ public class CameraPreview
     if (cameraXView == null || !cameraXView.isRunning()) return;
     getBridge()
       .getActivity()
-      .runOnUiThread(
-        () -> {
-          // Reapply current aspect ratio to recompute layout, then emit screenResize
-          String ar = cameraXView.getAspectRatio();
-          cameraXView.setAspectRatio(
-            ar,
-            null,
-            null,
-            () -> {
-              int[] bounds = cameraXView.getCurrentPreviewBounds();
-              JSObject data = new JSObject();
-              data.put("x", bounds[0]);
-              data.put("y", bounds[1]);
-              data.put("width", bounds[2]);
-              data.put("height", bounds[3]);
-              notifyListeners("screenResize", data);
-            }
-          );
-        }
-      );
+      .runOnUiThread(() -> {
+        // Reapply current aspect ratio to recompute layout, then emit screenResize
+        String ar = cameraXView.getAspectRatio();
+        cameraXView.setAspectRatio(ar, null, null, () -> {
+          int[] bounds = cameraXView.getCurrentPreviewBounds();
+          JSObject data = new JSObject();
+          data.put("x", bounds[0]);
+          data.put("y", bounds[1]);
+          data.put("width", bounds[2]);
+          data.put("height", bounds[3]);
+          notifyListeners("screenResize", data);
+        });
+      });
   }
 
   @Override
@@ -1330,14 +1329,20 @@ public class CameraPreview
   @PluginMethod
   public void getSafeAreaInsets(PluginCall call) {
     JSObject ret = new JSObject();
-    int orientation = getContext().getResources().getConfiguration().orientation;
+    int orientation = getContext()
+      .getResources()
+      .getConfiguration()
+      .orientation;
 
     int topPx = 0;
     int bottomPx = 0;
     try {
       View webView = getBridge().getWebView();
       if (webView != null) {
-        DisplayMetrics metrics = getBridge().getActivity().getResources().getDisplayMetrics();
+        DisplayMetrics metrics = getBridge()
+          .getActivity()
+          .getResources()
+          .getDisplayMetrics();
         int screenHeight = metrics.heightPixels;
         int[] location = new int[2];
         webView.getLocationOnScreen(location);
@@ -1351,8 +1356,12 @@ public class CameraPreview
         View decorView = getBridge().getActivity().getWindow().getDecorView();
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
         if (insets != null) {
-          Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-          Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+          Insets sysBars = insets.getInsets(
+            WindowInsetsCompat.Type.systemBars()
+          );
+          Insets cutout = insets.getInsets(
+            WindowInsetsCompat.Type.displayCutout()
+          );
           systemTop = Math.max(sysBars.top, cutout.top);
           systemBottom = Math.max(sysBars.bottom, cutout.bottom);
         } else {
@@ -1368,7 +1377,9 @@ public class CameraPreview
         //   it means layout already accounts for it -> return 0 as requested.
         // - If WebView has no gap (edge-to-edge or overlay), return system bottom inset.
         // - Otherwise, default to system bottom inset (avoid counting app UI like tab bars).
-        if (webViewBottomGap > 0 && approxEqualPx(webViewBottomGap, systemBottom)) {
+        if (
+          webViewBottomGap > 0 && approxEqualPx(webViewBottomGap, systemBottom)
+        ) {
           bottomPx = 0; // already offset by system nav bar
         } else if (webViewBottomGap == 0) {
           bottomPx = systemBottom;
@@ -1380,8 +1391,12 @@ public class CameraPreview
         View decorView = getBridge().getActivity().getWindow().getDecorView();
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
         if (insets != null) {
-          Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-          Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+          Insets sysBars = insets.getInsets(
+            WindowInsetsCompat.Type.systemBars()
+          );
+          Insets cutout = insets.getInsets(
+            WindowInsetsCompat.Type.displayCutout()
+          );
           topPx = Math.max(sysBars.top, cutout.top);
           bottomPx = Math.max(sysBars.bottom, cutout.bottom);
         } else {
@@ -1407,12 +1422,9 @@ public class CameraPreview
 
   private int getStatusBarHeightPx() {
     int result = 0;
-    int resourceId =
-      getContext().getResources().getIdentifier(
-        "status_bar_height",
-        "dimen",
-        "android"
-      );
+    int resourceId = getContext()
+      .getResources()
+      .getIdentifier("status_bar_height", "dimen", "android");
     if (resourceId > 0) {
       result = getContext().getResources().getDimensionPixelSize(resourceId);
     }
@@ -1421,12 +1433,9 @@ public class CameraPreview
 
   private int getNavigationBarHeightPx() {
     int result = 0;
-    int resourceId =
-      getContext().getResources().getIdentifier(
-        "navigation_bar_height",
-        "dimen",
-        "android"
-      );
+    int resourceId = getContext()
+      .getResources()
+      .getIdentifier("navigation_bar_height", "dimen", "android");
     if (resourceId > 0) {
       result = getContext().getResources().getDimensionPixelSize(resourceId);
     }
