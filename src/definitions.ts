@@ -309,6 +309,19 @@ export interface CameraOpacityOptions {
 }
 
 /**
+ * Represents safe area insets on Android.
+ * Values are expressed in logical pixels (dp) to match JS layout units.
+ */
+export interface SafeAreaInsets {
+  /** Current device orientation as reported by Android configuration. */
+  orientation: number;
+  /** Top inset (e.g., status bar or cutout) in dp. */
+  top: number;
+  /** Bottom inset (e.g., navigation bar) in dp. */
+  bottom: number;
+}
+
+/**
  * The main interface for the CameraPreview plugin.
  */
 export interface CameraPreviewPlugin {
@@ -609,4 +622,19 @@ export interface CameraPreviewPlugin {
       y: number;
     }) => void,
   ): Promise<PluginListenerHandle>;
+  /**
+   * Deletes a file at the given absolute path on the device.
+   * Use this to quickly clean up temporary images created with `storeToFile`.
+   * On web, this is not supported and will throw.
+   * @since 8.2.0
+   */
+  deleteFile(options: { path: string }): Promise<{ success: boolean }>;
+
+  /**
+   * Gets the safe area insets for Android devices.
+   * Returns the top and bottom insets in dp and the current orientation.
+   *
+   * @platform android
+   */
+  getSafeAreaInsets(): Promise<SafeAreaInsets>;
 }
