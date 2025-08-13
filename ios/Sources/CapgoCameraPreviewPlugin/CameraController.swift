@@ -51,6 +51,25 @@ class CameraController: NSObject {
         // A rear multi-lens virtual camera will have a min zoom of 1.0 but support wider angles
         return device.position == .back && device.isVirtualDevice && device.constituentDevices.count > 1
     }
+
+    // Returns the display zoom multiplier introduced in iOS 18 to map between
+    // native zoom factor and the UI-displayed zoom factor. Falls back to 1.0 on
+    // older systems or if the property is unavailable.
+    func getDisplayZoomMultiplier() -> Float {
+        var multiplier: Float = 1.0
+        // Use KVC to avoid compile-time dependency on the iOS 18 SDK symbol
+        let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera
+        if #available(iOS 18.0, *), let device = device {
+            if let value = device.value(forKey: "displayVideoZoomFactorMultiplier") as? NSNumber {
+                let m = value.floatValue
+                if m > 0 { multiplier = m }
+            }
+        }
+        return multiplier
+    }
+
+    // Track whether an aspect ratio was explicitly requested
+    var requestedAspectRatio: String?
 }
 
 extension CameraController {
@@ -169,7 +188,7 @@ extension CameraController {
         self.outputsPrepared = true
     }
 
-    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float = 1.0, completionHandler: @escaping (Error?) -> Void) {
+    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, completionHandler: @escaping (Error?) -> Void) {
         print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? "nil"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? "nil"), zoom: \(initialZoomLevel)")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -196,7 +215,8 @@ extension CameraController {
                 // Configure the session
                 captureSession.beginConfiguration()
 
-                // Set aspect ratio preset
+                // Set aspect ratio preset and remember requested ratio
+                self.requestedAspectRatio = aspectRatio
                 self.configureSessionPreset(for: aspectRatio)
 
                 // Configure device inputs
@@ -253,15 +273,18 @@ extension CameraController {
         guard let captureSession = self.captureSession else { return }
 
         var targetPreset: AVCaptureSession.Preset = .high
-
         if let aspectRatio = aspectRatio {
             switch aspectRatio {
             case "16:9":
-                targetPreset = captureSession.canSetSessionPreset(.hd1920x1080) ? .hd1920x1080 : .high
+                if captureSession.canSetSessionPreset(.hd4K3840x2160) {
+                    targetPreset = .hd4K3840x2160
+                } else if captureSession.canSetSessionPreset(.hd1920x1080) {
+                    targetPreset = .hd1920x1080
+                }
             case "4:3":
-                targetPreset = captureSession.canSetSessionPreset(.photo) ? .photo : .high
+                targetPreset = captureSession.canSetSessionPreset(.high) ? .high : captureSession.sessionPreset
             default:
-                targetPreset = .high
+                targetPreset = captureSession.canSetSessionPreset(.high) ? .high : captureSession.sessionPreset
             }
         }
 
@@ -270,7 +293,7 @@ extension CameraController {
         }
     }
 
-    private func setInitialZoom(level: Float) {
+    private func setInitialZoom(level: Float?) {
         let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera
         guard let device = device else {
             print("[CameraPreview] No device available for initial zoom")
@@ -280,7 +303,12 @@ extension CameraController {
         let minZoom = device.minAvailableVideoZoomFactor
         let maxZoom = min(device.maxAvailableVideoZoomFactor, saneMaxZoomFactor)
 
-        let adjustedLevel = level
+        // Compute UI-level default = 1 * multiplier when not provided
+        let multiplier = self.getDisplayZoomMultiplier()
+        // if level is nil, it's the initial zoom
+        let uiLevel: Float = level ?? (2.0 * multiplier)
+        // Map UI/display zoom to native zoom using iOS 18+ multiplier
+        let adjustedLevel = multiplier != 1.0 ? (uiLevel / multiplier) : uiLevel
 
         guard CGFloat(adjustedLevel) >= minZoom && CGFloat(adjustedLevel) <= maxZoom else {
             print("[CameraPreview] Initial zoom level \(adjustedLevel) out of range (\(minZoom)-\(maxZoom))")
@@ -376,7 +404,8 @@ extension CameraController {
         }
 
         // Fast configuration without CATransaction overhead
-        previewLayer.videoGravity = .resizeAspectFill
+        // Use resizeAspect to avoid crop when no aspect ratio is requested; otherwise fill
+        previewLayer.videoGravity = (requestedAspectRatio == nil) ? .resizeAspect : .resizeAspectFill
         previewLayer.frame = view.bounds
 
         // Insert layer immediately (only if new)
@@ -564,6 +593,13 @@ extension CameraController {
         }
 
         let settings = AVCapturePhotoSettings()
+        // Request highest quality photo capture
+        if #available(iOS 13.0, *) {
+            settings.isHighResolutionPhotoEnabled = true
+        }
+        if #available(iOS 15.0, *) {
+            settings.photoQualityPrioritization = .balanced
+        }
 
         // Apply the current flash mode to the photo settings
         // Check if the current device supports flash
@@ -804,6 +840,7 @@ extension CameraController {
         return supportedFlashModesAsStrings
 
     }
+
     func getHorizontalFov() throws -> Float {
         var currentCamera: AVCaptureDevice?
         switch currentCameraPosition {
@@ -830,6 +867,7 @@ extension CameraController {
 
         return adjustedFov
     }
+
     func setFlashMode(flashMode: AVCaptureDevice.FlashMode) throws {
         var currentCamera: AVCaptureDevice?
         switch currentCameraPosition {
@@ -903,6 +941,7 @@ extension CameraController {
 
     func getZoom() throws -> (min: Float, max: Float, current: Float) {
         var currentCamera: AVCaptureDevice?
+
         switch currentCameraPosition {
         case .front:
             currentCamera = self.frontCamera
@@ -957,9 +996,9 @@ extension CameraController {
             self.zoomFactor = zoomLevel
 
             // Trigger autofocus after zoom if requested
-            // if autoFocus {
-            //     self.triggerAutoFocus()
-            // }
+            if autoFocus {
+                self.triggerAutoFocus()
+            }
         } catch {
             throw CameraControllerError.invalidOperation
         }
