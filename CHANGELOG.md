@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.10](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.9...7.4.0-alpha.10) (2025-08-13)
+
+
+### Features
+
+* **example-app:** remove custom aspect ratio ([3371f19](https://github.com/Cap-go/capacitor-camera-preview/commit/3371f19a87ec65e6539231e4c2f62db6bb0b0448))
+* **ios:** better zoom management ([c2810f4](https://github.com/Cap-go/capacitor-camera-preview/commit/c2810f4bbbe7805fda10d4b339fbc936e5dc0454))
+
+
+### Bug Fixes
+
+* **build:** fix blocking lint issues ([172581c](https://github.com/Cap-go/capacitor-camera-preview/commit/172581c087731cbd04644bea8a9e3d67e0be8639))
+
 ## [7.4.0-alpha.9](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.8...7.4.0-alpha.9) (2025-08-12)
 
 
