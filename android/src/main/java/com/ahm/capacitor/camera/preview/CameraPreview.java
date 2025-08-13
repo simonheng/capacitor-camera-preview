@@ -78,6 +78,26 @@ public class CameraPreview
   private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
 
   @PluginMethod
+  public void getOrientation(PluginCall call) {
+    int orientation = getContext()
+      .getResources()
+      .getConfiguration()
+      .orientation;
+    String o;
+    if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+      // We don't distinguish upside-down reliably on Android, report generic portrait
+      o = "portrait";
+    } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+      o = "landscape";
+    } else {
+      o = "unknown";
+    }
+    JSObject ret = new JSObject();
+    ret.put("orientation", o);
+    call.resolve(ret);
+  }
+
+  @PluginMethod
   public void start(PluginCall call) {
     boolean disableAudio = Boolean.TRUE.equals(
       call.getBoolean("disableAudio", true)
@@ -1037,6 +1057,23 @@ public class CameraPreview
           data.put("width", bounds[2]);
           data.put("height", bounds[3]);
           notifyListeners("screenResize", data);
+
+          // Also emit orientationChange with a unified string value
+          int current = getContext()
+            .getResources()
+            .getConfiguration()
+            .orientation;
+          String o;
+          if (current == Configuration.ORIENTATION_PORTRAIT) {
+            o = "portrait";
+          } else if (current == Configuration.ORIENTATION_LANDSCAPE) {
+            o = "landscape";
+          } else {
+            o = "unknown";
+          }
+          JSObject oData = new JSObject();
+          oData.put("orientation", o);
+          notifyListeners("orientationChange", oData);
         });
       });
   }

@@ -322,6 +322,17 @@ export interface SafeAreaInsets {
 }
 
 /**
+ * Canonical device orientation values across platforms.
+ */
+export type DeviceOrientation =
+  | "portrait"
+  | "landscape"
+  | "landscape-left"
+  | "landscape-right"
+  | "portrait-upside-down"
+  | "unknown";
+
+/**
  * The main interface for the CameraPreview plugin.
  */
 export interface CameraPreviewPlugin {
@@ -390,7 +401,8 @@ export interface CameraPreviewPlugin {
    *   - x: Optional x coordinate for positioning. If not provided, view will be auto-centered horizontally.
    *   - y: Optional y coordinate for positioning. If not provided, view will be auto-centered vertically.
    * @returns {Promise<{ width: number; height: number; x: number; y: number }>} A promise that resolves with the actual preview dimensions and position.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   setAspectRatio(options: {
     aspectRatio: "4:3" | "16:9";
@@ -407,7 +419,8 @@ export interface CameraPreviewPlugin {
    * Gets the current aspect ratio of the camera preview.
    *
    * @returns {Promise<{ aspectRatio: '4:3' | '16:9' }>} A promise that resolves with the current aspect ratio.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   getAspectRatio(): Promise<{ aspectRatio: "4:3" | "16:9" }>;
 
@@ -498,7 +511,8 @@ export interface CameraPreviewPlugin {
    * Checks if the camera preview is currently running.
    *
    * @returns {Promise<{ isRunning: boolean }>} A promise that resolves with the running state.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   isRunning(): Promise<{ isRunning: boolean }>;
 
@@ -506,7 +520,8 @@ export interface CameraPreviewPlugin {
    * Gets all available camera devices.
    *
    * @returns {Promise<{ devices: CameraDevice[] }>} A promise that resolves with the list of available camera devices.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   getAvailableDevices(): Promise<{ devices: CameraDevice[] }>;
 
@@ -514,7 +529,8 @@ export interface CameraPreviewPlugin {
    * Gets the current zoom state, including min/max and current lens info.
    *
    * @returns {Promise<{ min: number; max: number; current: number; lens: LensInfo }>} A promise that resolves with the zoom state.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   getZoom(): Promise<{
     min: number;
@@ -527,6 +543,8 @@ export interface CameraPreviewPlugin {
    * Returns zoom button values for quick switching.
    * - iOS/Android: includes 0.5 if ultra-wide available; 1 and 2 if wide available; 3 if telephoto available
    * - Web: unsupported
+   * @since 7.5.0
+   * @platform android, ios
    */
   getZoomButtonValues(): Promise<{ values: number[] }>;
 
@@ -535,7 +553,8 @@ export interface CameraPreviewPlugin {
    *
    * @param {{ level: number; ramp?: boolean; autoFocus?: boolean }} options - The desired zoom level. `ramp` is currently unused. `autoFocus` defaults to true.
    * @returns {Promise<void>} A promise that resolves when the zoom level is set.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   setZoom(options: {
     level: number;
@@ -547,14 +566,16 @@ export interface CameraPreviewPlugin {
    * Gets the current flash mode.
    *
    * @returns {Promise<{ flashMode: FlashMode }>} A promise that resolves with the current flash mode.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   getFlashMode(): Promise<{ flashMode: FlashMode }>;
 
   /**
    * Removes all registered listeners.
    *
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   removeAllListeners(): Promise<void>;
 
@@ -563,7 +584,8 @@ export interface CameraPreviewPlugin {
    *
    * @param {{ deviceId: string }} options - The ID of the device to switch to.
    * @returns {Promise<void>} A promise that resolves when the camera is switched.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   setDeviceId(options: { deviceId: string }): Promise<void>;
 
@@ -571,13 +593,16 @@ export interface CameraPreviewPlugin {
    * Gets the ID of the currently active camera device.
    *
    * @returns {Promise<{ deviceId: string }>} A promise that resolves with the current device ID.
-   * @since 7.4.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   getDeviceId(): Promise<{ deviceId: string }>;
 
   /**
    * Gets the current preview size and position.
    * @returns {Promise<{x: number, y: number, width: number, height: number}>}
+   * @since 7.5.0
+   * @platform android, ios
    */
   getPreviewSize(): Promise<{
     x: number;
@@ -589,6 +614,8 @@ export interface CameraPreviewPlugin {
    * Sets the preview size and position.
    * @param options The new position and dimensions.
    * @returns {Promise<{ width: number; height: number; x: number; y: number }>} A promise that resolves with the actual preview dimensions and position.
+   * @since 7.5.0
+   * @platform android, ios
    */
   setPreviewSize(options: {
     x?: number;
@@ -609,10 +636,19 @@ export interface CameraPreviewPlugin {
    * @param {number} options.x - The x coordinate in the preview view to focus on (0-1 normalized).
    * @param {number} options.y - The y coordinate in the preview view to focus on (0-1 normalized).
    * @returns {Promise<void>} A promise that resolves when the focus is set.
-   * @since 8.1.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   setFocus(options: { x: number; y: number }): Promise<void>;
 
+  /**
+   * Adds a listener for screen resize events.
+   * @param {string} eventName - The event name to listen for.
+   * @param {Function} listenerFunc - The function to call when the event is triggered.
+   * @returns {Promise<PluginListenerHandle>} A promise that resolves with a handle to the listener.
+   * @since 7.5.0
+   * @platform android, ios
+   */
   addListener(
     eventName: "screenResize",
     listenerFunc: (data: {
@@ -622,11 +658,25 @@ export interface CameraPreviewPlugin {
       y: number;
     }) => void,
   ): Promise<PluginListenerHandle>;
+
+  /**
+   * Adds a listener for orientation change events.
+   * @param {string} eventName - The event name to listen for.
+   * @param {Function} listenerFunc - The function to call when the event is triggered.
+   * @returns {Promise<PluginListenerHandle>} A promise that resolves with a handle to the listener.
+   * @since 7.5.0
+   * @platform android, ios
+   */
+  addListener(
+    eventName: "orientationChange",
+    listenerFunc: (data: { orientation: DeviceOrientation }) => void,
+  ): Promise<PluginListenerHandle>;
   /**
    * Deletes a file at the given absolute path on the device.
    * Use this to quickly clean up temporary images created with `storeToFile`.
    * On web, this is not supported and will throw.
-   * @since 8.2.0
+   * @since 7.5.0
+   * @platform android, ios
    */
   deleteFile(options: { path: string }): Promise<{ success: boolean }>;
 
@@ -637,4 +687,11 @@ export interface CameraPreviewPlugin {
    * @platform android
    */
   getSafeAreaInsets(): Promise<SafeAreaInsets>;
+
+  /**
+   * Gets the current device orientation in a cross-platform format.
+   * @since 7.5.0
+   * @platform android, ios
+   */
+  getOrientation(): Promise<{ orientation: DeviceOrientation }>;
 }

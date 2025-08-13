@@ -67,7 +67,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         CAPPluginMethod(name: "getPreviewSize", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPreviewSize", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setFocus", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "deleteFile", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "deleteFile", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getOrientation", returnType: CAPPluginReturnPromise)
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -1694,6 +1695,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         DispatchQueue.main.async {
             let result = self.rawSetAspectRatio()
             self.notifyListeners("screenResize", data: result)
+            self.notifyListeners("orientationChange", data: ["orientation": self.currentOrientationString()])
         }
     }
 
@@ -1722,5 +1724,32 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         } catch {
             call.reject("Failed to delete file: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Orientation
+    private func currentOrientationString() -> String {
+        // Prefer interface orientation for UI-consistent results
+        let orientation: UIInterfaceOrientation? = {
+            if Thread.isMainThread {
+                return (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.interfaceOrientation
+            } else {
+                var value: UIInterfaceOrientation?
+                DispatchQueue.main.sync {
+                    value = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.interfaceOrientation
+                }
+                return value
+            }
+        }()
+        switch orientation {
+        case .portrait: return "portrait"
+        case .portraitUpsideDown: return "portrait-upside-down"
+        case .landscapeLeft: return "landscape-left"
+        case .landscapeRight: return "landscape-right"
+        default: return "unknown"
+        }
+    }
+
+    @objc func getOrientation(_ call: CAPPluginCall) {
+        call.resolve(["orientation": self.currentOrientationString()])
     }
 }

@@ -8,6 +8,7 @@ import type {
   CameraPreviewPictureOptions,
   CameraPreviewPlugin,
   CameraSampleOptions,
+  DeviceOrientation,
   GridMode,
   FlashMode,
   LensInfo,
@@ -25,9 +26,55 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   private currentDeviceId: string | null = null;
   private videoElement: HTMLVideoElement | null = null;
   private isStarted = false;
+  private orientationListenerBound = false;
 
   constructor() {
     super();
+  }
+  private getCurrentOrientation(): DeviceOrientation {
+    try {
+      const so: any = (screen as any).orientation;
+      const type = so?.type || so?.mozOrientation || so?.msOrientation;
+      if (typeof type === "string") {
+        if (type.includes("portrait-primary")) return "portrait";
+        if (type.includes("portrait-secondary")) return "portrait-upside-down";
+        if (type.includes("landscape-primary")) return "landscape-left";
+        if (type.includes("landscape-secondary")) return "landscape-right";
+        if (type.includes("landscape")) return "landscape";
+        if (type.includes("portrait")) return "portrait";
+      }
+      const angle = (window as any).orientation;
+      if (typeof angle === "number") {
+        if (angle === 0) return "portrait";
+        if (angle === 180) return "portrait-upside-down";
+        if (angle === 90) return "landscape-right";
+        if (angle === -90) return "landscape-left";
+        if (angle === 270) return "landscape-left";
+      }
+      if (window.matchMedia("(orientation: portrait)")?.matches) {
+        return "portrait";
+      }
+      if (window.matchMedia("(orientation: landscape)")?.matches) {
+        return "landscape";
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return "unknown";
+  }
+  private ensureOrientationListener() {
+    if (this.orientationListenerBound) return;
+    const emit = () => {
+      this.notifyListeners("orientationChange", {
+        orientation: this.getCurrentOrientation(),
+      });
+    };
+    window.addEventListener("orientationchange", emit);
+    window.addEventListener("resize", emit);
+    this.orientationListenerBound = true;
+  }
+  async getOrientation(): Promise<{ orientation: DeviceOrientation }> {
+    return { orientation: this.getCurrentOrientation() };
   }
   getSafeAreaInsets(): Promise<SafeAreaInsets> {
     throw new Error("Method not implemented.");
@@ -330,6 +377,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
 
     this.isStarted = true;
+    this.ensureOrientationListener();
 
     // Wait for video to be ready and get actual dimensions
     await new Promise<void>((resolve) => {
