@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.18](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.17...7.4.0-alpha.18) (2025-08-13)
+
+
+### Features
+
+* add getOrientation method and emit orientationChange event in CameraPreview plugin for Android and iOS ([866b7ce](https://github.com/Cap-go/capacitor-camera-preview/commit/866b7cebf40d6e5744d71a08891688e6f6980bbd))
+
 ## [7.4.0-alpha.17](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.16...7.4.0-alpha.17) (2025-08-13)
 
 ## [7.4.0-alpha.16](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.15...7.4.0-alpha.16) (2025-08-13)
