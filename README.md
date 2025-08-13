@@ -705,7 +705,7 @@ Sets the camera focus to a specific point in the preview.
 ### addListener('screenResize', ...)
 
 ```typescript
-addListener(eventName: 'screenResize', listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
+addListener(eventName: "screenResize", listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
 ```
 
 | Param              | Type                                                                                     |
