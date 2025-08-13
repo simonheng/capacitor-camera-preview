@@ -262,6 +262,7 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`setFocus(...)`](#setfocus)
 * [`addListener('screenResize', ...)`](#addlistenerscreenresize-)
 * [`deleteFile(...)`](#deletefile)
+* [`getSafeAreaInsets()`](#getsafeareainsets)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 * [Enums](#enums)
@@ -740,6 +741,20 @@ On web, this is not supported and will throw.
 --------------------
 
 
+### getSafeAreaInsets()
+
+```typescript
+getSafeAreaInsets() => Promise<SafeAreaInsets>
+```
+
+Gets the safe area insets for Android devices.
+Returns the top and bottom insets in dp and the current orientation.
+
+**Returns:** <code>Promise&lt;<a href="#safeareainsets">SafeAreaInsets</a>&gt;</code>
+
+--------------------
+
+
 ### Interfaces
 
 
@@ -878,6 +893,18 @@ Represents the detailed information of the currently active lens.
 | Prop         | Type                                      |
 | ------------ | ----------------------------------------- |
 | **`remove`** | <code>() =&gt; Promise&lt;void&gt;</code> |
+
+
+#### SafeAreaInsets
+
+Represents safe area insets on Android.
+Values are expressed in logical pixels (dp) to match JS layout units.
+
+| Prop              | Type                | Description                                                      |
+| ----------------- | ------------------- | ---------------------------------------------------------------- |
+| **`orientation`** | <code>number</code> | Current device orientation as reported by Android configuration. |
+| **`top`**         | <code>number</code> | Top inset (e.g., status bar or cutout) in dp.                    |
+| **`bottom`**      | <code>number</code> | Bottom inset (e.g., navigation bar) in dp.                       |
 
 
 ### Type Aliases

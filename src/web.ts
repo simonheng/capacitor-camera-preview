@@ -11,6 +11,7 @@ import type {
   GridMode,
   FlashMode,
   LensInfo,
+  SafeAreaInsets,
 } from "./definitions";
 import { DeviceType } from "./definitions";
 
@@ -27,6 +28,9 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
 
   constructor() {
     super();
+  }
+  getSafeAreaInsets(): Promise<SafeAreaInsets> {
+    throw new Error("Method not implemented.");
   }
 
   async getSupportedPictureSizes(): Promise<any> {
