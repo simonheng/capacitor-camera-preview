@@ -229,6 +229,10 @@ public class CameraPreview
 
   @PluginMethod
   public void getSupportedFlashModes(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
     List<String> supportedFlashModes = cameraXView.getSupportedFlashModes();
     JSArray jsonFlashModes = new JSArray();
     for (String mode : supportedFlashModes) {
@@ -282,6 +286,10 @@ public class CameraPreview
 
   @PluginMethod
   public void getZoom(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
     ZoomFactors zoomFactors = cameraXView.getZoomFactors();
     JSObject result = new JSObject();
     result.put("min", zoomFactors.getMin());
@@ -292,6 +300,10 @@ public class CameraPreview
 
   @PluginMethod
   public void getZoomButtonValues(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
     // Build a sorted set to dedupe and order ascending
     java.util.Set<Double> sorted = new java.util.TreeSet<>();
     sorted.add(1.0);
@@ -984,14 +996,14 @@ public class CameraPreview
         cameraXView.startSession(config);
 
         // Setup orientation listener to mirror iOS screenResize emission
-        if (orientationListener != null) {
+        if (orientationListener == null) {
           lastOrientation = getContext().getResources().getConfiguration().orientation;
           orientationListener = new OrientationEventListener(getContext()) {
             @Override
             public void onOrientationChanged(int orientation) {
               if (orientation == ORIENTATION_UNKNOWN) return;
               int current = getContext().getResources().getConfiguration().orientation;
-              if (orientation != lastOrientation) {
+              if (current != lastOrientation) {
                 lastOrientation = current;
                 handleOrientationChange();
               }
