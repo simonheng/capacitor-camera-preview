@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.11](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.10...7.4.0-alpha.11) (2025-08-13)
+
+
+### Features
+
+* expose zoom button values based on physical cameras ([ce1ffe1](https://github.com/Cap-go/capacitor-camera-preview/commit/ce1ffe123f8f7fb42dd21c24750ca8101f81a7a3))
+
 ## [7.4.0-alpha.10](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.9...7.4.0-alpha.10) (2025-08-13)
 
 
