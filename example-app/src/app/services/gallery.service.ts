@@ -22,7 +22,7 @@ export class GalleryService {
     ) {
       // file path or uri -> convert for <img> usage
       const base64 = await this.#cameraViewService.getBase64FromFilePath(photo);
-      src = `data:image/jpeg;base64,${base64}`
+      src = `data:image/jpeg;base64,${base64}`;
       await this.#cameraViewService.deleteFile(photo);
     } else {
       // assume base64 payload

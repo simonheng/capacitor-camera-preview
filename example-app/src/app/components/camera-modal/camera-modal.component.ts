@@ -73,7 +73,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   public readonly y = input<number | null>(null);
   public readonly width = input<number>(0);
   public readonly height = input<number>(0);
-  public readonly aspectRatio = input<'4:3' | '16:9' | 'custom' | undefined>(
+  public readonly aspectRatio = input<'4:3' | '16:9' | undefined>(
     undefined,
   );
 
@@ -120,9 +120,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Camera switching functionality
   protected readonly availableCameras = signal<CameraDevice[]>([]);
   protected readonly selectedCameraIndex = signal<number>(0);
-  protected readonly currentAspectRatio = signal<'4:3' | '16:9' | 'custom'>(
-    'custom',
-  );
+  protected readonly currentAspectRatio = signal<'4:3' | '16:9'>('4:3');
   protected readonly currentGridMode = signal<GridMode>('none');
   protected readonly showOverlay = signal<boolean>(true);
 
@@ -283,20 +281,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       startOptions.y = this.y();
     }
 
-    // Initialize aspect ratio based on input or custom size usage
+    // Initialize aspect ratio based on input
     if (this.aspectRatio()) {
       this.currentAspectRatio.set(this.aspectRatio()!);
-    } else if (this.isUsingCustomSize()) {
-      this.currentAspectRatio.set('custom');
     }
 
-    // Only set width/height if provided, otherwise use aspectRatio
-    if (this.width() > 0 || this.height() > 0) {
-      startOptions.width = this.width();
-      startOptions.height = this.height();
-    } else if (this.currentAspectRatio() !== 'custom') {
-      startOptions.aspectRatio = this.currentAspectRatio();
-    }
+    startOptions.aspectRatio = this.currentAspectRatio();
 
     try {
       const nativeResult = await this.#cameraViewService.start(startOptions);
@@ -390,21 +380,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         captureOptions = { ...captureOptions, ...{ format } };
       }
 
-      if (this.useCustomSize()) {
-        captureOptions = {
-          ...captureOptions,
-          ...{
-            width: this.pictureWidth(),
-            height: this.pictureHeight(),
-          },
-        };
-      } else if (this.currentAspectRatio() !== 'custom') {
-        // Use aspectRatio for capture when not using custom size
-        captureOptions = {
-          ...captureOptions,
-          aspectRatio: this.currentAspectRatio(),
-        };
-      }
+      captureOptions = {
+        ...captureOptions,
+        aspectRatio: this.currentAspectRatio(),
+      };
 
       const { value, exif } = await this.#cameraViewService.capture(
         quality,
@@ -416,10 +395,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         exif: exif,
         options: {
           ...captureOptions,
-          actualAspectRatio:
-            this.currentAspectRatio() !== 'custom' && !this.useCustomSize()
-              ? this.currentAspectRatio()
-              : undefined,
+          actualAspectRatio: this.currentAspectRatio(),
         },
         type: 'capture',
       });
@@ -511,17 +487,14 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected async toggleAspectRatio(): Promise<void> {
     try {
       const current = this.currentAspectRatio();
-      let next: '4:3' | '16:9' | 'custom';
+      let next: '4:3' | '16:9';
 
       switch (current) {
         case '4:3':
+          default:
           next = '16:9';
           break;
         case '16:9':
-          next = 'custom';
-          break;
-        case 'custom':
-        default:
           next = '4:3';
           break;
       }
@@ -529,23 +502,20 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       this.currentAspectRatio.set(next);
 
       // Instead of restarting camera, just apply the new aspect ratio
-      if (next !== 'custom') {
-        const nativeResult = await this.#cameraViewService.setAspectRatio(next);
+      const nativeResult = await this.#cameraViewService.setAspectRatio(next);
 
-        // Update red boundary overlay with new preview size after aspect ratio change
-        const newSize = await this.#cameraViewService.getPreviewSize();
-        this.currentPreviewX.set(newSize.x);
-        this.currentPreviewY.set(newSize.y);
-        this.currentPreviewWidth.set(newSize.width);
-        this.currentPreviewHeight.set(newSize.height);
+      // Update red boundary overlay with new preview size after aspect ratio change
+      const newSize = await this.#cameraViewService.getPreviewSize();
+      this.currentPreviewX.set(newSize.x);
+      this.currentPreviewY.set(newSize.y);
+      this.currentPreviewWidth.set(newSize.width);
+      this.currentPreviewHeight.set(newSize.height);
 
-        // Update blue boundary overlay signals (native returned)
-        this.nativePreviewX.set(nativeResult.x);
-        this.nativePreviewY.set(nativeResult.y);
-        this.nativePreviewWidth.set(nativeResult.width);
-        this.nativePreviewHeight.set(nativeResult.height);
-      }
-      // For custom, we don't change anything - keep current size as is
+      // Update blue boundary overlay signals (native returned)
+      this.nativePreviewX.set(nativeResult.x);
+      this.nativePreviewY.set(nativeResult.y);
+      this.nativePreviewWidth.set(nativeResult.width);
+      this.nativePreviewHeight.set(nativeResult.height);
     } catch (error) {
       console.error('Failed to toggle aspect ratio', error);
     }
