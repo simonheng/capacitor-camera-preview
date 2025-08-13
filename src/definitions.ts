@@ -594,12 +594,12 @@ export interface CameraPreviewPlugin {
   setFocus(options: { x: number; y: number }): Promise<void>;
 
   addListener(
-    eventName: 'screenResize',
+    eventName: "screenResize",
     listenerFunc: (data: {
       width: number;
       height: number;
       x: number;
       y: number;
-    }) => void
+    }) => void,
   ): Promise<PluginListenerHandle>;
 }

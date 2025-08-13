@@ -84,11 +84,11 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
       this.videoElement.style.zIndex = "-1";
     }
 
-    // Default to 16:9 vertical (9:16 for portrait) if no aspect ratio or size specified
+    // Default to 4:3 if no aspect ratio or size specified
     const useDefaultAspectRatio =
       !options.aspectRatio && !options.width && !options.height;
     const effectiveAspectRatio =
-      options.aspectRatio || (useDefaultAspectRatio ? "16:9" : null);
+      options.aspectRatio || (useDefaultAspectRatio ? "4:3" : null);
 
     if (options.width) {
       this.videoElement.width = options.width;
@@ -289,7 +289,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
 
     // Set initial zoom level if specified and supported
-    if (options.initialZoomLevel && options.initialZoomLevel !== 1.0) {
+    if (options.initialZoomLevel !== undefined && options.initialZoomLevel !== 1.0) {
       // videoTrack already declared above
       if (videoTrack) {
         const capabilities = videoTrack.getCapabilities() as any;
