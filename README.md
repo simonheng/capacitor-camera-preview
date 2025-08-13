@@ -586,8 +586,7 @@ getZoomButtonValues() => Promise<{ values: number[]; }>
 ```
 
 Returns zoom button values for quick switching.
-- iOS: includes 0.5 if ultra-wide available; 1 and 2 if wide available; 3 if telephoto available
-- Android: always includes 1 and 2; includes min zoom (often 0.5) if ultra-wide detected
+- iOS/Android: includes 0.5 if ultra-wide available; 1 and 2 if wide available; 3 if telephoto available
 - Web: unsupported
 
 **Returns:** <code>Promise&lt;{ values: number[]; }&gt;</code>
