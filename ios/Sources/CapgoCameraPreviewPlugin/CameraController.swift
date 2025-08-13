@@ -272,7 +272,7 @@ extension CameraController {
     private func configureSessionPreset(for aspectRatio: String?) {
         guard let captureSession = self.captureSession else { return }
 
-        var targetPreset: AVCaptureSession.Preset = .high
+        var targetPreset: AVCaptureSession.Preset = .photo
         if let aspectRatio = aspectRatio {
             switch aspectRatio {
             case "16:9":
@@ -282,9 +282,21 @@ extension CameraController {
                     targetPreset = .hd1920x1080
                 }
             case "4:3":
-                targetPreset = captureSession.canSetSessionPreset(.high) ? .high : captureSession.sessionPreset
+                if captureSession.canSetSessionPreset(.photo) {
+                    targetPreset = .photo
+                } else if captureSession.canSetSessionPreset(.high) {
+                    targetPreset = .high
+                } else {
+                    targetPreset = captureSession.sessionPreset
+                }
             default:
-                targetPreset = captureSession.canSetSessionPreset(.high) ? .high : captureSession.sessionPreset
+                if captureSession.canSetSessionPreset(.photo) {
+                    targetPreset = .photo
+                } else if captureSession.canSetSessionPreset(.high) {
+                    targetPreset = .high
+                } else {
+                    targetPreset = captureSession.sessionPreset
+                }
             }
         }
 

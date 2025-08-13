@@ -1652,7 +1652,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       }
 
       camera.getCameraControl().setZoomRatio(zoomRatio);
-
       // Note: autofocus is intentionally not triggered on zoom because it's done by CameraX
     } catch (Exception e) {
       Log.e(TAG, "Failed to set zoom: " + e.getMessage());
@@ -1867,29 +1866,34 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             thisIndicatorView == focusIndicatorView &&
             thisAnimationId == focusIndicatorAnimationId
           ) {
-            focusIndicatorView.animate()
+            focusIndicatorView
+              .animate()
               .alpha(0f)
               .scaleX(0.9f)
               .scaleY(0.9f)
               .setDuration(180)
-              .setInterpolator(new android.view.animation.AccelerateInterpolator())
-              .withEndAction(new Runnable() {
-                @Override
-                public void run() {
-                  if (
-                    focusIndicatorView != null &&
-                    previewContainer != null &&
-                    thisIndicatorView == focusIndicatorView &&
-                    thisAnimationId == focusIndicatorAnimationId
-                  ) {
-                    try {
-                      focusIndicatorView.clearAnimation();
-                    } catch (Exception ignore) {}
-                    previewContainer.removeView(focusIndicatorView);
-                    focusIndicatorView = null;
+              .setInterpolator(
+                new android.view.animation.AccelerateInterpolator()
+              )
+              .withEndAction(
+                new Runnable() {
+                  @Override
+                  public void run() {
+                    if (
+                      focusIndicatorView != null &&
+                      previewContainer != null &&
+                      thisIndicatorView == focusIndicatorView &&
+                      thisAnimationId == focusIndicatorAnimationId
+                    ) {
+                      try {
+                        focusIndicatorView.clearAnimation();
+                      } catch (Exception ignore) {}
+                      previewContainer.removeView(focusIndicatorView);
+                      focusIndicatorView = null;
+                    }
                   }
                 }
-              });
+              );
           }
         }
       },

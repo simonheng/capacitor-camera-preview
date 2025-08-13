@@ -841,7 +841,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                         result["value"] = base64Image
                         result["exif"] = exifData
 
-                        print("[CameraPreview] Resolving capture call")
+                        print("[CameraPreview] base64 - Resolving capture call")
                         call.resolve(result)
                     } else {
                         do {
@@ -850,7 +850,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                             var result = JSObject()
                             result["value"] = fileUrl.absoluteString
                             result["exif"] = exifData
-                            print("[CameraPreview] Resolving capture call")
+                            print("[CameraPreview] filePath - Resolving capture call")
                             call.resolve(result)
                         } catch {
                             call.reject("Error writing image to file")
