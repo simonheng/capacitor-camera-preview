@@ -170,16 +170,60 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
 
         var values: [Float] = []
-        if hasUltraWide { values.append(0.5) }
+        if hasUltraWide {
+            values.append(0.5)
+        }
         if hasWide {
             values.append(1.0)
-            values.append(2.0)
+            if self.isProModelSupportingOptical2x() {
+                values.append(2.0)
+            }
         }
-        if hasTele { values.append(3.0) }
+        if hasTele {
+            // Use the virtual device's switch-over zoom factors when available
+            let displayMultiplier = self.cameraController.getDisplayZoomMultiplier()
+            var teleStep: Float
+
+            if #available(iOS 13.0, *) {
+                let switchFactors = device.virtualDeviceSwitchOverVideoZoomFactors
+                if !switchFactors.isEmpty {
+                    // Choose the highest switch-over factor (typically the wide->tele threshold)
+                    let maxSwitch = switchFactors.map { $0.floatValue }.max() ?? Float(device.maxAvailableVideoZoomFactor)
+                    teleStep = maxSwitch * displayMultiplier
+                } else {
+                    teleStep = Float(device.maxAvailableVideoZoomFactor) * displayMultiplier
+                }
+            } else {
+                teleStep = Float(device.maxAvailableVideoZoomFactor) * displayMultiplier
+            }
+            values.append(teleStep)
+        }
 
         // Deduplicate and sort
         let uniqueSorted = Array(Set(values)).sorted()
         call.resolve(["values": uniqueSorted])
+    }
+
+    private func isProModelSupportingOptical2x() -> Bool {
+        // Detects iPhone 14 Pro/Pro Max, 15 Pro/Pro Max, and 16 Pro/Pro Max
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let mirror = Mirror(reflecting: systemInfo.machine)
+        let identifier = mirror.children.reduce("") { partialResult, element in
+            guard let value = element.value as? Int8, value != 0 else { return partialResult }
+            return partialResult + String(UnicodeScalar(UInt8(value)))
+        }
+
+        // Known identifiers: 14 Pro (iPhone15,2), 14 Pro Max (iPhone15,3),
+        // 15 Pro (iPhone16,1), 15 Pro Max (iPhone16,2),
+        // 16 Pro (iPhone17,1), 16 Pro Max (iPhone17,2),
+        // 17 Pro (iPhone18,1), 17 Pro Max (iPhone18,2)
+        let supportedIdentifiers: Set<String> = [
+            "iPhone15,2", "iPhone15,3", // 14 Pro / 14 Pro Max
+            "iPhone16,1", "iPhone16,2", // 15 Pro / 15 Pro Max
+            "iPhone17,1", "iPhone17,2", // 16 Pro / 16 Pro Max
+        ]
+        return supportedIdentifiers.contains(identifier)
     }
 
     @objc func rotated() {
