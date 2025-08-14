@@ -135,6 +135,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     return isRunning;
   }
 
+  public View getPreviewContainer() {
+    return previewContainer;
+  }
+
   private void saveImageToGallery(byte[] data) {
     try {
       // Detect image format from byte array header
@@ -267,6 +271,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     // Ensure container can receive touch events
     previewContainer.setClickable(true);
     previewContainer.setFocusable(true);
+
+    // Disable any potential drawing artifacts that might cause 1px offset
+    previewContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+    // Ensure no clip bounds that might cause visual offset
+    previewContainer.setClipChildren(false);
+    previewContainer.setClipToPadding(false);
 
     // Create and setup the preview view
     previewView = new PreviewView(context);
@@ -3353,10 +3364,19 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     int webViewTopInset = getWebViewTopInset();
     int webViewLeftInset = getWebViewLeftInset();
 
-    int x = Math.max(0, (int) ((actualX - webViewLeftInset) / pixelRatio));
-    int y = Math.max(0, (int) ((actualY - webViewTopInset) / pixelRatio));
-    int width = (int) (actualWidth / pixelRatio);
-    int height = (int) (actualHeight / pixelRatio);
+    // Use proper rounding strategy to avoid gaps:
+    // - For positions (x, y): floor to avoid gaps at top/left
+    // - For dimensions (width, height): ceil to avoid gaps at bottom/right
+    int x = Math.max(
+      0,
+      (int) Math.ceil((actualX - webViewLeftInset) / pixelRatio)
+    );
+    int y = Math.max(
+      0,
+      (int) Math.ceil((actualY - webViewTopInset) / pixelRatio)
+    );
+    int width = (int) Math.floor(actualWidth / pixelRatio);
+    int height = (int) Math.floor(actualHeight / pixelRatio);
 
     return new int[] { x, y, width, height };
   }

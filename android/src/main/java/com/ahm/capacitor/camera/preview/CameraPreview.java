@@ -1281,11 +1281,116 @@ public class CameraPreview
       Log.d("CameraPreview", "12. PIXEL RATIO - " + pixelRatio);
       Log.d("CameraPreview", "========================");
 
+      // Calculate logical values with proper rounding to avoid sub-pixel issues
+      double logicalWidth = width / pixelRatio;
+      double logicalHeight = height / pixelRatio;
+      double logicalX = x / pixelRatio;
+      double logicalY = relativeY / pixelRatio;
+
+      // Log exact calculations to debug one-pixel difference
+      Log.d("CameraPreview", "========================");
+      Log.d("CameraPreview", "FINAL POSITION CALCULATIONS:");
+      Log.d(
+        "CameraPreview",
+        "Pixel values: x=" +
+        x +
+        ", y=" +
+        relativeY +
+        ", width=" +
+        width +
+        ", height=" +
+        height
+      );
+      Log.d("CameraPreview", "Pixel ratio: " + pixelRatio);
+      Log.d(
+        "CameraPreview",
+        "Logical values (exact): x=" +
+        logicalX +
+        ", y=" +
+        logicalY +
+        ", width=" +
+        logicalWidth +
+        ", height=" +
+        logicalHeight
+      );
+      Log.d(
+        "CameraPreview",
+        "Logical values (rounded): x=" +
+        Math.round(logicalX) +
+        ", y=" +
+        Math.round(logicalY) +
+        ", width=" +
+        Math.round(logicalWidth) +
+        ", height=" +
+        Math.round(logicalHeight)
+      );
+
+      // Check if previewContainer has any padding or margin that might cause offset
+      if (cameraXView != null) {
+        View previewContainer = cameraXView.getPreviewContainer();
+        if (previewContainer != null) {
+          Log.d(
+            "CameraPreview",
+            "PreviewContainer padding: left=" +
+            previewContainer.getPaddingLeft() +
+            ", top=" +
+            previewContainer.getPaddingTop() +
+            ", right=" +
+            previewContainer.getPaddingRight() +
+            ", bottom=" +
+            previewContainer.getPaddingBottom()
+          );
+          ViewGroup.LayoutParams params = previewContainer.getLayoutParams();
+          if (params instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams marginParams =
+              (ViewGroup.MarginLayoutParams) params;
+            Log.d(
+              "CameraPreview",
+              "PreviewContainer margins: left=" +
+              marginParams.leftMargin +
+              ", top=" +
+              marginParams.topMargin +
+              ", right=" +
+              marginParams.rightMargin +
+              ", bottom=" +
+              marginParams.bottomMargin
+            );
+          }
+        }
+      }
+      Log.d("CameraPreview", "========================");
+
       JSObject result = new JSObject();
-      result.put("width", width / pixelRatio);
-      result.put("height", height / pixelRatio);
-      result.put("x", x / pixelRatio);
-      result.put("y", relativeY / pixelRatio);
+      // Return values with proper rounding to avoid gaps
+      // For positions (x, y): floor to avoid gaps at top/left
+      // For dimensions (width, height): ceil to avoid gaps at bottom/right
+      result.put("width", Math.floor(logicalWidth));
+      result.put("height", Math.floor(logicalHeight));
+      result.put("x", Math.ceil(logicalX));
+      result.put("y", Math.ceil(logicalY));
+
+      // Log what we're returning
+      Log.d(
+        "CameraPreview",
+        "Returning to JS - x: " +
+        Math.ceil(logicalX) +
+        " (from " +
+        logicalX +
+        "), y: " +
+        Math.ceil(logicalY) +
+        " (from " +
+        logicalY +
+        "), width: " +
+        Math.floor(logicalWidth) +
+        " (from " +
+        logicalWidth +
+        "), height: " +
+        Math.floor(logicalHeight) +
+        " (from " +
+        logicalHeight +
+        ")"
+      );
+
       call.resolve(result);
       bridge.releaseCall(call);
       cameraStartCallbackId = null; // Prevent re-use
@@ -1391,10 +1496,16 @@ public class CameraPreview
     float pixelRatio = metrics.density;
 
     JSObject ret = new JSObject();
-    ret.put("x", cameraXView.getPreviewX() / pixelRatio);
-    ret.put("y", cameraXView.getPreviewY() / pixelRatio);
-    ret.put("width", cameraXView.getPreviewWidth() / pixelRatio);
-    ret.put("height", cameraXView.getPreviewHeight() / pixelRatio);
+    // Use same rounding strategy as start method
+    double x = cameraXView.getPreviewX() / pixelRatio;
+    double y = cameraXView.getPreviewY() / pixelRatio;
+    double width = cameraXView.getPreviewWidth() / pixelRatio;
+    double height = cameraXView.getPreviewHeight() / pixelRatio;
+
+    ret.put("x", Math.ceil(x));
+    ret.put("y", Math.ceil(y));
+    ret.put("width", Math.floor(width));
+    ret.put("height", Math.floor(height));
     call.resolve(ret);
   }
 
