@@ -221,7 +221,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         let supportedIdentifiers: Set<String> = [
             "iPhone15,2", "iPhone15,3", // 14 Pro / 14 Pro Max
             "iPhone16,1", "iPhone16,2", // 15 Pro / 15 Pro Max
-            "iPhone17,1", "iPhone17,2", // 16 Pro / 16 Pro Max
+            "iPhone17,1", "iPhone17,2" // 16 Pro / 16 Pro Max
         ]
         return supportedIdentifiers.contains(identifier)
     }
