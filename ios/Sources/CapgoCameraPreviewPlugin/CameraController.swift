@@ -504,6 +504,33 @@ extension CameraController {
         dataOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
         photoOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
     }
+    
+    private func setDefaultZoomAfterFlip() {
+        let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera
+        guard let device = device else {
+            print("[CameraPreview] No device available for default zoom after flip")
+            return
+        }
+        
+        // Set zoom to 1.0x in UI terms, accounting for display multiplier
+        let multiplier = self.getDisplayZoomMultiplier()
+        let targetUIZoom: Float = 1.0  // We want 1.0x in the UI
+        let nativeZoom = multiplier != 1.0 ? (targetUIZoom / multiplier) : targetUIZoom
+        
+        let minZoom = device.minAvailableVideoZoomFactor
+        let maxZoom = min(device.maxAvailableVideoZoomFactor, saneMaxZoomFactor)
+        let clampedZoom = max(minZoom, min(CGFloat(nativeZoom), maxZoom))
+        
+        do {
+            try device.lockForConfiguration()
+            device.videoZoomFactor = clampedZoom
+            device.unlockForConfiguration()
+            self.zoomFactor = clampedZoom
+            print("[CameraPreview] Set default zoom after flip: UI=\(targetUIZoom)x, native=\(clampedZoom), multiplier=\(multiplier)")
+        } catch {
+            print("[CameraPreview] Failed to set default zoom after flip: \(error)")
+        }
+    }
 
     func switchCameras() throws {
         guard let currentCameraPosition = currentCameraPosition,
@@ -594,6 +621,11 @@ extension CameraController {
 
         // Update video orientation
         self.updateVideoOrientation()
+        
+        // Set default 1.0 zoom level after camera switch to prevent iOS 18+ zoom jumps
+        DispatchQueue.main.async { [weak self] in
+            self?.setDefaultZoomAfterFlip()
+        }
     }
 
     func captureImage(width: Int?, height: Int?, aspectRatio: String?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Data?, [AnyHashable: Any]?, Error?) -> Void) {
