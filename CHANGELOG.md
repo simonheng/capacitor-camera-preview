@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.23](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.22...7.4.0-alpha.23) (2025-08-14)
+
+
+### Bug Fixes
+
+* zoom for flip camera ([bebe394](https://github.com/Cap-go/capacitor-camera-preview/commit/bebe394103bd8cbb3206b0376cad59bbf1548063))
+
 ## [7.4.0-alpha.22](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.21...7.4.0-alpha.22) (2025-08-14)
 
 
