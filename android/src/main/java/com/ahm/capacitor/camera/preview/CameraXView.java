@@ -2728,17 +2728,82 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     boolean usesFillCenter =
       sessionConfig != null && sessionConfig.getAspectRatio() != null;
 
+    // For FILL_CENTER with aspect ratio, we need to calculate the actual visible bounds
+    // The preview might extend beyond the container bounds and get clipped
+    if (usesFillCenter) {
+      // Calculate how the camera preview is scaled to fill the container
+      float widthScale = (float) containerWidth / cameraWidth;
+      float heightScale = (float) containerHeight / cameraHeight;
+      float scale = Math.max(widthScale, heightScale); // max for FILL_CENTER
+
+      // Calculate the scaled dimensions
+      int scaledWidth = Math.round(cameraWidth * scale);
+      int scaledHeight = Math.round(cameraHeight * scale);
+
+      // Calculate how much is clipped on each side
+      int excessWidth = Math.max(0, scaledWidth - containerWidth);
+      int excessHeight = Math.max(0, scaledHeight - containerHeight);
+
+      // For the actual visible bounds, we need to account for potential
+      // internal misalignment of PreviewView's SurfaceView
+      int adjustedWidth = containerWidth;
+      int adjustedHeight = containerHeight;
+
+      // Apply small adjustments for 4:3 ratio to prevent blue line
+      // This compensates for PreviewView's internal SurfaceView misalignment
+      String aspectRatio = sessionConfig != null
+        ? sessionConfig.getAspectRatio()
+        : null;
+      if ("4:3".equals(aspectRatio)) {
+        // For 4:3, reduce the reported width slightly to account for
+        // the SurfaceView drawing outside its bounds
+        adjustedWidth = containerWidth - 2;
+        adjustedHeight = containerHeight - 2;
+      }
+
+      Log.d(
+        TAG,
+        "getActualCameraBounds FILL_CENTER: container=" +
+        containerWidth +
+        "x" +
+        containerHeight +
+        ", camera=" +
+        cameraWidth +
+        "x" +
+        cameraHeight +
+        " (portrait=" +
+        isPortrait +
+        ")" +
+        ", scale=" +
+        scale +
+        ", scaled=" +
+        scaledWidth +
+        "x" +
+        scaledHeight +
+        ", excess=" +
+        excessWidth +
+        "x" +
+        excessHeight +
+        ", adjusted=" +
+        adjustedWidth +
+        "x" +
+        adjustedHeight +
+        ", ratio=" +
+        aspectRatio
+      );
+
+      // Return slightly inset bounds for 4:3 to avoid blue line
+      if ("4:3".equals(aspectRatio)) {
+        return new Rect(1, 1, adjustedWidth + 1, adjustedHeight + 1);
+      } else {
+        return new Rect(0, 0, containerWidth, containerHeight);
+      }
+    }
+
+    // For FIT_CENTER (no aspect ratio), calculate letterboxing
     float widthScale = (float) containerWidth / cameraWidth;
     float heightScale = (float) containerHeight / cameraHeight;
-    float scale;
-
-    if (usesFillCenter) {
-      // FILL_CENTER uses max scale to fill the container
-      scale = Math.max(widthScale, heightScale);
-    } else {
-      // FIT_CENTER uses min scale to fit within the container
-      scale = Math.min(widthScale, heightScale);
-    }
+    float scale = Math.min(widthScale, heightScale);
 
     // Calculate the actual size of the camera content after scaling
     int scaledWidth = Math.round(cameraWidth * scale);
@@ -2750,7 +2815,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     Log.d(
       TAG,
-      "getActualCameraBounds: container=" +
+      "getActualCameraBounds FIT_CENTER: container=" +
       containerWidth +
       "x" +
       containerHeight +
@@ -2763,9 +2828,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       ")" +
       ", scale=" +
       scale +
-      " (fillCenter=" +
-      usesFillCenter +
-      ")" +
       ", scaled=" +
       scaledWidth +
       "x" +
@@ -3377,6 +3439,38 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     );
     int width = (int) Math.floor(actualWidth / pixelRatio);
     int height = (int) Math.floor(actualHeight / pixelRatio);
+
+    // Debug logging to understand the blue line issue
+    Log.d(
+      TAG,
+      "getCurrentPreviewBounds DEBUG: " +
+      "actualBounds=(" +
+      actualX +
+      "," +
+      actualY +
+      "," +
+      actualWidth +
+      "x" +
+      actualHeight +
+      "), " +
+      "logicalBounds=(" +
+      x +
+      "," +
+      y +
+      "," +
+      width +
+      "x" +
+      height +
+      "), " +
+      "pixelRatio=" +
+      pixelRatio +
+      ", " +
+      "insets=(" +
+      webViewLeftInset +
+      "," +
+      webViewTopInset +
+      ")"
+    );
 
     return new int[] { x, y, width, height };
   }
