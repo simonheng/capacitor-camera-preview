@@ -1423,23 +1423,48 @@ extension CameraController: UIGestureRecognizerDelegate {
         // Remove any existing focus indicator
         focusIndicatorView?.removeFromSuperview()
 
-        // Create a new focus indicator
+        // Create a new focus indicator (iOS Camera style): square with mid-edge ticks
         let indicator = UIView(frame: CGRect(x: 0, y: 0, width: 80, height: 80))
         indicator.center = point
         indicator.layer.borderColor = UIColor.yellow.cgColor
         indicator.layer.borderWidth = 2.0
-        indicator.layer.cornerRadius = 40
+        indicator.layer.cornerRadius = 0
         indicator.backgroundColor = UIColor.clear
         indicator.alpha = 0
         indicator.transform = CGAffineTransform(scaleX: 1.5, y: 1.5)
 
-        // Add inner circle for better visibility
-        let innerCircle = UIView(frame: CGRect(x: 20, y: 20, width: 40, height: 40))
-        innerCircle.layer.borderColor = UIColor.yellow.cgColor
-        innerCircle.layer.borderWidth = 1.0
-        innerCircle.layer.cornerRadius = 20
-        innerCircle.backgroundColor = UIColor.clear
-        indicator.addSubview(innerCircle)
+        // Add 4 tiny mid-edge ticks inside the square
+        let stroke: CGFloat = 2.0
+        let tickLen: CGFloat = 12.0
+        let inset: CGFloat = stroke // ticks should touch the sides
+        // Top tick (perpendicular): vertical inward from top edge
+        let topTick = UIView(frame: CGRect(x: (indicator.bounds.width - stroke)/2,
+                                           y: inset,
+                                           width: stroke,
+                                           height: tickLen))
+        topTick.backgroundColor = .yellow
+        indicator.addSubview(topTick)
+        // Bottom tick (perpendicular): vertical inward from bottom edge
+        let bottomTick = UIView(frame: CGRect(x: (indicator.bounds.width - stroke)/2,
+                                              y: indicator.bounds.height - inset - tickLen,
+                                              width: stroke,
+                                              height: tickLen))
+        bottomTick.backgroundColor = .yellow
+        indicator.addSubview(bottomTick)
+        // Left tick (perpendicular): horizontal inward from left edge
+        let leftTick = UIView(frame: CGRect(x: inset,
+                                            y: (indicator.bounds.height - stroke)/2,
+                                            width: tickLen,
+                                            height: stroke))
+        leftTick.backgroundColor = .yellow
+        indicator.addSubview(leftTick)
+        // Right tick (perpendicular): horizontal inward from right edge
+        let rightTick = UIView(frame: CGRect(x: indicator.bounds.width - inset - tickLen,
+                                             y: (indicator.bounds.height - stroke)/2,
+                                             width: tickLen,
+                                             height: stroke))
+        rightTick.backgroundColor = .yellow
+        indicator.addSubview(rightTick)
 
         view.addSubview(indicator)
         focusIndicatorView = indicator
@@ -1449,7 +1474,7 @@ extension CameraController: UIGestureRecognizerDelegate {
             indicator.alpha = 1.0
             indicator.transform = CGAffineTransform.identity
         }) { _ in
-            // Keep the indicator visible for a moment
+            // Keep the indicator visible briefly
             UIView.animate(withDuration: 0.2, delay: 0.5, options: [], animations: {
                 indicator.alpha = 0.3
             }) { _ in

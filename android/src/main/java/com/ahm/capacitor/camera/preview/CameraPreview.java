@@ -61,6 +61,8 @@ public class CameraPreview
   extends Plugin
   implements CameraXView.CameraXViewListener {
 
+  private static final String TAG = "CameraPreview CameraXView";
+
   static final String CAMERA_WITH_AUDIO_PERMISSION_ALIAS = "cameraWithAudio";
   static final String CAMERA_ONLY_PERMISSION_ALIAS = "cameraOnly";
   static final String CAMERA_WITH_LOCATION_PERMISSION_ALIAS =
@@ -1031,7 +1033,12 @@ public class CameraPreview
                 .orientation;
               if (current != lastOrientation) {
                 lastOrientation = current;
-                handleOrientationChange();
+                // Post to next frame so WebView has updated bounds before we recompute layout
+                getBridge()
+                  .getActivity()
+                  .getWindow()
+                  .getDecorView()
+                  .post(() -> handleOrientationChange());
               }
             }
           };
@@ -1044,13 +1051,115 @@ public class CameraPreview
 
   private void handleOrientationChange() {
     if (cameraXView == null || !cameraXView.isRunning()) return;
+
+    Log.d(
+      TAG,
+      "======================== ORIENTATION CHANGE DETECTED ========================"
+    );
+
+    // Get comprehensive display and orientation information
+    android.util.DisplayMetrics metrics = getContext()
+      .getResources()
+      .getDisplayMetrics();
+    int screenWidthPx = metrics.widthPixels;
+    int screenHeightPx = metrics.heightPixels;
+    float density = metrics.density;
+    int screenWidthDp = (int) (screenWidthPx / density);
+    int screenHeightDp = (int) (screenHeightPx / density);
+
+    int current = getContext().getResources().getConfiguration().orientation;
+    Log.d(TAG, "New orientation: " + current + " (1=PORTRAIT, 2=LANDSCAPE)");
+    Log.d(
+      TAG,
+      "Screen dimensions - Pixels: " +
+      screenWidthPx +
+      "x" +
+      screenHeightPx +
+      ", DP: " +
+      screenWidthDp +
+      "x" +
+      screenHeightDp +
+      ", Density: " +
+      density
+    );
+
+    // Get WebView dimensions before rotation
+    WebView webView = getBridge().getWebView();
+    int webViewWidth = webView.getWidth();
+    int webViewHeight = webView.getHeight();
+    Log.d(TAG, "WebView dimensions: " + webViewWidth + "x" + webViewHeight);
+
+    // Get current preview bounds before rotation
+    int[] oldBounds = cameraXView.getCurrentPreviewBounds();
+    Log.d(
+      TAG,
+      "Current preview bounds before rotation: x=" +
+      oldBounds[0] +
+      ", y=" +
+      oldBounds[1] +
+      ", width=" +
+      oldBounds[2] +
+      ", height=" +
+      oldBounds[3]
+    );
+
     getBridge()
       .getActivity()
       .runOnUiThread(() -> {
         // Reapply current aspect ratio to recompute layout, then emit screenResize
         String ar = cameraXView.getAspectRatio();
-        cameraXView.setAspectRatio(ar, null, null, () -> {
+        Log.d(TAG, "Reapplying aspect ratio: " + ar);
+
+        // Re-get dimensions after potential layout pass
+        android.util.DisplayMetrics newMetrics = getContext()
+          .getResources()
+          .getDisplayMetrics();
+        int newScreenWidthPx = newMetrics.widthPixels;
+        int newScreenHeightPx = newMetrics.heightPixels;
+        int newWebViewWidth = webView.getWidth();
+        int newWebViewHeight = webView.getHeight();
+
+        Log.d(
+          TAG,
+          "New screen dimensions after rotation: " +
+          newScreenWidthPx +
+          "x" +
+          newScreenHeightPx
+        );
+        Log.d(
+          TAG,
+          "New WebView dimensions after rotation: " +
+          newWebViewWidth +
+          "x" +
+          newWebViewHeight
+        );
+
+        // Force aspect ratio recalculation on orientation change
+        cameraXView.forceAspectRatioRecalculation(ar, null, null, () -> {
           int[] bounds = cameraXView.getCurrentPreviewBounds();
+          Log.d(
+            TAG,
+            "New bounds after orientation change: x=" +
+            bounds[0] +
+            ", y=" +
+            bounds[1] +
+            ", width=" +
+            bounds[2] +
+            ", height=" +
+            bounds[3]
+          );
+          Log.d(
+            TAG,
+            "Bounds change: deltaX=" +
+            (bounds[0] - oldBounds[0]) +
+            ", deltaY=" +
+            (bounds[1] - oldBounds[1]) +
+            ", deltaWidth=" +
+            (bounds[2] - oldBounds[2]) +
+            ", deltaHeight=" +
+            (bounds[3] - oldBounds[3])
+          );
+
           JSObject data = new JSObject();
           data.put("x", bounds[0]);
           data.put("y", bounds[1]);
@@ -1059,10 +1168,6 @@ public class CameraPreview
           notifyListeners("screenResize", data);
 
           // Also emit orientationChange with a unified string value
-          int current = getContext()
-            .getResources()
-            .getConfiguration()
-            .orientation;
           String o;
           if (current == Configuration.ORIENTATION_PORTRAIT) {
             o = "portrait";
@@ -1074,6 +1179,11 @@ public class CameraPreview
           JSObject oData = new JSObject();
           oData.put("orientation", o);
           notifyListeners("orientationChange", oData);
+
+          Log.d(
+            TAG,
+            "================================================================================"
+          );
         });
       });
   }

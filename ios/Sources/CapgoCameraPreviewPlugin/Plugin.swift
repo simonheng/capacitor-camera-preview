@@ -1190,7 +1190,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
 
         let ramp = call.getBool("ramp") ?? true
-        let autoFocus = call.getBool("autoFocus") ?? true
+        let autoFocus = call.getBool("autoFocus") ?? false
 
         do {
             try self.cameraController.setZoom(level: CGFloat(level), ramp: ramp, autoFocus: autoFocus)

@@ -1,6 +1,7 @@
 package com.ahm.capacitor.camera.preview;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -20,14 +21,7 @@ import android.util.Size;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.AlphaAnimation;
-import android.view.animation.Animation;
-import android.view.animation.AnimationSet;
-import android.view.animation.AnimationUtils;
-import android.view.animation.ScaleAnimation;
 import android.webkit.WebView;
-import android.webkit.WebView;
-import android.widget.FrameLayout;
 import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
@@ -78,7 +72,6 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 
 public class CameraXView implements LifecycleOwner, LifecycleObserver {
@@ -277,7 +270,15 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     // Create and setup the preview view
     previewView = new PreviewView(context);
-    previewView.setScaleType(PreviewView.ScaleType.FIT_CENTER);
+    // Match iOS behavior: FIT when no aspect ratio, FILL when aspect ratio is set
+    String initialAspectRatio = sessionConfig != null
+      ? sessionConfig.getAspectRatio()
+      : null;
+    previewView.setScaleType(
+      (initialAspectRatio == null || initialAspectRatio.isEmpty())
+        ? PreviewView.ScaleType.FIT_CENTER
+        : PreviewView.ScaleType.FILL_CENTER
+    );
     // Also make preview view touchable as backup
     previewView.setClickable(true);
     previewView.setFocusable(true);
@@ -434,9 +435,45 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     int height = sessionConfig.getHeight();
     String aspectRatio = sessionConfig.getAspectRatio();
 
+    // Get comprehensive display information
+    DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+    int screenWidthPx = metrics.widthPixels;
+    int screenHeightPx = metrics.heightPixels;
+    float density = metrics.density;
+    int screenWidthDp = (int) (screenWidthPx / density);
+    int screenHeightDp = (int) (screenHeightPx / density);
+
+    // Get WebView dimensions
+    int webViewWidth = webView != null ? webView.getWidth() : 0;
+    int webViewHeight = webView != null ? webView.getHeight() : 0;
+
+    // Get parent dimensions
+    ViewGroup parent = (ViewGroup) webView.getParent();
+    int parentWidth = parent != null ? parent.getWidth() : 0;
+    int parentHeight = parent != null ? parent.getHeight() : 0;
+
     Log.d(
       TAG,
-      "calculatePreviewLayoutParams: Using sessionConfig values - x:" +
+      "======================== CALCULATE PREVIEW LAYOUT PARAMS ========================"
+    );
+    Log.d(
+      TAG,
+      "Screen dimensions - Pixels: " +
+      screenWidthPx +
+      "x" +
+      screenHeightPx +
+      ", DP: " +
+      screenWidthDp +
+      "x" +
+      screenHeightDp +
+      ", Density: " +
+      density
+    );
+    Log.d(TAG, "WebView dimensions: " + webViewWidth + "x" + webViewHeight);
+    Log.d(TAG, "Parent dimensions: " + parentWidth + "x" + parentHeight);
+    Log.d(
+      TAG,
+      "SessionConfig values - x:" +
       x +
       " y:" +
       y +
@@ -445,83 +482,97 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       " height:" +
       height +
       " aspectRatio:" +
-      aspectRatio
+      aspectRatio +
+      " isCentered:" +
+      sessionConfig.isCentered()
     );
 
-    // Apply aspect ratio if specified and no explicit size was given
-    if (aspectRatio != null && !aspectRatio.isEmpty()) {
+    // Apply aspect ratio if specified
+    if (
+      aspectRatio != null &&
+      !aspectRatio.isEmpty() &&
+      sessionConfig.isCentered()
+    ) {
       String[] ratios = aspectRatio.split(":");
       if (ratios.length == 2) {
         try {
-          // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-          float ratio =
-            Float.parseFloat(ratios[1]) / Float.parseFloat(ratios[0]);
-
-          // Calculate optimal size while maintaining aspect ratio
-          int optimalWidth = width;
-          int optimalHeight = (int) (width / ratio);
-
-          if (optimalHeight > height) {
-            // Height constraint is tighter, fit by height
-            optimalHeight = height;
-            optimalWidth = (int) (height * ratio);
-          }
-
-          // Store the old dimensions to check if we need to recenter
-          int oldWidth = width;
-          int oldHeight = height;
-          width = optimalWidth;
-          height = optimalHeight;
-
-          // If we're centered and dimensions changed, recalculate position
-          if (sessionConfig.isCentered()) {
-            DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-
-            if (width != oldWidth) {
-              int screenWidth = metrics.widthPixels;
-              x = (screenWidth - width) / 2;
-              Log.d(
-                TAG,
-                "calculatePreviewLayoutParams: Recentered X after aspect ratio - " +
-                "oldWidth=" +
-                oldWidth +
-                ", newWidth=" +
-                width +
-                ", screenWidth=" +
-                screenWidth +
-                ", newX=" +
-                x
-              );
-            }
-
-            if (height != oldHeight) {
-              int screenHeight = metrics.heightPixels;
-              // Always center based on full screen height
-              y = (screenHeight - height) / 2;
-              Log.d(
-                TAG,
-                "calculatePreviewLayoutParams: Recentered Y after aspect ratio - " +
-                "oldHeight=" +
-                oldHeight +
-                ", newHeight=" +
-                height +
-                ", screenHeight=" +
-                screenHeight +
-                ", newY=" +
-                y
-              );
-            }
-          }
+          // Match iOS logic exactly
+          double ratioWidth = Double.parseDouble(ratios[0]);
+          double ratioHeight = Double.parseDouble(ratios[1]);
+          boolean isPortrait =
+            context.getResources().getConfiguration().orientation ==
+            Configuration.ORIENTATION_PORTRAIT;
 
           Log.d(
             TAG,
-            "calculatePreviewLayoutParams: Applied aspect ratio " +
+            "Aspect ratio parsing - Original: " +
             aspectRatio +
-            " - new size: " +
-            width +
-            "x" +
-            height
+            " (width=" +
+            ratioWidth +
+            ", height=" +
+            ratioHeight +
+            ")"
           );
+          Log.d(
+            TAG,
+            "Device orientation: " + (isPortrait ? "PORTRAIT" : "LANDSCAPE")
+          );
+
+          // iOS: let ratio = !isPortrait ? ratioParts[0] / ratioParts[1] : ratioParts[1] / ratioParts[0]
+          double ratio = !isPortrait
+            ? (ratioWidth / ratioHeight)
+            : (ratioHeight / ratioWidth);
+
+          Log.d(
+            TAG,
+            "Computed ratio: " +
+            ratio +
+            " (iOS formula: " +
+            (!isPortrait ? "width/height" : "height/width") +
+            ")"
+          );
+
+          // For centered mode with aspect ratio, calculate maximum size that fits
+          int availableWidth = metrics.widthPixels;
+          int availableHeight = metrics.heightPixels;
+
+          Log.d(
+            TAG,
+            "Available space for preview: " +
+            availableWidth +
+            "x" +
+            availableHeight
+          );
+
+          // Calculate maximum size that fits the aspect ratio in available space
+          double maxWidthByHeight = availableHeight * ratio;
+          double maxHeightByWidth = availableWidth / ratio;
+
+          Log.d(
+            TAG,
+            "Aspect ratio calculations - maxWidthByHeight: " +
+            maxWidthByHeight +
+            ", maxHeightByWidth: " +
+            maxHeightByWidth
+          );
+
+          if (maxWidthByHeight <= availableWidth) {
+            // Height is the limiting factor
+            width = (int) maxWidthByHeight;
+            height = availableHeight;
+            Log.d(TAG, "Height-limited sizing: " + width + "x" + height);
+          } else {
+            // Width is the limiting factor
+            width = availableWidth;
+            height = (int) maxHeightByWidth;
+            Log.d(TAG, "Width-limited sizing: " + width + "x" + height);
+          }
+
+          // Center the preview
+          x = (availableWidth - width) / 2;
+          y = (availableHeight - height) / 2;
+
+          Log.d(TAG, "Auto-centered position: x=" + x + ", y=" + y);
         } catch (NumberFormatException e) {
           Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
         }
@@ -540,28 +591,20 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     Log.d(
       TAG,
-      "calculatePreviewLayoutParams: Position calculation - x:" +
-      x +
-      " (leftMargin=" +
+      "Final layout params - Margins: left=" +
       layoutParams.leftMargin +
-      "), y:" +
-      y +
-      " (topMargin=" +
+      ", top=" +
       layoutParams.topMargin +
-      ")"
-    );
-
-    Log.d(
-      TAG,
-      "calculatePreviewLayoutParams: Final layout - x:" +
-      x +
-      " y:" +
-      y +
-      " width:" +
+      ", Size: " +
       width +
-      " height:" +
+      "x" +
       height
     );
+    Log.d(
+      TAG,
+      "================================================================================"
+    );
+
     return layoutParams;
   }
 
@@ -623,13 +666,19 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         ResolutionSelector resolutionSelector =
           resolutionSelectorBuilder.build();
 
+        int rotation = previewView != null && previewView.getDisplay() != null
+          ? previewView.getDisplay().getRotation()
+          : android.view.Surface.ROTATION_0;
+
         Preview preview = new Preview.Builder()
           .setResolutionSelector(resolutionSelector)
+          .setTargetRotation(rotation)
           .build();
         imageCapture = new ImageCapture.Builder()
           .setResolutionSelector(resolutionSelector)
           .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
           .setFlashMode(currentFlashMode)
+          .setTargetRotation(rotation)
           .build();
         sampleImageCapture = imageCapture;
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
@@ -698,6 +747,16 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             imageCaptureResolution.getResolution()
           );
         }
+
+        // Update scale type based on aspect ratio whenever (re)binding
+        String ar = sessionConfig != null
+          ? sessionConfig.getAspectRatio()
+          : null;
+        previewView.setScaleType(
+          (ar == null || ar.isEmpty())
+            ? PreviewView.ScaleType.FIT_CENTER
+            : PreviewView.ScaleType.FILL_CENTER
+        );
 
         // Set initial zoom if specified, prioritizing targetZoom over default zoomFactor
         float initialZoom = sessionConfig.getTargetZoom() != 1.0f
@@ -914,26 +973,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
             JSONObject exifData = getExifData(exifInterface);
 
-            // Use the stored aspectRatio if none is provided and no width/height is specified
+            // Determine final output: explicit size wins, then explicit aspectRatio,
+            // otherwise crop to match what is visible in the preview (iOS parity)
             String captureAspectRatio = aspectRatio;
-            if (
-              width == null &&
-              height == null &&
-              aspectRatio == null &&
-              sessionConfig != null
-            ) {
-              captureAspectRatio = sessionConfig.getAspectRatio();
-              // Default to "4:3" if no aspect ratio was set at all
-              if (captureAspectRatio == null) {
-                captureAspectRatio = "4:3";
-              }
-              Log.d(
-                TAG,
-                "capturePhoto: Using stored aspectRatio: " + captureAspectRatio
-              );
-            }
-
-            // Handle aspect ratio if no width/height specified
             if (
               width == null &&
               height == null &&
@@ -1027,14 +1069,22 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               // Write EXIF data back to resized image
               bytes = writeExifToImageBytes(bytes, exifInterface);
             } else {
-              // For non-resized images, ensure EXIF is saved
-              exifInterface.saveAttributes();
-              bytes = new byte[(int) tempFile.length()];
-              java.io.FileInputStream fis2 = new java.io.FileInputStream(
-                tempFile
+              // No explicit size/ratio: crop to match current preview content
+              Bitmap originalBitmap = BitmapFactory.decodeByteArray(
+                bytes,
+                0,
+                bytes.length
               );
-              fis2.read(bytes);
-              fis2.close();
+              Bitmap previewCropped = cropBitmapToMatchPreview(originalBitmap);
+              ByteArrayOutputStream stream = new ByteArrayOutputStream();
+              previewCropped.compress(
+                Bitmap.CompressFormat.JPEG,
+                quality,
+                stream
+              );
+              bytes = stream.toByteArray();
+              // Preserve EXIF
+              bytes = writeExifToImageBytes(bytes, exifInterface);
             }
 
             if (saveToGallery) {
@@ -1380,6 +1430,49 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     return bytes;
   }
 
+  private Bitmap cropBitmapToMatchPreview(Bitmap image) {
+    if (previewContainer == null || previewView == null) {
+      return image;
+    }
+    int containerWidth = previewContainer.getWidth();
+    int containerHeight = previewContainer.getHeight();
+    if (containerWidth == 0 || containerHeight == 0) {
+      return image;
+    }
+    // Compute preview aspect based on actual camera content bounds
+    Rect bounds = getActualCameraBounds();
+    int previewW = Math.max(1, bounds.width());
+    int previewH = Math.max(1, bounds.height());
+    float previewRatio = (float) previewW / (float) previewH;
+
+    int imgW = image.getWidth();
+    int imgH = image.getHeight();
+    float imgRatio = (float) imgW / (float) imgH;
+
+    int targetW = imgW;
+    int targetH = imgH;
+    if (imgRatio > previewRatio) {
+      // Image wider than preview: crop width
+      targetW = Math.round(imgH * previewRatio);
+    } else if (imgRatio < previewRatio) {
+      // Image taller than preview: crop height
+      targetH = Math.round(imgW / previewRatio);
+    }
+    int x = Math.max(0, (imgW - targetW) / 2);
+    int y = Math.max(0, (imgH - targetH) / 2);
+    try {
+      return Bitmap.createBitmap(
+        image,
+        x,
+        y,
+        Math.min(targetW, imgW - x),
+        Math.min(targetH, imgH - y)
+      );
+    } catch (Exception ignore) {
+      return image;
+    }
+  }
+
   // not workin for xiaomi https://xiaomi.eu/community/threads/mi-11-ultra-unable-to-access-camera-lenses-in-apps-camera2-api.61456/
   @OptIn(markerClass = ExperimentalCamera2Interop.class)
   public static List<
@@ -1698,12 +1791,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     MeteringPointFactory factory = previewView.getMeteringPointFactory();
     MeteringPoint point = factory.createPoint(x * viewWidth, y * viewHeight);
 
-    // Create focus and metering action
+    // Create focus and metering action (persistent, no auto-cancel) to match iOS behavior
     FocusMeteringAction action = new FocusMeteringAction.Builder(
       point,
       FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
     )
-      .setAutoCancelDuration(3, TimeUnit.SECONDS) // Auto-cancel after 3 seconds
+      .disableAutoCancel()
       .build();
 
     try {
@@ -1777,8 +1870,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     }
 
     // Create an elegant focus indicator
-    View container = new View(context);
-    int size = (int) (60 * context.getResources().getDisplayMetrics().density); // 60dp size
+    FrameLayout container = new FrameLayout(context);
+    int size = (int) (80 * context.getResources().getDisplayMetrics().density); // match iOS size
     FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size, size);
 
     // Center the indicator on the touch point with bounds checking
@@ -1794,25 +1887,73 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       Math.min((int) (y - size / 2), containerHeight - size)
     );
 
-    // Create an elegant focus ring - white stroke with transparent center
-    GradientDrawable drawable = new GradientDrawable();
-    drawable.setShape(GradientDrawable.OVAL);
-    drawable.setStroke(
-      (int) (2 * context.getResources().getDisplayMetrics().density),
-      Color.WHITE
-    ); // 2dp white stroke
-    drawable.setColor(Color.TRANSPARENT); // Transparent center
-    container.setBackground(drawable);
+    // iOS Camera style: square with mid-edge ticks
+    GradientDrawable border = new GradientDrawable();
+    border.setShape(GradientDrawable.RECTANGLE);
+    int stroke = (int) (2 * context.getResources().getDisplayMetrics().density);
+    border.setStroke(stroke, Color.YELLOW);
+    border.setCornerRadius(0);
+    border.setColor(Color.TRANSPARENT);
+    container.setBackground(border);
+
+    // Add 4 tiny mid-edge ticks inside the square
+    int tickLen = (int) (12 *
+      context.getResources().getDisplayMetrics().density);
+    int inset = stroke; // ticks should touch the sides
+    // Top tick (perpendicular): vertical inward from top edge
+    View topTick = new View(context);
+    FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(
+      stroke,
+      tickLen
+    );
+    topParams.leftMargin = (size - stroke) / 2;
+    topParams.topMargin = inset;
+    topTick.setLayoutParams(topParams);
+    topTick.setBackgroundColor(Color.YELLOW);
+    container.addView(topTick);
+    // Bottom tick (perpendicular): vertical inward from bottom edge
+    View bottomTick = new View(context);
+    FrameLayout.LayoutParams bottomParams = new FrameLayout.LayoutParams(
+      stroke,
+      tickLen
+    );
+    bottomParams.leftMargin = (size - stroke) / 2;
+    bottomParams.topMargin = size - inset - tickLen;
+    bottomTick.setLayoutParams(bottomParams);
+    bottomTick.setBackgroundColor(Color.YELLOW);
+    container.addView(bottomTick);
+    // Left tick (perpendicular): horizontal inward from left edge
+    View leftTick = new View(context);
+    FrameLayout.LayoutParams leftParams = new FrameLayout.LayoutParams(
+      tickLen,
+      stroke
+    );
+    leftParams.leftMargin = inset;
+    leftParams.topMargin = (size - stroke) / 2;
+    leftTick.setLayoutParams(leftParams);
+    leftTick.setBackgroundColor(Color.YELLOW);
+    container.addView(leftTick);
+    // Right tick (perpendicular): horizontal inward from right edge
+    View rightTick = new View(context);
+    FrameLayout.LayoutParams rightParams = new FrameLayout.LayoutParams(
+      tickLen,
+      stroke
+    );
+    rightParams.leftMargin = size - inset - tickLen;
+    rightParams.topMargin = (size - stroke) / 2;
+    rightTick.setLayoutParams(rightParams);
+    rightTick.setBackgroundColor(Color.YELLOW);
+    container.addView(rightTick);
 
     focusIndicatorView = container;
     // Bump animation token; everything after this must validate against this token
     final long thisAnimationId = ++focusIndicatorAnimationId;
     final View thisIndicatorView = focusIndicatorView;
 
-    // Set initial state for smooth animation
-    focusIndicatorView.setAlpha(1f); // Start visible
-    focusIndicatorView.setScaleX(1.4f); // Start slightly larger for a quick scale-in
-    focusIndicatorView.setScaleY(1.4f);
+    // Set initial state for smooth animation (mirror iOS)
+    focusIndicatorView.setAlpha(0f);
+    focusIndicatorView.setScaleX(1.5f);
+    focusIndicatorView.setScaleY(1.5f);
     focusIndicatorView.setVisibility(View.VISIBLE);
 
     // Ensure container doesn't intercept touch events
@@ -1836,26 +1977,16 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     // Force a layout pass to ensure the view is properly positioned
     previewContainer.requestLayout();
 
-    // Smooth scale down animation with easing (no fade needed since we start visible)
-    ScaleAnimation scaleAnimation = new ScaleAnimation(
-      1.4f,
-      1.0f,
-      1.4f,
-      1.0f,
-      Animation.RELATIVE_TO_SELF,
-      0.5f,
-      Animation.RELATIVE_TO_SELF,
-      0.5f
-    );
-    scaleAnimation.setDuration(120);
-    scaleAnimation.setInterpolator(
-      new android.view.animation.OvershootInterpolator(1.2f)
-    );
+    // First phase: fade in and scale to 1.0 over 150ms
+    focusIndicatorView
+      .animate()
+      .alpha(1f)
+      .scaleX(1f)
+      .scaleY(1f)
+      .setDuration(150)
+      .start();
 
-    // Start the animation
-    focusIndicatorView.startAnimation(scaleAnimation);
-
-    // Schedule fast fade out and removal
+    // Phase 2: after 500ms, fade to 0.3 over 200ms
     focusIndicatorView.postDelayed(
       new Runnable() {
         @Override
@@ -1868,37 +1999,66 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           ) {
             focusIndicatorView
               .animate()
-              .alpha(0f)
-              .scaleX(0.9f)
-              .scaleY(0.9f)
-              .setDuration(180)
-              .setInterpolator(
-                new android.view.animation.AccelerateInterpolator()
-              )
+              .alpha(0.3f)
+              .setDuration(200)
               .withEndAction(
                 new Runnable() {
                   @Override
                   public void run() {
-                    if (
-                      focusIndicatorView != null &&
-                      previewContainer != null &&
-                      thisIndicatorView == focusIndicatorView &&
-                      thisAnimationId == focusIndicatorAnimationId
-                    ) {
-                      try {
-                        focusIndicatorView.clearAnimation();
-                      } catch (Exception ignore) {}
-                      previewContainer.removeView(focusIndicatorView);
-                      focusIndicatorView = null;
-                    }
+                    // Phase 3: after 200ms more, fade out to 0 and scale to 0.8 over 300ms
+                    focusIndicatorView.postDelayed(
+                      new Runnable() {
+                        @Override
+                        public void run() {
+                          if (
+                            focusIndicatorView != null &&
+                            thisIndicatorView == focusIndicatorView &&
+                            thisAnimationId == focusIndicatorAnimationId
+                          ) {
+                            focusIndicatorView
+                              .animate()
+                              .alpha(0f)
+                              .scaleX(0.8f)
+                              .scaleY(0.8f)
+                              .setDuration(300)
+                              .setInterpolator(
+                                new android.view.animation.AccelerateInterpolator()
+                              )
+                              .withEndAction(
+                                new Runnable() {
+                                  @Override
+                                  public void run() {
+                                    if (
+                                      focusIndicatorView != null &&
+                                      previewContainer != null &&
+                                      thisIndicatorView == focusIndicatorView &&
+                                      thisAnimationId ==
+                                      focusIndicatorAnimationId
+                                    ) {
+                                      try {
+                                        focusIndicatorView.clearAnimation();
+                                      } catch (Exception ignore) {}
+                                      previewContainer.removeView(
+                                        focusIndicatorView
+                                      );
+                                      focusIndicatorView = null;
+                                    }
+                                  }
+                                }
+                              );
+                          }
+                        }
+                      },
+                      200
+                    );
                   }
                 }
               );
           }
         }
       },
-      250
-    ); // Faster feedback
+      500
+    );
   }
 
   public static List<Size> getSupportedPictureSizes(String facing) {
@@ -2149,12 +2309,47 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     Float y,
     Runnable callback
   ) {
+    Log.d(
+      TAG,
+      "======================== SET ASPECT RATIO ========================"
+    );
+    Log.d(
+      TAG,
+      "Input parameters - aspectRatio: " +
+      aspectRatio +
+      ", x: " +
+      x +
+      ", y: " +
+      y
+    );
+
     if (sessionConfig == null) {
+      Log.d(TAG, "SessionConfig is null, returning");
       if (callback != null) callback.run();
       return;
     }
 
     String currentAspectRatio = sessionConfig.getAspectRatio();
+
+    // Get current display information
+    DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+    int screenWidthPx = metrics.widthPixels;
+    int screenHeightPx = metrics.heightPixels;
+    boolean isPortrait =
+      context.getResources().getConfiguration().orientation ==
+      Configuration.ORIENTATION_PORTRAIT;
+
+    Log.d(
+      TAG,
+      "Current screen: " +
+      screenWidthPx +
+      "x" +
+      screenHeightPx +
+      " (" +
+      (isPortrait ? "PORTRAIT" : "LANDSCAPE") +
+      ")"
+    );
+    Log.d(TAG, "Current aspect ratio: " + currentAspectRatio);
 
     // Don't restart camera if aspect ratio hasn't changed and no position specified
     if (
@@ -2163,12 +2358,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       x == null &&
       y == null
     ) {
-      Log.d(
-        TAG,
-        "setAspectRatio: Aspect ratio " +
-        aspectRatio +
-        " is already set and no position specified, skipping"
-      );
+      Log.d(TAG, "Aspect ratio unchanged and no position specified, skipping");
       if (callback != null) callback.run();
       return;
     }
@@ -2176,22 +2366,16 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     String currentGridMode = sessionConfig.getGridMode();
     Log.d(
       TAG,
-      "setAspectRatio: Changing from " +
-      currentAspectRatio +
-      " to " +
-      aspectRatio +
-      (x != null && y != null
-          ? " at position (" + x + ", " + y + ")"
-          : " with auto-centering") +
-      ", preserving grid mode: " +
-      currentGridMode
+      "Changing aspect ratio from " + currentAspectRatio + " to " + aspectRatio
     );
+    Log.d(TAG, "Auto-centering will be applied (matching iOS behavior)");
 
+    // Match iOS behavior: when aspect ratio changes, always auto-center
     sessionConfig = new CameraSessionConfiguration(
       sessionConfig.getDeviceId(),
       sessionConfig.getPosition(),
-      sessionConfig.getX(),
-      sessionConfig.getY(),
+      -1, // Force auto-center X (iOS: self.posX = -1)
+      -1, // Force auto-center Y (iOS: self.posY = -1)
       sessionConfig.getWidth(),
       sessionConfig.getHeight(),
       sessionConfig.getPaddingBottom(),
@@ -2205,12 +2389,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       aspectRatio,
       currentGridMode
     );
+    sessionConfig.setCentered(true);
 
     // Update layout and rebind camera with new aspect ratio
     if (isRunning && previewContainer != null) {
       mainExecutor.execute(() -> {
-        // First update the UI layout
-        updatePreviewLayoutForAspectRatio(aspectRatio, x, y);
+        // First update the UI layout - always pass null for x,y to force auto-centering (matching iOS)
+        updatePreviewLayoutForAspectRatio(aspectRatio, null, null);
 
         // Then rebind the camera with new aspect ratio configuration
         Log.d(
@@ -2240,8 +2425,121 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             previewContainer.post(callback);
           }
         }
+
+        Log.d(
+          TAG,
+          "=================================================================="
+        );
       });
     } else {
+      Log.d(TAG, "Camera not running, just saving configuration");
+      Log.d(
+        TAG,
+        "=================================================================="
+      );
+      if (callback != null) callback.run();
+    }
+  }
+
+  // Force aspect ratio recalculation (used during orientation changes)
+  public void forceAspectRatioRecalculation(
+    String aspectRatio,
+    Float x,
+    Float y,
+    Runnable callback
+  ) {
+    Log.d(
+      TAG,
+      "======================== FORCE ASPECT RATIO RECALCULATION ========================"
+    );
+    Log.d(
+      TAG,
+      "Input parameters - aspectRatio: " +
+      aspectRatio +
+      ", x: " +
+      x +
+      ", y: " +
+      y
+    );
+
+    if (sessionConfig == null) {
+      Log.d(TAG, "SessionConfig is null, returning");
+      if (callback != null) callback.run();
+      return;
+    }
+
+    String currentGridMode = sessionConfig.getGridMode();
+    Log.d(TAG, "Forcing aspect ratio recalculation for: " + aspectRatio);
+    Log.d(TAG, "Auto-centering will be applied (matching iOS behavior)");
+
+    // Match iOS behavior: when aspect ratio changes, always auto-center
+    sessionConfig = new CameraSessionConfiguration(
+      sessionConfig.getDeviceId(),
+      sessionConfig.getPosition(),
+      -1, // Force auto-center X (iOS: self.posX = -1)
+      -1, // Force auto-center Y (iOS: self.posY = -1)
+      sessionConfig.getWidth(),
+      sessionConfig.getHeight(),
+      sessionConfig.getPaddingBottom(),
+      sessionConfig.getToBack(),
+      sessionConfig.getStoreToFile(),
+      sessionConfig.getEnableOpacity(),
+      sessionConfig.getEnableZoom(),
+      sessionConfig.getDisableExifHeaderStripping(),
+      sessionConfig.getDisableAudio(),
+      sessionConfig.getZoomFactor(),
+      aspectRatio,
+      currentGridMode
+    );
+    sessionConfig.setCentered(true);
+
+    // Update layout and rebind camera with new aspect ratio
+    if (isRunning && previewContainer != null) {
+      mainExecutor.execute(() -> {
+        // First update the UI layout - always pass null for x,y to force auto-centering (matching iOS)
+        updatePreviewLayoutForAspectRatio(aspectRatio, null, null);
+
+        // Then rebind the camera with new aspect ratio configuration
+        Log.d(
+          TAG,
+          "forceAspectRatioRecalculation: Rebinding camera with aspect ratio: " +
+          aspectRatio
+        );
+        bindCameraUseCases();
+
+        // Preserve grid mode and wait for completion
+        if (gridOverlayView != null) {
+          gridOverlayView.post(() -> {
+            Log.d(
+              TAG,
+              "forceAspectRatioRecalculation: Re-applying grid mode: " +
+              currentGridMode
+            );
+            gridOverlayView.setGridMode(currentGridMode);
+
+            // Wait one more frame for grid to be applied, then call callback
+            if (callback != null) {
+              gridOverlayView.post(callback);
+            }
+          });
+        } else {
+          // No grid overlay, wait one frame for layout completion then call callback
+          if (callback != null) {
+            previewContainer.post(callback);
+          }
+        }
+
+        Log.d(
+          TAG,
+          "=================================================================="
+        );
+      });
+    } else {
+      Log.d(TAG, "Camera not running, just saving configuration");
+      Log.d(
+        TAG,
+        "=================================================================="
+      );
       if (callback != null) callback.run();
     }
   }
@@ -2352,15 +2650,40 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       return new Rect(0, 0, containerWidth, containerHeight);
     }
 
-    // The preview is rotated 90 degrees for portrait mode
-    // So we swap the dimensions
-    int cameraWidth = currentPreviewResolution.getHeight();
-    int cameraHeight = currentPreviewResolution.getWidth();
+    // CameraX delivers preview in sensor orientation (always landscape)
+    // But PreviewView internally rotates it to match device orientation
+    // So we need to swap dimensions in portrait mode
+    int cameraWidth = currentPreviewResolution.getWidth();
+    int cameraHeight = currentPreviewResolution.getHeight();
 
-    // Calculate the scaling factor to fit the camera in the container
+    // Check if we're in portrait mode
+    boolean isPortrait =
+      getContext().getResources().getConfiguration().orientation ==
+      Configuration.ORIENTATION_PORTRAIT;
+
+    // Swap dimensions if in portrait mode to match how PreviewView displays it
+    if (isPortrait) {
+      int temp = cameraWidth;
+      cameraWidth = cameraHeight;
+      cameraHeight = temp;
+    }
+
+    // When we have an aspect ratio set, we use FILL_CENTER which scales to fill
+    // the container while maintaining aspect ratio, potentially cropping
+    boolean usesFillCenter =
+      sessionConfig != null && sessionConfig.getAspectRatio() != null;
+
     float widthScale = (float) containerWidth / cameraWidth;
     float heightScale = (float) containerHeight / cameraHeight;
-    float scale = Math.min(widthScale, heightScale); // FIT_CENTER uses min scale
+    float scale;
+
+    if (usesFillCenter) {
+      // FILL_CENTER uses max scale to fill the container
+      scale = Math.max(widthScale, heightScale);
+    } else {
+      // FIT_CENTER uses min scale to fit within the container
+      scale = Math.min(widthScale, heightScale);
+    }
 
     // Calculate the actual size of the camera content after scaling
     int scaledWidth = Math.round(cameraWidth * scale);
@@ -2380,8 +2703,14 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       cameraWidth +
       "x" +
       cameraHeight +
+      " (swapped=" +
+      isPortrait +
+      ")" +
       ", scale=" +
       scale +
+      " (fillCenter=" +
+      usesFillCenter +
+      ")" +
       ", scaled=" +
       scaledWidth +
       "x" +
@@ -2395,10 +2724,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     // Return the bounds relative to the container
     return new Rect(
-      offsetX,
-      offsetY,
-      offsetX + scaledWidth,
-      offsetY + scaledHeight
+      Math.max(0, offsetX),
+      Math.max(0, offsetY),
+      Math.min(containerWidth, offsetX + scaledWidth),
+      Math.min(containerHeight, offsetY + scaledHeight)
     );
   }
 
@@ -2630,27 +2959,137 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   ) {
     if (previewContainer == null || aspectRatio == null) return;
 
-    // Parse aspect ratio
+    Log.d(
+      TAG,
+      "======================== UPDATE PREVIEW LAYOUT FOR ASPECT RATIO ========================"
+    );
+    Log.d(
+      TAG,
+      "Input parameters - aspectRatio: " +
+      aspectRatio +
+      ", x: " +
+      x +
+      ", y: " +
+      y
+    );
+
+    // Get comprehensive display information
+    DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+    int screenWidthPx = metrics.widthPixels;
+    int screenHeightPx = metrics.heightPixels;
+    float density = metrics.density;
+
+    // Get WebView dimensions
+    int webViewWidth = webView.getWidth();
+    int webViewHeight = webView.getHeight();
+
+    // Get current preview container info
+    ViewGroup.LayoutParams currentParams = previewContainer.getLayoutParams();
+    int currentWidth = currentParams != null ? currentParams.width : 0;
+    int currentHeight = currentParams != null ? currentParams.height : 0;
+    int currentX = 0;
+    int currentY = 0;
+    if (currentParams instanceof ViewGroup.MarginLayoutParams) {
+      ViewGroup.MarginLayoutParams marginParams =
+        (ViewGroup.MarginLayoutParams) currentParams;
+      currentX = marginParams.leftMargin;
+      currentY = marginParams.topMargin;
+    }
+
+    Log.d(
+      TAG,
+      "Screen dimensions: " +
+      screenWidthPx +
+      "x" +
+      screenHeightPx +
+      " pixels, density: " +
+      density
+    );
+    Log.d(TAG, "WebView dimensions: " + webViewWidth + "x" + webViewHeight);
+    Log.d(
+      TAG,
+      "Current preview position: " +
+      currentX +
+      "," +
+      currentY +
+      " size: " +
+      currentWidth +
+      "x" +
+      currentHeight
+    );
+
+    // Parse aspect ratio as width:height (e.g., 4:3 -> r=4/3)
     String[] ratios = aspectRatio.split(":");
-    if (ratios.length != 2) return;
+    if (ratios.length != 2) {
+      Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio);
+      return;
+    }
 
     try {
-      // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-      float ratio = Float.parseFloat(ratios[1]) / Float.parseFloat(ratios[0]);
+      // Match iOS logic exactly
+      double ratioWidth = Double.parseDouble(ratios[0]);
+      double ratioHeight = Double.parseDouble(ratios[1]);
+      boolean isPortrait =
+        context.getResources().getConfiguration().orientation ==
+        Configuration.ORIENTATION_PORTRAIT;
+
+      Log.d(
+        TAG,
+        "Aspect ratio parsing - Original: " +
+        aspectRatio +
+        " (width=" +
+        ratioWidth +
+        ", height=" +
+        ratioHeight +
+        ")"
+      );
+      Log.d(
+        TAG,
+        "Device orientation: " + (isPortrait ? "PORTRAIT" : "LANDSCAPE")
+      );
+
+      // iOS: let ratio = !isPortrait ? ratioParts[0] / ratioParts[1] : ratioParts[1] / ratioParts[0]
+      double ratio = !isPortrait
+        ? (ratioWidth / ratioHeight)
+        : (ratioHeight / ratioWidth);
+
+      Log.d(
+        TAG,
+        "Computed ratio: " +
+        ratio +
+        " (iOS formula: " +
+        (!isPortrait ? "width/height" : "height/width") +
+        ")"
+      );
 
       // Get available space from webview dimensions
-      int availableWidth = webView.getWidth();
-      int availableHeight = webView.getHeight();
+      int availableWidth = webViewWidth;
+      int availableHeight = webViewHeight;
+
+      Log.d(
+        TAG,
+        "Available space from WebView: " +
+        availableWidth +
+        "x" +
+        availableHeight
+      );
 
       // Calculate position and size
       int finalX, finalY, finalWidth, finalHeight;
 
       if (x != null && y != null) {
-        // Account for WebView insets from edge-to-edge support
+        // Manual positioning mode
         int webViewTopInset = getWebViewTopInset();
         int webViewLeftInset = getWebViewLeftInset();
 
-        // Use provided coordinates with boundary checking, adjusted for insets
+        Log.d(
+          TAG,
+          "Manual positioning mode - WebView insets: left=" +
+          webViewLeftInset +
+          ", top=" +
+          webViewTopInset
+        );
+
         finalX = Math.max(
           0,
           Math.min(x.intValue() + webViewLeftInset, availableWidth)
@@ -2664,6 +3103,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         int maxWidth = availableWidth - finalX;
         int maxHeight = availableHeight - finalY;
 
+        Log.d(
+          TAG,
+          "Max available space from position: " + maxWidth + "x" + maxHeight
+        );
+
         // Calculate optimal size while maintaining aspect ratio within available space
         finalWidth = maxWidth;
         finalHeight = (int) (maxWidth / ratio);
@@ -2672,76 +3116,113 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           // Height constraint is tighter, fit by height
           finalHeight = maxHeight;
           finalWidth = (int) (maxHeight * ratio);
+          Log.d(TAG, "Height-constrained sizing");
+        } else {
+          Log.d(TAG, "Width-constrained sizing");
         }
 
         // Ensure final position stays within bounds
         finalX = Math.max(0, Math.min(finalX, availableWidth - finalWidth));
         finalY = Math.max(0, Math.min(finalY, availableHeight - finalHeight));
       } else {
-        // Auto-center the view
-        // Use full available space to match iOS behavior
-        int maxAvailableWidth = availableWidth;
-        int maxAvailableHeight = availableHeight;
+        // Auto-center mode - match iOS behavior exactly
+        Log.d(TAG, "Auto-center mode");
 
-        // Start with width-based calculation
-        finalWidth = maxAvailableWidth;
-        finalHeight = (int) (finalWidth / ratio);
+        // Calculate maximum size that fits the aspect ratio in available space
+        double maxWidthByHeight = availableHeight * ratio;
+        double maxHeightByWidth = availableWidth / ratio;
 
-        // If height exceeds available space, use height-based calculation
-        if (finalHeight > maxAvailableHeight) {
-          finalHeight = maxAvailableHeight;
-          finalWidth = (int) (finalHeight * ratio);
+        Log.d(
+          TAG,
+          "Aspect ratio calculations - maxWidthByHeight: " +
+          maxWidthByHeight +
+          ", maxHeightByWidth: " +
+          maxHeightByWidth
+        );
+
+        if (maxWidthByHeight <= availableWidth) {
+          // Height is the limiting factor
+          finalWidth = (int) maxWidthByHeight;
+          finalHeight = availableHeight;
+          Log.d(
+            TAG,
+            "Height-limited sizing: " + finalWidth + "x" + finalHeight
+          );
+        } else {
+          // Width is the limiting factor
+          finalWidth = availableWidth;
+          finalHeight = (int) maxHeightByWidth;
+          Log.d(TAG, "Width-limited sizing: " + finalWidth + "x" + finalHeight);
         }
 
-        // Center the view
+        // Center the preview
         finalX = (availableWidth - finalWidth) / 2;
         finalY = (availableHeight - finalHeight) / 2;
 
         Log.d(
           TAG,
-          "updatePreviewLayoutForAspectRatio: Auto-center mode - ratio=" +
-          ratio +
-          ", calculated size=" +
+          "Auto-center mode: calculated size " +
           finalWidth +
           "x" +
           finalHeight +
-          ", available=" +
-          availableWidth +
-          "x" +
-          availableHeight
+          " at position (" +
+          finalX +
+          ", " +
+          finalY +
+          ")"
         );
       }
 
+      Log.d(
+        TAG,
+        "Final calculated layout - Position: (" +
+        finalX +
+        "," +
+        finalY +
+        "), Size: " +
+        finalWidth +
+        "x" +
+        finalHeight
+      );
+
       // Update layout params
-      ViewGroup.LayoutParams currentParams = previewContainer.getLayoutParams();
-      if (currentParams instanceof ViewGroup.MarginLayoutParams) {
+      ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+      if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
         ViewGroup.MarginLayoutParams params =
-          (ViewGroup.MarginLayoutParams) currentParams;
+          (ViewGroup.MarginLayoutParams) layoutParams;
         params.width = finalWidth;
         params.height = finalHeight;
         params.leftMargin = finalX;
         params.topMargin = finalY;
         previewContainer.setLayoutParams(params);
         previewContainer.requestLayout();
-        Log.d(
-          TAG,
-          "updatePreviewLayoutForAspectRatio: Updated to " +
-          finalWidth +
-          "x" +
-          finalHeight +
-          " at (" +
-          finalX +
-          "," +
-          finalY +
-          ")"
-        );
+
+        Log.d(TAG, "Layout params applied successfully");
 
         // Update grid overlay bounds after aspect ratio change
-        previewContainer.post(() -> updateGridOverlayBounds());
+        previewContainer.post(() -> {
+          Log.d(
+            TAG,
+            "Post-layout verification - Actual position: " +
+            previewContainer.getLeft() +
+            "," +
+            previewContainer.getTop() +
+            ", Actual size: " +
+            previewContainer.getWidth() +
+            "x" +
+            previewContainer.getHeight()
+          );
+          updateGridOverlayBounds();
+        });
       }
     } catch (NumberFormatException e) {
       Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
     }
+
+    Log.d(
+      TAG,
+      "========================================================================================"
+    );
   }
 
   private int getWebViewTopInset() {
@@ -2843,12 +3324,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     MeteringPointFactory factory = previewView.getMeteringPointFactory();
     MeteringPoint point = factory.createPoint(viewWidth / 2f, viewHeight / 2f);
 
-    // Create focus and metering action
+    // Create focus and metering action (persistent, no auto-cancel) to match iOS behavior
     FocusMeteringAction action = new FocusMeteringAction.Builder(
       point,
       FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
     )
-      .setAutoCancelDuration(3, TimeUnit.SECONDS) // Auto-cancel after 3 seconds
+      .disableAutoCancel()
       .build();
 
     try {
