@@ -1527,6 +1527,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                         finalY = (screenHeight - finalHeight) / 2
                         print("[CameraPreview] Centering vertically: screenHeight=\(screenHeight), finalHeight=\(finalHeight), finalY=\(finalY)")
                     } else {
+                        // In landscape, center both horizontally and vertically
+                        finalY = (screenHeight - finalHeight) / 2
                         finalX = (screenWidth - finalWidth) / 2
                     }
                 }
