@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.19](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.18...7.4.0-alpha.19) (2025-08-14)
+
+
+### Bug Fixes
+
+* center CameraPreview in landscape mode by adjusting finalY calculation ([65bf183](https://github.com/Cap-go/capacitor-camera-preview/commit/65bf1830ab17376e72c9669b3bb01ec7eeecad5a))
+
 ## [7.4.0-alpha.18](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.17...7.4.0-alpha.18) (2025-08-13)
 
 
