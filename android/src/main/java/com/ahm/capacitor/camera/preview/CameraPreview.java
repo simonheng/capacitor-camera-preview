@@ -6,6 +6,7 @@ import static android.Manifest.permission.RECORD_AUDIO;
 import android.Manifest;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Color;
 import android.location.Location;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -74,6 +75,7 @@ public class CameraPreview
   private int previousOrientationRequest =
     ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
   private CameraXView cameraXView;
+  private View rotationOverlay;
   private FusedLocationProviderClient fusedLocationClient;
   private Location lastLocation;
   private OrientationEventListener orientationListener;
@@ -239,6 +241,12 @@ public class CameraPreview
           orientationListener.disable();
           orientationListener = null;
           lastOrientation = Configuration.ORIENTATION_UNDEFINED;
+        }
+
+        // Remove any rotation overlay if present
+        if (rotationOverlay != null && rotationOverlay.getParent() != null) {
+          ((ViewGroup) rotationOverlay.getParent()).removeView(rotationOverlay);
+          rotationOverlay = null;
         }
 
         if (cameraXView != null && cameraXView.isRunning()) {
@@ -1106,6 +1114,28 @@ public class CameraPreview
     getBridge()
       .getActivity()
       .runOnUiThread(() -> {
+        // Create and show a black full-screen overlay during rotation
+        ViewGroup rootView = (ViewGroup) getBridge()
+          .getActivity()
+          .getWindow()
+          .getDecorView()
+          .getRootView();
+
+        // Remove any existing overlay
+        if (rotationOverlay != null && rotationOverlay.getParent() != null) {
+          ((ViewGroup) rotationOverlay.getParent()).removeView(rotationOverlay);
+        }
+
+        // Create new black overlay
+        rotationOverlay = new View(getContext());
+        rotationOverlay.setBackgroundColor(Color.BLACK);
+        ViewGroup.LayoutParams overlayParams = new ViewGroup.LayoutParams(
+          ViewGroup.LayoutParams.MATCH_PARENT,
+          ViewGroup.LayoutParams.MATCH_PARENT
+        );
+        rotationOverlay.setLayoutParams(overlayParams);
+        rootView.addView(rotationOverlay);
+
         // Reapply current aspect ratio to recompute layout, then emit screenResize
         String ar = cameraXView.getAspectRatio();
         Log.d(TAG, "Reapplying aspect ratio: " + ar);
@@ -1180,6 +1210,38 @@ public class CameraPreview
           oData.put("orientation", o);
           notifyListeners("orientationChange", oData);
 
+          // Don't remove the overlay here - wait for camera to fully start
+          // The overlay will be removed after a delay to ensure camera is stable
+          if (rotationOverlay != null && rotationOverlay.getParent() != null) {
+            // Shorter delay for faster transition
+            int delay = "4:3".equals(ar) ? 200 : 150;
+            rotationOverlay.postDelayed(
+              () -> {
+                if (
+                  rotationOverlay != null && rotationOverlay.getParent() != null
+                ) {
+                  rotationOverlay
+                    .animate()
+                    .alpha(0f)
+                    .setDuration(100) // Faster fade out
+                    .withEndAction(() -> {
+                      if (
+                        rotationOverlay != null &&
+                        rotationOverlay.getParent() != null
+                      ) {
+                        ((ViewGroup) rotationOverlay.getParent()).removeView(
+                            rotationOverlay
+                          );
+                        rotationOverlay = null;
+                      }
+                    })
+                    .start();
+                }
+              },
+              delay
+            );
+          }
+
           Log.d(
             TAG,
             "================================================================================"
@@ -1211,6 +1273,23 @@ public class CameraPreview
     }
     pluginCall.reject(message);
     bridge.releaseCall(pluginCall);
+  }
+
+  private JSObject getViewSize(
+    double x,
+    double y,
+    double width,
+    double height
+  ) {
+    JSObject ret = new JSObject();
+    // Return values with proper rounding to avoid gaps
+    // For positions (x, y): ceil to avoid gaps at top/left
+    // For dimensions (width, height): floor to avoid gaps at bottom/right
+    ret.put("x", Math.ceil(x));
+    ret.put("y", Math.ceil(y));
+    ret.put("width", Math.floor(width));
+    ret.put("height", Math.floor(height));
+    return ret;
   }
 
   @Override
@@ -1287,6 +1366,13 @@ public class CameraPreview
       double logicalX = x / pixelRatio;
       double logicalY = relativeY / pixelRatio;
 
+      JSObject result = getViewSize(
+        logicalX,
+        logicalY,
+        logicalWidth,
+        logicalHeight
+      );
+
       // Log exact calculations to debug one-pixel difference
       Log.d("CameraPreview", "========================");
       Log.d("CameraPreview", "FINAL POSITION CALCULATIONS:");
@@ -1360,32 +1446,23 @@ public class CameraPreview
       }
       Log.d("CameraPreview", "========================");
 
-      JSObject result = new JSObject();
-      // Return values with proper rounding to avoid gaps
-      // For positions (x, y): floor to avoid gaps at top/left
-      // For dimensions (width, height): ceil to avoid gaps at bottom/right
-      result.put("width", Math.floor(logicalWidth));
-      result.put("height", Math.floor(logicalHeight));
-      result.put("x", Math.ceil(logicalX));
-      result.put("y", Math.ceil(logicalY));
-
       // Log what we're returning
       Log.d(
         "CameraPreview",
         "Returning to JS - x: " +
-        Math.ceil(logicalX) +
+        logicalX +
         " (from " +
         logicalX +
         "), y: " +
-        Math.ceil(logicalY) +
+        logicalY +
         " (from " +
         logicalY +
         "), width: " +
-        Math.floor(logicalWidth) +
+        logicalWidth +
         " (from " +
         logicalWidth +
         "), height: " +
-        Math.floor(logicalHeight) +
+        logicalHeight +
         " (from " +
         logicalHeight +
         ")"
@@ -1497,15 +1574,26 @@ public class CameraPreview
 
     JSObject ret = new JSObject();
     // Use same rounding strategy as start method
-    double x = cameraXView.getPreviewX() / pixelRatio;
-    double y = cameraXView.getPreviewY() / pixelRatio;
-    double width = cameraXView.getPreviewWidth() / pixelRatio;
-    double height = cameraXView.getPreviewHeight() / pixelRatio;
+    double x = Math.ceil(cameraXView.getPreviewX() / pixelRatio);
+    double y = Math.ceil(cameraXView.getPreviewY() / pixelRatio);
+    double width = Math.floor(cameraXView.getPreviewWidth() / pixelRatio);
+    double height = Math.floor(cameraXView.getPreviewHeight() / pixelRatio);
 
-    ret.put("x", Math.ceil(x));
-    ret.put("y", Math.ceil(y));
-    ret.put("width", Math.floor(width));
-    ret.put("height", Math.floor(height));
+    Log.d(
+      "CameraPreview",
+      "getPreviewSize: x=" +
+      x +
+      ", y=" +
+      y +
+      ", width=" +
+      width +
+      ", height=" +
+      height
+    );
+    ret.put("x", x);
+    ret.put("y", y);
+    ret.put("width", width);
+    ret.put("height", height);
     call.resolve(ret);
   }
 
