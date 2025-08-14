@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.20](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.19...7.4.0-alpha.20) (2025-08-14)
+
+
+### Features
+
+* enhance CameraPreview with detailed logging and improved aspect ratio handling during orientation changes ([ccb170c](https://github.com/Cap-go/capacitor-camera-preview/commit/ccb170c5ee2636368907c24500431e5df52dd1c4))
+
 ## [7.4.0-alpha.19](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.18...7.4.0-alpha.19) (2025-08-14)
 
 
