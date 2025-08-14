@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.22](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.21...7.4.0-alpha.22) (2025-08-14)
+
+
+### Features
+
+* improve CameraPreview and CameraXView with enhanced logging and rounding strategies for dimensions and positions ([de7d9b6](https://github.com/Cap-go/capacitor-camera-preview/commit/de7d9b661a0aaa97017f0869c9f3aa98d144ca22))
+
 ## [7.4.0-alpha.21](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.20...7.4.0-alpha.21) (2025-08-14)
 
 
