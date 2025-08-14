@@ -737,6 +737,50 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         if (previewResolution != null) {
           currentPreviewResolution = previewResolution.getResolution();
           Log.d(TAG, "Preview resolution: " + currentPreviewResolution);
+
+          // Log the actual aspect ratio of the selected resolution
+          if (currentPreviewResolution != null) {
+            double actualRatio =
+              (double) currentPreviewResolution.getWidth() /
+              (double) currentPreviewResolution.getHeight();
+            Log.d(
+              TAG,
+              "Actual preview aspect ratio: " +
+              actualRatio +
+              " (width=" +
+              currentPreviewResolution.getWidth() +
+              ", height=" +
+              currentPreviewResolution.getHeight() +
+              ")"
+            );
+
+            // Compare with requested ratio
+            if ("4:3".equals(sessionConfig.getAspectRatio())) {
+              double expectedRatio = 4.0 / 3.0;
+              double difference = Math.abs(actualRatio - expectedRatio);
+              Log.d(
+                TAG,
+                "4:3 ratio check - Expected: " +
+                expectedRatio +
+                ", Actual: " +
+                actualRatio +
+                ", Difference: " +
+                difference
+              );
+            } else if ("16:9".equals(sessionConfig.getAspectRatio())) {
+              double expectedRatio = 16.0 / 9.0;
+              double difference = Math.abs(actualRatio - expectedRatio);
+              Log.d(
+                TAG,
+                "16:9 ratio check - Expected: " +
+                expectedRatio +
+                ", Actual: " +
+                actualRatio +
+                ", Difference: " +
+                difference
+              );
+            }
+          }
         }
         ResolutionInfo imageCaptureResolution =
           imageCapture.getResolutionInfo();
@@ -2658,7 +2702,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     // Check if we're in portrait mode
     boolean isPortrait =
-      getContext().getResources().getConfiguration().orientation ==
+      context.getResources().getConfiguration().orientation ==
       Configuration.ORIENTATION_PORTRAIT;
 
     // Swap dimensions if in portrait mode to match how PreviewView displays it
@@ -3184,6 +3228,40 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         "x" +
         finalHeight
       );
+
+      // Calculate and log the actual displayed aspect ratio
+      double displayedRatio = (double) finalWidth / (double) finalHeight;
+      Log.d(
+        TAG,
+        "Displayed aspect ratio: " +
+        displayedRatio +
+        " (width=" +
+        finalWidth +
+        ", height=" +
+        finalHeight +
+        ")"
+      );
+
+      // Compare with expected ratio based on orientation
+      if (aspectRatio != null) {
+        String[] parts = aspectRatio.split(":");
+        if (parts.length == 2) {
+          double expectedDisplayRatio = isPortrait
+            ? (ratioHeight / ratioWidth)
+            : (ratioWidth / ratioHeight);
+          double difference = Math.abs(displayedRatio - expectedDisplayRatio);
+          Log.d(
+            TAG,
+            "Display ratio check - Expected: " +
+            expectedDisplayRatio +
+            ", Actual: " +
+            displayedRatio +
+            ", Difference: " +
+            difference +
+            " (tolerance should be < 0.01)"
+          );
+        }
+      }
 
       // Update layout params
       ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
