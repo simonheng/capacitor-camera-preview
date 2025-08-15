@@ -1,5 +1,7 @@
 package com.ahm.capacitor.camera.preview;
 
+import static androidx.core.content.ContextCompat.getSystemService;
+
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -21,10 +23,13 @@ import android.util.Size;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.WindowMetrics;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
+import androidx.annotation.RequiresApi;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.core.AspectRatio;
@@ -447,10 +452,27 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     String aspectRatio = sessionConfig.getAspectRatio();
 
     // Get comprehensive display information
-    DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-    int screenWidthPx = metrics.widthPixels;
-    int screenHeightPx = metrics.heightPixels;
-    float density = metrics.density;
+    int screenWidthPx, screenHeightPx;
+    float density;
+    
+    // Get density using DisplayMetrics (available on all API levels)
+    WindowManager windowManager = (WindowManager) this.context.getSystemService(Context.WINDOW_SERVICE);
+    DisplayMetrics displayMetrics = new DisplayMetrics();
+    windowManager.getDefaultDisplay().getMetrics(displayMetrics);
+    density = displayMetrics.density;
+    
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      // API 30+ (Android 11+) - use WindowMetrics for screen dimensions
+      WindowMetrics metrics = windowManager.getCurrentWindowMetrics();
+      Rect bounds = metrics.getBounds();
+      screenWidthPx = bounds.width();
+      screenHeightPx = bounds.height();
+    } else {
+      // API < 30 - use legacy DisplayMetrics for screen dimensions
+      screenWidthPx = displayMetrics.widthPixels;
+      screenHeightPx = displayMetrics.heightPixels;
+    }
+    
     int screenWidthDp = (int) (screenWidthPx / density);
     int screenHeightDp = (int) (screenHeightPx / density);
 
@@ -544,8 +566,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           );
 
           // For centered mode with aspect ratio, calculate maximum size that fits
-          int availableWidth = metrics.widthPixels;
-          int availableHeight = metrics.heightPixels;
+          int availableWidth = screenWidthPx;
+          int availableHeight = screenHeightPx;
 
           Log.d(
             TAG,
@@ -3091,10 +3113,26 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     );
 
     // Get comprehensive display information
-    DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-    int screenWidthPx = metrics.widthPixels;
-    int screenHeightPx = metrics.heightPixels;
-    float density = metrics.density;
+    WindowManager windowManager = (WindowManager) this.context.getSystemService(Context.WINDOW_SERVICE);
+    int screenWidthPx, screenHeightPx;
+    float density;
+    
+    // Get density using DisplayMetrics (available on all API levels)
+    DisplayMetrics displayMetrics = new DisplayMetrics();
+    windowManager.getDefaultDisplay().getMetrics(displayMetrics);
+    density = displayMetrics.density;
+    
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      // API 30+ (Android 11+) - use WindowMetrics for screen dimensions
+      WindowMetrics metrics = windowManager.getCurrentWindowMetrics();
+      Rect bounds = metrics.getBounds();
+      screenWidthPx = bounds.width();
+      screenHeightPx = bounds.height();
+    } else {
+      // API < 30 - use legacy DisplayMetrics for screen dimensions
+      screenWidthPx = displayMetrics.widthPixels;
+      screenHeightPx = displayMetrics.heightPixels;
+    }
 
     // Get WebView dimensions
     int webViewWidth = webView.getWidth();
