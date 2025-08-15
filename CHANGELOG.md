@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.26](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.25...7.4.0-alpha.26) (2025-08-15)
+
+
+### Bug Fixes
+
+* ceneter the preview horizontally correctly ([557bddd](https://github.com/Cap-go/capacitor-camera-preview/commit/557bdddcc01dc1035efc8743bdd9e7f14a811c6c))
+
 ## [7.4.0-alpha.25](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.24...7.4.0-alpha.25) (2025-08-14)
 
 
