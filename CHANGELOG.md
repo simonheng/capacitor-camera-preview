@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.3.15](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.14...7.3.15) (2025-08-18)
+
+
+### Bug Fixes
+
+* **deps:** update dependency androidx.test.ext:junit to v1.3.0 ([#209](https://github.com/Cap-go/capacitor-camera-preview/issues/209)) ([521570a](https://github.com/Cap-go/capacitor-camera-preview/commit/521570a02a2fd02da64d6533fcefbb633b6a7fa1))
+
 ## [7.3.14](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.13...7.3.14) (2025-08-11)
 
 
