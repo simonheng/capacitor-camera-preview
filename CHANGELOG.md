@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.28](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.27...7.4.0-alpha.28) (2025-08-18)
+
+
+### Bug Fixes
+
+* add support for notch on different devices ([97e9ac5](https://github.com/Cap-go/capacitor-camera-preview/commit/97e9ac551a48523acdedee5889ef53529aa4b6ea))
+
 ## [7.4.0-alpha.27](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.26...7.4.0-alpha.27) (2025-08-15)
 
 ## [7.4.0-alpha.26](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.25...7.4.0-alpha.26) (2025-08-15)
