@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.29](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.28...7.4.0-alpha.29) (2025-08-18)
+
+
+### Features
+
+* add screen resize listener and auto-center functionality in camera preview ([15dc367](https://github.com/Cap-go/capacitor-camera-preview/commit/15dc367f20411670d2870576468f34eb1e772f6d))
+
 ## [7.4.0-alpha.28](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.27...7.4.0-alpha.28) (2025-08-18)
 
 
