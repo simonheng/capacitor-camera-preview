@@ -795,9 +795,14 @@ On web, this is not supported and will throw.
 getSafeAreaInsets() => Promise<SafeAreaInsets>
 ```
 
-Gets the safe area insets for Android devices.
-Returns the top notch/camera cutout inset in dp and the current orientation.
-This specifically targets the top cutout area (notch, punch hole, etc.) that all modern phones have.
+Gets the safe area insets for devices.
+Returns the orientation-aware notch/camera cutout inset and the current orientation.
+In portrait mode: returns top inset (notch at top).
+In landscape mode: returns left inset (notch moved to side).
+This specifically targets the cutout area (notch, punch hole, etc.) that all modern phones have.
+
+Android: Values returned in dp (logical pixels).
+iOS: Values returned in physical pixels, excluding status bar (only pure notch/cutout size).
 
 **Returns:** <code>Promise&lt;<a href="#safeareainsets">SafeAreaInsets</a>&gt;</code>
 
@@ -961,13 +966,14 @@ Represents the detailed information of the currently active lens.
 
 #### SafeAreaInsets
 
-Represents safe area insets on Android.
-Values are expressed in logical pixels (dp) to match JS layout units.
+Represents safe area insets for devices.
+Android: Values are expressed in logical pixels (dp) to match JS layout units.
+iOS: Values are expressed in physical pixels and exclude status bar.
 
-| Prop              | Type                | Description                                                      |
-| ----------------- | ------------------- | ---------------------------------------------------------------- |
-| **`orientation`** | <code>number</code> | Current device orientation as reported by Android configuration. |
-| **`top`**         | <code>number</code> | Top inset for notch/camera cutout/status bar in dp.              |
+| Prop              | Type                | Description                                                                                                                                                                                                                                      |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`orientation`** | <code>number</code> | Current device orientation (1 = portrait, 2 = landscape, 0 = unknown).                                                                                                                                                                           |
+| **`top`**         | <code>number</code> | Orientation-aware notch/camera cutout inset (excluding status bar). In portrait mode: returns top inset (notch at top). In landscape mode: returns left inset (notch at side). Android: Value in dp, iOS: Value in pixels (status bar excluded). |
 
 
 ### Type Aliases
