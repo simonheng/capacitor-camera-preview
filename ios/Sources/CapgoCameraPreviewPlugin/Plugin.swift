@@ -98,6 +98,44 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     private var permissionCallID: String?
     private var waitingForLocation: Bool = false
 
+    // MARK: - Helper Methods for Aspect Ratio
+    
+    /// Validates that aspectRatio and size (width/height) are not both set
+    private func validateAspectRatioParameters(aspectRatio: String?, width: Int?, height: Int?) -> String? {
+        if aspectRatio != nil && (width != nil || height != nil) {
+            return "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start."
+        }
+        return nil
+    }
+    
+    /// Parses aspect ratio string and returns the appropriate ratio for the current orientation
+    private func parseAspectRatio(_ ratio: String, isPortrait: Bool) -> CGFloat {
+        let parts = ratio.split(separator: ":").compactMap { Double($0) }
+        guard parts.count == 2 else { return 1.0 }
+        
+        // For camera (portrait), we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+        return isPortrait ? 
+            CGFloat(parts[1] / parts[0]) : 
+            CGFloat(parts[0] / parts[1])
+    }
+    
+    /// Calculates dimensions based on aspect ratio and available space
+    private func calculateDimensionsForAspectRatio(_ aspectRatio: String, availableWidth: CGFloat, availableHeight: CGFloat, isPortrait: Bool) -> (width: CGFloat, height: CGFloat) {
+        let ratio = parseAspectRatio(aspectRatio, isPortrait: isPortrait)
+        
+        // Calculate maximum size that fits the aspect ratio in available space
+        let maxWidthByHeight = availableHeight * ratio
+        let maxHeightByWidth = availableWidth / ratio
+        
+        if maxWidthByHeight <= availableWidth {
+            // Height is the limiting factor
+            return (width: maxWidthByHeight, height: availableHeight)
+        } else {
+            // Width is the limiting factor
+            return (width: availableWidth, height: maxHeightByWidth)
+        }
+    }
+
     // MARK: - Transparency Methods
 
     private func makeWebViewTransparent() {
@@ -304,23 +342,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
 
         // Parse aspect ratio - convert to portrait orientation for camera use
-        let ratioParts = self.aspectRatio?.split(separator: ":").map { Double($0) ?? 1.0 } ?? [1.0, 1.0]
-
-        // For camera (portrait), we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-        let ratio = !isPortrait ? ratioParts[0] / ratioParts[1] : ratioParts[1] / ratioParts[0]
-
-        // Calculate maximum size that fits the aspect ratio in available space
-        let maxWidthByHeight = availableHeight * CGFloat(ratio)
-        let maxHeightByWidth = availableWidth / CGFloat(ratio)
-
-        if maxWidthByHeight <= availableWidth {
-            // Height is the limiting factor
-            self.width = maxWidthByHeight
-            self.height = availableHeight
-        } else {
-            // Width is the limiting factor
-            self.width = availableWidth
-            self.height = maxHeightByWidth
+        // Use the centralized calculation method
+        if let aspectRatio = self.aspectRatio {
+            let dimensions = calculateDimensionsForAspectRatio(aspectRatio, availableWidth: availableWidth, availableHeight: availableHeight, isPortrait: isPortrait)
+            self.width = dimensions.width
+            self.height = dimensions.height
         }
 
         self.updateCameraFrame()
@@ -475,6 +501,26 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     @objc func start(_ call: CAPPluginCall) {
         let startTime = CFAbsoluteTimeGetCurrent()
         print("[CameraPreview] 🚀 START CALLED at \(Date())")
+        
+        // Log all received settings
+        print("[CameraPreview] 📋 Settings received:")
+        print("  - position: \(call.getString("position") ?? "rear")")
+        print("  - deviceId: \(call.getString("deviceId") ?? "nil")")
+        print("  - cameraMode: \(call.getBool("cameraMode") ?? false)")
+        print("  - width: \(call.getInt("width") ?? 0)")
+        print("  - height: \(call.getInt("height") ?? 0)")
+        print("  - x: \(call.getInt("x") ?? -1)")
+        print("  - y: \(call.getInt("y") ?? -1)")
+        print("  - paddingBottom: \(call.getInt("paddingBottom") ?? 0)")
+        print("  - rotateWhenOrientationChanged: \(call.getBool("rotateWhenOrientationChanged") ?? true)")
+        print("  - toBack: \(call.getBool("toBack") ?? true)")
+        print("  - storeToFile: \(call.getBool("storeToFile") ?? false)")
+        print("  - enableZoom: \(call.getBool("enableZoom") ?? false)")
+        print("  - disableAudio: \(call.getBool("disableAudio") ?? true)")
+        print("  - aspectRatio: \(call.getString("aspectRatio") ?? "4:3")")
+        print("  - gridMode: \(call.getString("gridMode") ?? "none")")
+        print("  - positioning: \(call.getString("positioning") ?? "top")")
+        print("  - initialZoomLevel: \(call.getFloat("initialZoomLevel") ?? 1.0)")
 
         if self.isInitializing {
             call.reject("camera initialization in progress")
@@ -533,8 +579,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         let initialZoomLevel = call.getFloat("initialZoomLevel")
 
-        if self.aspectRatio != nil && (call.getInt("width") != nil || call.getInt("height") != nil) {
-            call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
+        // Validate aspect ratio parameters using centralized method
+        if let validationError = validateAspectRatioParameters(aspectRatio: self.aspectRatio, width: call.getInt("width"), height: call.getInt("height")) {
+            call.reject(validationError)
             return
         }
 
@@ -790,10 +837,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         print("[CameraPreview] Raw parameter values - width: \(String(describing: width)), height: \(String(describing: height)), aspectRatio: \(String(describing: aspectRatio))")
 
-        // Check for conflicting parameters
-        if aspectRatio != nil && (width != nil || height != nil) {
-            print("[CameraPreview] Error: Cannot set both aspectRatio and size (width/height)")
-            call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
+        // Check for conflicting parameters using centralized validation
+        if let validationError = validateAspectRatioParameters(aspectRatio: aspectRatio, width: width, height: height) {
+            print("[CameraPreview] Error: \(validationError)")
+            call.reject(validationError)
             return
         }
 
@@ -853,7 +900,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     self.saveImageDataToGallery(imageData: imageDataWithExif) { success, error in
                         print("[CameraPreview] Save to gallery completed, success: \(success), error: \(error?.localizedDescription ?? "none")")
                         let exifData = self.getExifData(from: imageDataWithExif)
-                        let base64Image = imageDataWithExif.base64EncodedString()
 
                         var result = JSObject()
                         result["exif"] = exifData
@@ -1591,16 +1637,16 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                 print("[CameraPreview] width: \(UIScreen.main.bounds.size.width) height: \(UIScreen.main.bounds.size.height)")
 
-                // Calculate height based on aspect ratio
-                let ratioParts = ratio.split(separator: ":").compactMap { Double($0) }
-                if ratioParts.count == 2 {
-                    // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-                    let ratioValue = ratioParts[1] / ratioParts[0]
-                    if isPortrait {
-                        finalHeight = finalWidth / CGFloat(ratioValue)
-                    } else {
-                        finalWidth = finalHeight / CGFloat(ratioValue)
-                    }
+                // Calculate dimensions using centralized method
+                let dimensions = calculateDimensionsForAspectRatio(ratio, availableWidth: finalWidth, availableHeight: webViewHeight - paddingBottom, isPortrait: isPortrait)
+                if isPortrait {
+                    finalHeight = dimensions.height
+                    finalWidth = dimensions.width
+                } else {
+                    // In landscape, recalculate based on available space
+                    let landscapeDimensions = calculateDimensionsForAspectRatio(ratio, availableWidth: webViewWidth, availableHeight: webViewHeight - paddingBottom, isPortrait: isPortrait)
+                    finalWidth = landscapeDimensions.width
+                    finalHeight = landscapeDimensions.height
                 }
             }
 
@@ -1660,21 +1706,18 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         // Apply aspect ratio adjustments only if not auto-centering
         if posX != -1 && posY != -1, let aspectRatio = self.aspectRatio {
-            let ratioParts = aspectRatio.split(separator: ":").compactMap { Double($0) }
-            if ratioParts.count == 2 {
-                // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-                let ratio = ratioParts[1] / ratioParts[0]
-                let currentRatio = Double(frame.width) / Double(frame.height)
-
-                if currentRatio > ratio {
-                    let newWidth = Double(frame.height) * ratio
-                    frame.origin.x = frame.origin.x + (frame.width - CGFloat(newWidth)) / 2
-                    frame.size.width = CGFloat(newWidth)
-                } else {
-                    let newHeight = Double(frame.width) / ratio
-                    frame.origin.y = frame.origin.y + (frame.height - CGFloat(newHeight)) / 2
-                    frame.size.height = CGFloat(newHeight)
-                }
+            let isPortrait = self.isPortrait()
+            let ratio = parseAspectRatio(aspectRatio, isPortrait: isPortrait)
+            let currentRatio = frame.width / frame.height
+            
+            if currentRatio > ratio {
+                let newWidth = frame.height * ratio
+                frame.origin.x = frame.origin.x + (frame.width - newWidth) / 2
+                frame.size.width = newWidth
+            } else {
+                let newHeight = frame.width / ratio
+                frame.origin.y = frame.origin.y + (frame.height - newHeight) / 2
+                frame.size.height = newHeight
             }
         }
 

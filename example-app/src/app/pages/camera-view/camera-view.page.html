@@ -162,6 +162,11 @@
                 placeholder="0"
               ></ion-input>
             </ion-item>
+            <ion-item lines="none">
+              <ion-button expand="block" color="medium" (click)="unsetXY()">
+                Unset X &amp; Y (Auto Center)
+              </ion-button>
+            </ion-item>
             @if (aspectRatio() === 'custom') {
             <ion-item>
               <ion-label>Width</ion-label>

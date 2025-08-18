@@ -75,6 +75,10 @@ import { GalleryService } from '../../services/gallery.service';
   ],
 })
 export class CameraViewPage implements OnInit {
+  protected unsetXY() {
+    this.previewX.set(-1);
+    this.previewY.set(-1);
+  }
   readonly #cameraViewService = inject(CapacitorCameraViewService);
   readonly #galleryService = inject(GalleryService);
   readonly #modalController = inject(ModalController);
@@ -163,8 +167,8 @@ export class CameraViewPage implements OnInit {
         h = 200;
         break;
     }
-    this.previewX.set(x);
-    this.previewY.set(y);
+  this.previewX.set(x);
+  this.previewY.set(y);
     this.previewWidth.set(w);
     this.previewHeight.set(h);
     this.aspectRatio.set('custom');
@@ -232,8 +236,8 @@ export class CameraViewPage implements OnInit {
         deviceId: this.deviceId(),
         position: this.position(),
         quality: this.quality(),
-        x: this.previewX() === 0 ? undefined : this.previewX(),
-        y: this.previewY() === 0 ? undefined : this.previewY(),
+  x: this.previewX() == null ? undefined : this.previewX(),
+  y: this.previewY() == null ? undefined : this.previewY(),
         width: this.previewWidth(),
         height: this.previewHeight(),
         aspectRatio:

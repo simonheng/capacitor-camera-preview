@@ -10,7 +10,7 @@ import {
   signal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import {
   IonCard,
   IonCardContent,
@@ -31,6 +31,8 @@ import {
   type CameraLens,
   type CameraPreviewPictureOptions,
   type GridMode,
+  CameraPreview,
+  CameraPreviewOptions,
 } from '@capgo/camera-preview';
 import { CapacitorCameraViewService } from '../../core/capacitor-camera-preview.service';
 
@@ -165,6 +167,9 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected nativePreviewWidth = signal(0);
   protected nativePreviewHeight = signal(0);
 
+  // Listener handle for screen resize events
+  #screenResizeListener?: PluginListenerHandle;
+
   protected async togglePreviewSize(): Promise<void> {
     try {
       if (this.isHalfSize()) {
@@ -252,17 +257,20 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     await this.startCamera();
+    await this.setupScreenResizeListener();
   }
 
   ngOnDestroy(): void {
     this.stop();
+    this.removeScreenResizeListener();
   }
 
   protected async startCamera(): Promise<void> {
-    const startOptions: any = {
+    const startOptions: CameraPreviewOptions = {
       parent: 'cameraView',
       deviceId: this.deviceId(),
       position: this.position(),
+      positioning: 'center',
       enableZoom: this.enableZoom(),
       disableAudio: this.disableAudio(),
       lockAndroidOrientation: this.lockAndroidOrientation(),
@@ -272,11 +280,13 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     };
 
     // Only add x and y if they are not null
-    if (this.x() !== null) {
-      startOptions.x = this.x();
+    const x = this.x();
+    if (x !== null) {
+      startOptions.x = x;
     }
-    if (this.y() !== null) {
-      startOptions.y = this.y();
+    const y = this.y();
+    if (y !== null) {
+      startOptions.y = y;
     }
 
     // Initialize aspect ratio based on input
@@ -940,6 +950,88 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       });
     } catch (error) {
       // Silently fail if focus is not supported
+    }
+  }
+
+  private async setupScreenResizeListener(): Promise<void> {
+    try {
+      this.#screenResizeListener = await CameraPreview.addListener(
+        'screenResize',
+        async (data) => {
+          console.log('Screen resize event:', data);
+
+          // Check if we're currently running and not in the middle of capturing
+          if (!this.cameraStarted() || this.isCapturingPhoto()) {
+            return;
+          }
+
+          try {
+            // Get the current preview size from native
+            const currentSize = await this.#cameraViewService.getPreviewSize();
+
+            // Update the preview position and size signals
+            this.currentPreviewX.set(currentSize.x);
+            this.currentPreviewY.set(currentSize.y);
+            this.currentPreviewWidth.set(currentSize.width);
+            this.currentPreviewHeight.set(currentSize.height);
+
+            // If we're in half size mode, recalculate the centered position
+            if (this.isHalfSize()) {
+              const centerX = Math.floor((data.width - 200) / 2);
+              const centerY = Math.floor((data.height - 200) / 2);
+              const newSize = { x: centerX, y: centerY, width: 200, height: 200 };
+              
+              const nativeResult = await this.#cameraViewService.setPreviewSize(newSize);
+
+              // Update both requested and native positions
+              this.currentPreviewX.set(newSize.x);
+              this.currentPreviewY.set(newSize.y);
+              this.currentPreviewWidth.set(newSize.width);
+              this.currentPreviewHeight.set(newSize.height);
+
+              this.nativePreviewX.set(nativeResult.x);
+              this.nativePreviewY.set(nativeResult.y);
+              this.nativePreviewWidth.set(nativeResult.width);
+              this.nativePreviewHeight.set(nativeResult.height);
+            } else {
+              // Full screen mode - update to new screen dimensions
+              const newSize = {
+                x: 0,
+                y: 0,
+                width: data.width,
+                height: data.height,
+              };
+              
+              const nativeResult = await this.#cameraViewService.setPreviewSize(newSize);
+
+              // Update both requested and native positions
+              this.currentPreviewX.set(newSize.x);
+              this.currentPreviewY.set(newSize.y);
+              this.currentPreviewWidth.set(newSize.width);
+              this.currentPreviewHeight.set(newSize.height);
+
+              this.nativePreviewX.set(nativeResult.x);
+              this.nativePreviewY.set(nativeResult.y);
+              this.nativePreviewWidth.set(nativeResult.width);
+              this.nativePreviewHeight.set(nativeResult.height);
+            }
+
+            // Re-initialize zoom limits as they might change with orientation
+            await this.#initializeZoomLimits();
+          } catch (error) {
+            console.error('Failed to handle screen resize:', error);
+          }
+        },
+      );
+    } catch (error) {
+      console.warn('Failed to setup screen resize listener:', error);
+    }
+  }
+
+  private removeScreenResizeListener(): void {
+    if (this.#screenResizeListener) {
+      this.#screenResizeListener.remove();
+      this.#screenResizeListener = undefined;
     }
   }
 }
