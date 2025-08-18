@@ -454,13 +454,15 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     // Get comprehensive display information
     int screenWidthPx, screenHeightPx;
     float density;
-    
+
     // Get density using DisplayMetrics (available on all API levels)
-    WindowManager windowManager = (WindowManager) this.context.getSystemService(Context.WINDOW_SERVICE);
+    WindowManager windowManager = (WindowManager) this.context.getSystemService(
+        Context.WINDOW_SERVICE
+      );
     DisplayMetrics displayMetrics = new DisplayMetrics();
     windowManager.getDefaultDisplay().getMetrics(displayMetrics);
     density = displayMetrics.density;
-    
+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       // API 30+ (Android 11+) - use WindowMetrics for screen dimensions
       WindowMetrics metrics = windowManager.getCurrentWindowMetrics();
@@ -472,7 +474,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       screenWidthPx = displayMetrics.widthPixels;
       screenHeightPx = displayMetrics.heightPixels;
     }
-    
+
     int screenWidthDp = (int) (screenWidthPx / density);
     int screenHeightDp = (int) (screenHeightPx / density);
 
@@ -3113,15 +3115,17 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     );
 
     // Get comprehensive display information
-    WindowManager windowManager = (WindowManager) this.context.getSystemService(Context.WINDOW_SERVICE);
+    WindowManager windowManager = (WindowManager) this.context.getSystemService(
+        Context.WINDOW_SERVICE
+      );
     int screenWidthPx, screenHeightPx;
     float density;
-    
+
     // Get density using DisplayMetrics (available on all API levels)
     DisplayMetrics displayMetrics = new DisplayMetrics();
     windowManager.getDefaultDisplay().getMetrics(displayMetrics);
     density = displayMetrics.density;
-    
+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       // API 30+ (Android 11+) - use WindowMetrics for screen dimensions
       WindowMetrics metrics = windowManager.getCurrentWindowMetrics();
