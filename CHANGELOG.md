@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.30](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.29...7.4.0-alpha.30) (2025-08-18)
+
+
+### Bug Fixes
+
+* improve handling of notch insets for different orientations and clean up code formatting ([7e678db](https://github.com/Cap-go/capacitor-camera-preview/commit/7e678dbdc16f5a2670349db2815cc83dfa41e600))
+
 ## [7.4.0-alpha.29](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.28...7.4.0-alpha.29) (2025-08-18)
 
 
