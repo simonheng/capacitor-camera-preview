@@ -1680,85 +1680,61 @@ public class CameraPreview
       .getConfiguration()
       .orientation;
 
-    int topPx = 0;
-    int bottomPx = 0;
+    int notchInsetPx = 0;
+    
     try {
-      View webView = getBridge().getWebView();
-      if (webView != null) {
-        DisplayMetrics metrics = getBridge()
-          .getActivity()
-          .getResources()
-          .getDisplayMetrics();
-        int screenHeight = metrics.heightPixels;
-        int[] location = new int[2];
-        webView.getLocationOnScreen(location);
-        int webViewTop = location[1];
-        int webViewBottom = webViewTop + webView.getHeight();
-        int webViewBottomGap = Math.max(0, screenHeight - webViewBottom);
-
-        // System insets (status/navigation/cutout)
-        int systemTop = 0;
-        int systemBottom = 0;
-        View decorView = getBridge().getActivity().getWindow().getDecorView();
-        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
-        if (insets != null) {
-          Insets sysBars = insets.getInsets(
-            WindowInsetsCompat.Type.systemBars()
-          );
-          Insets cutout = insets.getInsets(
-            WindowInsetsCompat.Type.displayCutout()
-          );
-          systemTop = Math.max(sysBars.top, cutout.top);
-          systemBottom = Math.max(sysBars.bottom, cutout.bottom);
+      View decorView = getBridge().getActivity().getWindow().getDecorView();
+      WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
+      
+      if (insets != null) {
+        // Get display cutout insets (notch, punch hole, etc.)
+        // this.Capacitor.Plugins.CameraPreview.getSafeAreaInsets()
+        Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+        
+        // Get system bars insets (status bar, navigation bars)
+        Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+        
+        // In portrait mode, notch is at the top
+        // In landscape mode, notch is typically at the left side (or right, but left is more common)
+        if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+          // Portrait: return top inset (notch/status bar)
+          notchInsetPx = Math.max(cutout.top, sysBars.top);
+          
+          // If no cutout detected but we have system bars, use status bar height as fallback
+          if (cutout.top == 0 && sysBars.top > 0) {
+            notchInsetPx = sysBars.top;
+          }
+        } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+          // Landscape: return left inset (notch moved to side)
+          notchInsetPx = Math.max(cutout.left, sysBars.left);
+          
+          // If no cutout detected but we have system bars, use left system bar as fallback
+          if (cutout.left == 0 && sysBars.left > 0) {
+            notchInsetPx = sysBars.left;
+          }
+          
+          // Additional fallback: some devices might have the notch on the right in landscape
+          // If left is 0, check right side as well
+          if (notchInsetPx == 0) {
+            notchInsetPx = Math.max(cutout.right, sysBars.right);
+          }
         } else {
-          systemTop = getStatusBarHeightPx();
-          systemBottom = getNavigationBarHeightPx();
-        }
-
-        // Top: report the gap between screen and WebView (useful when not edge-to-edge)
-        topPx = Math.max(0, webViewTop);
-
-        // Bottom logic:
-        // - If WebView has a bottom gap equal to the system nav bar height (3-button mode),
-        //   it means layout already accounts for it -> return 0 as requested.
-        // - If WebView has no gap (edge-to-edge or overlay), return system bottom inset.
-        // - Otherwise, default to system bottom inset (avoid counting app UI like tab bars).
-        if (
-          webViewBottomGap > 0 && approxEqualPx(webViewBottomGap, systemBottom)
-        ) {
-          bottomPx = 0; // already offset by system nav bar
-        } else if (webViewBottomGap == 0) {
-          bottomPx = systemBottom;
-        } else {
-          bottomPx = systemBottom;
+          // Unknown orientation, default to top
+          notchInsetPx = Math.max(cutout.top, sysBars.top);
         }
       } else {
-        // Fallback if WebView is unavailable
-        View decorView = getBridge().getActivity().getWindow().getDecorView();
-        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
-        if (insets != null) {
-          Insets sysBars = insets.getInsets(
-            WindowInsetsCompat.Type.systemBars()
-          );
-          Insets cutout = insets.getInsets(
-            WindowInsetsCompat.Type.displayCutout()
-          );
-          topPx = Math.max(sysBars.top, cutout.top);
-          bottomPx = Math.max(sysBars.bottom, cutout.bottom);
-        } else {
-          topPx = getStatusBarHeightPx();
-          bottomPx = getNavigationBarHeightPx();
-        }
+        // Fallback to status bar height if WindowInsets are not available
+        notchInsetPx = getStatusBarHeightPx();
       }
     } catch (Exception e) {
-      topPx = getStatusBarHeightPx();
-      bottomPx = getNavigationBarHeightPx();
+      // Final fallback
+      notchInsetPx = getStatusBarHeightPx();
     }
 
+    // Convert pixels to dp for consistency with JS layout units
     float density = getContext().getResources().getDisplayMetrics().density;
     ret.put("orientation", orientation);
-    ret.put("top", topPx / density);
-    ret.put("bottom", bottomPx / density);
+    ret.put("top", notchInsetPx / density);
     call.resolve(ret);
   }
 

@@ -68,7 +68,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         CAPPluginMethod(name: "setPreviewSize", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setFocus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "deleteFile", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getOrientation", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getOrientation", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getSafeAreaInsets", returnType: CAPPluginReturnPromise)
+
     ]
     // Camera state tracking
     private var isInitializing: Bool = false
@@ -934,6 +936,62 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
 
         return exifData
+    }
+    
+    @objc func getSafeAreaInsets(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            var notchInset: CGFloat = 0
+            var orientation: Int = 0
+            
+            // Get the current interface orientation
+            let interfaceOrientation: UIInterfaceOrientation? = {
+                return (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.interfaceOrientation
+            }()
+            
+            // Convert to orientation number (matching Android values for consistency)
+            switch interfaceOrientation {
+            case .portrait, .portraitUpsideDown:
+                orientation = 1 // Portrait
+            case .landscapeLeft, .landscapeRight:
+                orientation = 2 // Landscape
+            default:
+                orientation = 0 // Unknown
+            }
+            
+            // Get safe area insets
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                let safeAreaInsets = window.safeAreaInsets
+                
+                switch interfaceOrientation {
+                case .portrait:
+                    // Portrait: notch is at the top
+                    notchInset = safeAreaInsets.top
+                case .portraitUpsideDown:
+                    // Portrait upside down: notch is at the bottom (but we still call it "top" for consistency)
+                    notchInset = safeAreaInsets.bottom
+                case .landscapeLeft:
+                    // Landscape left: notch is typically on the left
+                    notchInset = safeAreaInsets.left
+                case .landscapeRight:
+                    // Landscape right: notch is typically on the right (but we use left for consistency with Android)
+                    notchInset = safeAreaInsets.right
+                default:
+                    // Unknown orientation, default to top
+                    notchInset = safeAreaInsets.top
+                }
+            } else {
+                // Fallback: use status bar height as approximation
+                notchInset = UIApplication.shared.statusBarFrame.height
+            }
+            
+            let result: [String: Any] = [
+                "orientation": orientation,
+                "top": Double(notchInset)
+            ]
+            
+            call.resolve(result)
+        }
     }
 
     private func createImageDataWithExif(from image: UIImage, quality: Int, location: CLLocation?, originalPhotoData: Data?) -> Data? {

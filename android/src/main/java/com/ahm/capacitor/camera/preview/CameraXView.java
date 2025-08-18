@@ -567,7 +567,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
           // For centered mode with aspect ratio, calculate maximum size that fits
           int availableWidth = screenWidthPx;
-          int availableHeight = screenHeightPx;
+          int availableHeight = screenHeightPx  ;
 
           Log.d(
             TAG,

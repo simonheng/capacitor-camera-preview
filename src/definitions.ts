@@ -309,16 +309,20 @@ export interface CameraOpacityOptions {
 }
 
 /**
- * Represents safe area insets on Android.
- * Values are expressed in logical pixels (dp) to match JS layout units.
+ * Represents safe area insets for devices.
+ * Android: Values are expressed in logical pixels (dp) to match JS layout units.
+ * iOS: Values are expressed in physical pixels and exclude status bar.
  */
 export interface SafeAreaInsets {
-  /** Current device orientation as reported by Android configuration. */
+  /** Current device orientation (1 = portrait, 2 = landscape, 0 = unknown). */
   orientation: number;
-  /** Top inset (e.g., status bar or cutout) in dp. */
+  /** 
+   * Orientation-aware notch/camera cutout inset (excluding status bar).
+   * In portrait mode: returns top inset (notch at top).
+   * In landscape mode: returns left inset (notch at side).
+   * Android: Value in dp, iOS: Value in pixels (status bar excluded).
+   */
   top: number;
-  /** Bottom inset (e.g., navigation bar) in dp. */
-  bottom: number;
 }
 
 /**
@@ -681,10 +685,16 @@ export interface CameraPreviewPlugin {
   deleteFile(options: { path: string }): Promise<{ success: boolean }>;
 
   /**
-   * Gets the safe area insets for Android devices.
-   * Returns the top and bottom insets in dp and the current orientation.
+   * Gets the safe area insets for devices.
+   * Returns the orientation-aware notch/camera cutout inset and the current orientation.
+   * In portrait mode: returns top inset (notch at top).
+   * In landscape mode: returns left inset (notch moved to side).
+   * This specifically targets the cutout area (notch, punch hole, etc.) that all modern phones have.
+   * 
+   * Android: Values returned in dp (logical pixels).
+   * iOS: Values returned in physical pixels, excluding status bar (only pure notch/cutout size).
    *
-   * @platform android
+   * @platform android, ios
    */
   getSafeAreaInsets(): Promise<SafeAreaInsets>;
 

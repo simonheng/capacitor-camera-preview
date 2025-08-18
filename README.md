@@ -796,7 +796,8 @@ getSafeAreaInsets() => Promise<SafeAreaInsets>
 ```
 
 Gets the safe area insets for Android devices.
-Returns the top and bottom insets in dp and the current orientation.
+Returns the top notch/camera cutout inset in dp and the current orientation.
+This specifically targets the top cutout area (notch, punch hole, etc.) that all modern phones have.
 
 **Returns:** <code>Promise&lt;<a href="#safeareainsets">SafeAreaInsets</a>&gt;</code>
 
@@ -966,8 +967,7 @@ Values are expressed in logical pixels (dp) to match JS layout units.
 | Prop              | Type                | Description                                                      |
 | ----------------- | ------------------- | ---------------------------------------------------------------- |
 | **`orientation`** | <code>number</code> | Current device orientation as reported by Android configuration. |
-| **`top`**         | <code>number</code> | Top inset (e.g., status bar or cutout) in dp.                    |
-| **`bottom`**      | <code>number</code> | Bottom inset (e.g., navigation bar) in dp.                       |
+| **`top`**         | <code>number</code> | Top inset for notch/camera cutout/status bar in dp.              |
 
 
 ### Type Aliases
