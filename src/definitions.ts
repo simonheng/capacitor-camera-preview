@@ -316,7 +316,7 @@ export interface CameraOpacityOptions {
 export interface SafeAreaInsets {
   /** Current device orientation (1 = portrait, 2 = landscape, 0 = unknown). */
   orientation: number;
-  /** 
+  /**
    * Orientation-aware notch/camera cutout inset (excluding status bar).
    * In portrait mode: returns top inset (notch at top).
    * In landscape mode: returns left inset (notch at side).
@@ -690,7 +690,7 @@ export interface CameraPreviewPlugin {
    * In portrait mode: returns top inset (notch at top).
    * In landscape mode: returns left inset (notch moved to side).
    * This specifically targets the cutout area (notch, punch hole, etc.) that all modern phones have.
-   * 
+   *
    * Android: Values returned in dp (logical pixels).
    * iOS: Values returned in physical pixels, excluding status bar (only pure notch/cutout size).
    *

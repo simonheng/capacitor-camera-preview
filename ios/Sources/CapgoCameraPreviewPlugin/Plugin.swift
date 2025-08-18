@@ -99,7 +99,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     private var waitingForLocation: Bool = false
 
     // MARK: - Helper Methods for Aspect Ratio
-    
+
     /// Validates that aspectRatio and size (width/height) are not both set
     private func validateAspectRatioParameters(aspectRatio: String?, width: Int?, height: Int?) -> String? {
         if aspectRatio != nil && (width != nil || height != nil) {
@@ -107,26 +107,26 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
         return nil
     }
-    
+
     /// Parses aspect ratio string and returns the appropriate ratio for the current orientation
     private func parseAspectRatio(_ ratio: String, isPortrait: Bool) -> CGFloat {
         let parts = ratio.split(separator: ":").compactMap { Double($0) }
         guard parts.count == 2 else { return 1.0 }
-        
+
         // For camera (portrait), we want portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
-        return isPortrait ? 
-            CGFloat(parts[1] / parts[0]) : 
+        return isPortrait ?
+            CGFloat(parts[1] / parts[0]) :
             CGFloat(parts[0] / parts[1])
     }
-    
+
     /// Calculates dimensions based on aspect ratio and available space
     private func calculateDimensionsForAspectRatio(_ aspectRatio: String, availableWidth: CGFloat, availableHeight: CGFloat, isPortrait: Bool) -> (width: CGFloat, height: CGFloat) {
         let ratio = parseAspectRatio(aspectRatio, isPortrait: isPortrait)
-        
+
         // Calculate maximum size that fits the aspect ratio in available space
         let maxWidthByHeight = availableHeight * ratio
         let maxHeightByWidth = availableWidth / ratio
-        
+
         if maxWidthByHeight <= availableWidth {
             // Height is the limiting factor
             return (width: maxWidthByHeight, height: availableHeight)
@@ -501,7 +501,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     @objc func start(_ call: CAPPluginCall) {
         let startTime = CFAbsoluteTimeGetCurrent()
         print("[CameraPreview] 🚀 START CALLED at \(Date())")
-        
+
         // Log all received settings
         print("[CameraPreview] 📋 Settings received:")
         print("  - position: \(call.getString("position") ?? "rear")")
@@ -983,17 +983,17 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         return exifData
     }
-    
+
     @objc func getSafeAreaInsets(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             var notchInset: CGFloat = 0
             var orientation: Int = 0
-            
+
             // Get the current interface orientation
             let interfaceOrientation: UIInterfaceOrientation? = {
                 return (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.interfaceOrientation
             }()
-            
+
             // Convert to orientation number (matching Android values for consistency)
             switch interfaceOrientation {
             case .portrait, .portraitUpsideDown:
@@ -1003,12 +1003,12 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             default:
                 orientation = 0 // Unknown
             }
-            
+
             // Get safe area insets
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let window = windowScene.windows.first {
                 let safeAreaInsets = window.safeAreaInsets
-                
+
                 switch interfaceOrientation {
                 case .portrait:
                     // Portrait: notch is at the top
@@ -1030,12 +1030,12 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 // Fallback: use status bar height as approximation
                 notchInset = UIApplication.shared.statusBarFrame.height
             }
-            
+
             let result: [String: Any] = [
                 "orientation": orientation,
                 "top": Double(notchInset)
             ]
-            
+
             call.resolve(result)
         }
     }
@@ -1709,7 +1709,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             let isPortrait = self.isPortrait()
             let ratio = parseAspectRatio(aspectRatio, isPortrait: isPortrait)
             let currentRatio = frame.width / frame.height
-            
+
             if currentRatio > ratio {
                 let newWidth = frame.height * ratio
                 frame.origin.x = frame.origin.x + (frame.width - newWidth) / 2

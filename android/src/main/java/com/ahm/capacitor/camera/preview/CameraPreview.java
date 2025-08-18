@@ -1681,25 +1681,27 @@ public class CameraPreview
       .orientation;
 
     int notchInsetPx = 0;
-    
+
     try {
       View decorView = getBridge().getActivity().getWindow().getDecorView();
       WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
-      
+
       if (insets != null) {
         // Get display cutout insets (notch, punch hole, etc.)
         // this.Capacitor.Plugins.CameraPreview.getSafeAreaInsets()
-        Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
-        
+        Insets cutout = insets.getInsets(
+          WindowInsetsCompat.Type.displayCutout()
+        );
+
         // Get system bars insets (status bar, navigation bars)
         Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-        
+
         // In portrait mode, notch is at the top
         // In landscape mode, notch is typically at the left side (or right, but left is more common)
         if (orientation == Configuration.ORIENTATION_PORTRAIT) {
           // Portrait: return top inset (notch/status bar)
           notchInsetPx = Math.max(cutout.top, sysBars.top);
-          
+
           // If no cutout detected but we have system bars, use status bar height as fallback
           if (cutout.top == 0 && sysBars.top > 0) {
             notchInsetPx = sysBars.top;
@@ -1707,12 +1709,12 @@ public class CameraPreview
         } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
           // Landscape: return left inset (notch moved to side)
           notchInsetPx = Math.max(cutout.left, sysBars.left);
-          
+
           // If no cutout detected but we have system bars, use left system bar as fallback
           if (cutout.left == 0 && sysBars.left > 0) {
             notchInsetPx = sysBars.left;
           }
-          
+
           // Additional fallback: some devices might have the notch on the right in landscape
           // If left is 0, check right side as well
           if (notchInsetPx == 0) {
