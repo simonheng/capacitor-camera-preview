@@ -11,6 +11,8 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
+import { StatusBar } from '@capacitor/status-bar';
+import { HomeIndicator } from '@capgo/home-indicator';
 import {
   IonCard,
   IonCardContent,
@@ -170,6 +172,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   // Listener handle for screen resize events
   #screenResizeListener?: PluginListenerHandle;
 
+  // Status bar and home indicator state tracking
+  #previousStatusBarVisible = true;
+  #previousHomeIndicatorVisible = true;
+
   protected async togglePreviewSize(): Promise<void> {
     try {
       if (this.isHalfSize()) {
@@ -256,6 +262,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    await this.#hideStatusBarAndHomeIndicator();
     await this.startCamera();
     await this.setupScreenResizeListener();
   }
@@ -263,6 +270,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.stop();
     this.removeScreenResizeListener();
+    this.#showStatusBarAndHomeIndicator();
   }
 
   protected async startCamera(): Promise<void> {
@@ -1032,6 +1040,66 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     if (this.#screenResizeListener) {
       this.#screenResizeListener.remove();
       this.#screenResizeListener = undefined;
+    }
+  }
+
+  /**
+   * Hide status bar and home indicator when modal opens
+   */
+  async #hideStatusBarAndHomeIndicator(): Promise<void> {
+    if (this.isWeb) {
+      return; // Skip on web platform
+    }
+
+    try {
+      // Store current status bar visibility state
+      const statusBarInfo = await StatusBar.getInfo();
+      this.#previousStatusBarVisible = statusBarInfo.visible;
+
+      // Hide the status bar
+      await StatusBar.hide();
+
+      // Try to get current home indicator state and hide it
+      try {
+        const homeIndicatorInfo = await HomeIndicator.isHidden();
+        this.#previousHomeIndicatorVisible = !homeIndicatorInfo.hidden;
+        
+        if (!homeIndicatorInfo.hidden) {
+          await HomeIndicator.hide();
+        }
+      } catch (error) {
+        console.warn('Failed to hide home indicator:', error);
+        // Continue execution even if home indicator fails
+      }
+
+      console.log('Status bar and home indicator hidden for camera modal');
+    } catch (error) {
+      console.warn('Failed to hide status bar:', error);
+    }
+  }
+
+  /**
+   * Show status bar and home indicator when modal closes
+   */
+  #showStatusBarAndHomeIndicator(): void {
+    if (this.isWeb) {
+      return; // Skip on web platform
+    }
+
+    try {
+      // Restore status bar visibility if it was previously visible
+      if (this.#previousStatusBarVisible) {
+        StatusBar.show();
+      }
+
+      // Restore home indicator visibility if it was previously visible
+      if (this.#previousHomeIndicatorVisible) {
+        HomeIndicator.show();
+      }
+
+      console.log('Status bar and home indicator restored after camera modal');
+    } catch (error) {
+      console.warn('Failed to restore status bar and home indicator:', error);
     }
   }
 }
