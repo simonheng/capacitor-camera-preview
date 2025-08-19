@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.32](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.31...7.4.0-alpha.32) (2025-08-19)
+
+
+### Features
+
+* integrate home indicator and status bar management in camera modal ([d3627ea](https://github.com/Cap-go/capacitor-camera-preview/commit/d3627ea27490a7dc968f72f7920a0dd00c7ff532))
+
 ## [7.4.0-alpha.31](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.30...7.4.0-alpha.31) (2025-08-19)
 
 
