@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.0-alpha.31](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.30...7.4.0-alpha.31) (2025-08-19)
+
+
+### Features
+
+* add additional camera capabilities including zoom, focus, flash, lens, video, photo, image, and capture ([e6c47e9](https://github.com/Cap-go/capacitor-camera-preview/commit/e6c47e96c4e9597382007c0138c6a1b3d5b77241))
+
 ## [7.4.0-alpha.30](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.29...7.4.0-alpha.30) (2025-08-18)
 
 
