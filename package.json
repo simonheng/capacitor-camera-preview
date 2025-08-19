@@ -16,7 +16,15 @@
     "plugin",
     "camera",
     "preview",
-    "native"
+    "native",
+    "zoom",
+    "focus",
+    "flash",
+    "lense",
+    "video",
+    "photo",
+    "image",
+    "capture"
   ],
   "main": "dist/esm/index.js",
   "types": "dist/esm/index.d.ts",
