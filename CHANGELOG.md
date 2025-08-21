@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.4.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0...7.4.1) (2025-08-21)
+
 ## [7.4.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.3.16...7.4.0) (2025-08-21)
 
 ## [7.4.0-alpha.36](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.0-alpha.35...7.4.0-alpha.36) (2025-08-19)
