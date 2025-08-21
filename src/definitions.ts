@@ -369,9 +369,13 @@ export interface CameraPreviewPlugin {
   /**
    * Captures a picture from the camera.
    *
+   * If `storeToFile` was set to `true` when starting the preview, the returned
+   * `value` will be an absolute file path on the device instead of a base64 string. Use getBase64FromFilePath to get the base64 string from the file path.
+   *
    * @param {CameraPreviewPictureOptions} options - The options for capturing the picture.
-   * @returns {Promise<{ value: string }>} A promise that resolves with the captured image data.
-   * The `value` is a base64 encoded string unless `storeToFile` is true, in which case it's a file path.
+   * @returns {Promise<{ value: string; exif: ExifData }>} Resolves with:
+   *   - `value`: base64 string, or file path if `storeToFile` is true
+   *   - `exif`: extracted EXIF metadata when available
    * @since 0.0.1
    */
   capture(

@@ -83,8 +83,9 @@ When using `storeToFile: true`, you can avoid sending large base64 strings over 
 ```ts
 import { CameraPreview, getBase64FromFilePath } from '@capgo/camera-preview'
 
+await CameraPreview.start({ storeToFile: true });
 // Take a picture and get a file path
-const { value: filePath } = await CameraPreview.capture({ quality: 85, storeToFile: true })
+const { value: filePath } = await CameraPreview.capture({ quality: 85 })
 
 // Convert the file to base64 entirely on the JS side (fast, no bridge)
 const base64 = await getBase64FromFilePath(filePath)
@@ -316,6 +317,9 @@ capture(options: CameraPreviewPictureOptions) => Promise<{ value: string; exif: 
 ```
 
 Captures a picture from the camera.
+
+If `storeToFile` was set to `true` when starting the preview, the returned
+`value` will be an absolute file path on the device instead of a base64 string. Use getBase64FromFilePath to get the base64 string from the file path.
 
 | Param         | Type                                                                                | Description                              |
 | ------------- | ----------------------------------------------------------------------------------- | ---------------------------------------- |
