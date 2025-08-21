@@ -228,7 +228,62 @@ export class CameraViewPage implements OnInit {
     this.testResults.set(results);
   }
 
+  protected setMaxCapturePreset(preset: string) {
+    let maxWidth: number | undefined, maxHeight: number | undefined;
+
+    switch (preset) {
+      case 'max-width-800':
+        maxWidth = 800;
+        maxHeight = undefined;
+        break;
+      case 'max-height-600':
+        maxWidth = undefined;
+        maxHeight = 600;
+        break;
+      case 'max-800x600':
+        maxWidth = 800;
+        maxHeight = 600;
+        break;
+      case 'max-1200x800':
+        maxWidth = 1200;
+        maxHeight = 800;
+        break;
+      case 'max-square-500':
+        maxWidth = 500;
+        maxHeight = 500;
+        break;
+      case 'disable':
+        this.useCustomSize.set(false);
+        return;
+      default:
+        return;
+    }
+
+    this.pictureWidth.set(maxWidth || 0);
+    this.pictureHeight.set(maxHeight || 0);
+    this.useCustomSize.set(true);
+
+    // Add to test results to show what was selected
+    const maxWidthText = maxWidth ? maxWidth.toString() : 'unlimited';
+    const maxHeightText = maxHeight ? maxHeight.toString() : 'unlimited';
+    const results =
+      this.testResults() +
+      `\n📏 Max capture size set to: ${maxWidthText}x${maxHeightText} (${preset.toUpperCase()})`;
+    this.testResults.set(results);
+  }
+
   protected async startCamera(): Promise<void> {
+    // Validate that aspect ratio and size (width/height) are not both set
+    const hasAspectRatio = this.aspectRatio() !== 'custom';
+    const hasSize = this.previewWidth() > 0 || this.previewHeight() > 0;
+    
+    if (hasAspectRatio && hasSize) {
+      const results = this.testResults() + 
+        `\n✗ Error: Cannot set both aspect ratio and size (width/height). Use setPreviewSize after start.`;
+      this.testResults.set(results);
+      return;
+    }
+
     const cameraModal = await this.#modalController.create({
       component: CameraModalComponent,
       animated: false,
@@ -236,8 +291,8 @@ export class CameraViewPage implements OnInit {
         deviceId: this.deviceId(),
         position: this.position(),
         quality: this.quality(),
-  x: this.previewX() == null ? undefined : this.previewX(),
-  y: this.previewY() == null ? undefined : this.previewY(),
+        x: this.previewX() == null ? undefined : this.previewX(),
+        y: this.previewY() == null ? undefined : this.previewY(),
         width: this.previewWidth(),
         height: this.previewHeight(),
         aspectRatio:

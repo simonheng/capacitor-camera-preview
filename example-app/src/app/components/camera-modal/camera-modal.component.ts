@@ -396,10 +396,15 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         captureOptions = { ...captureOptions, ...{ format } };
       }
 
-      captureOptions = {
-        ...captureOptions,
-        aspectRatio: this.currentAspectRatio(),
-      };
+      // Add width/height if custom size is enabled
+      if (this.useCustomSize() && (this.pictureWidth() > 0 || this.pictureHeight() > 0)) {
+        if (this.pictureWidth() > 0) {
+          captureOptions.width = this.pictureWidth();
+        }
+        if (this.pictureHeight() > 0) {
+          captureOptions.height = this.pictureHeight();
+        }
+      }
 
       const { value, exif } = await this.#cameraViewService.capture(
         quality,

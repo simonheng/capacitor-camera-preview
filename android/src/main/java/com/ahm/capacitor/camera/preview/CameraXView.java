@@ -981,7 +981,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     final boolean saveToGallery,
     Integer width,
     Integer height,
-    String aspectRatio,
     Location location
   ) {
     Log.d(
@@ -991,20 +990,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       ", width: " +
       width +
       ", height: " +
-      height +
-      ", aspectRatio: " +
-      aspectRatio
+      height
     );
-
-    // Check for conflicting parameters
-    if (aspectRatio != null && (width != null || height != null)) {
-      if (listener != null) {
-        listener.onPictureTakenError(
-          "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start."
-        );
-      }
-      return;
-    }
 
     if (imageCapture == null) {
       if (listener != null) {
@@ -1052,91 +1039,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
             JSONObject exifData = getExifData(exifInterface);
 
-            // Determine final output: explicit size wins, then explicit aspectRatio,
-            // otherwise crop to match what is visible in the preview (iOS parity)
-            String captureAspectRatio = aspectRatio;
-            if (
-              width == null &&
-              height == null &&
-              captureAspectRatio != null &&
-              !captureAspectRatio.isEmpty()
-            ) {
-              // Get the original image dimensions
-              Bitmap originalBitmap = BitmapFactory.decodeByteArray(
-                bytes,
-                0,
-                bytes.length
-              );
-              int originalWidth = originalBitmap.getWidth();
-              int originalHeight = originalBitmap.getHeight();
-
-              // Parse aspect ratio
-              String[] ratios = captureAspectRatio.split(":");
-              if (ratios.length == 2) {
-                try {
-                  float widthRatio = Float.parseFloat(ratios[0]);
-                  float heightRatio = Float.parseFloat(ratios[1]);
-
-                  // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
-                  boolean isPortrait = originalHeight > originalWidth;
-                  float targetAspectRatio = isPortrait
-                    ? heightRatio / widthRatio
-                    : widthRatio / heightRatio;
-                  float originalAspectRatio =
-                    (float) originalWidth / originalHeight;
-
-                  int targetWidth, targetHeight;
-
-                  if (originalAspectRatio > targetAspectRatio) {
-                    // Original is wider than target - fit by height
-                    targetHeight = originalHeight;
-                    targetWidth = (int) (targetHeight * targetAspectRatio);
-                  } else {
-                    // Original is taller than target - fit by width
-                    targetWidth = originalWidth;
-                    targetHeight = (int) (targetWidth / targetAspectRatio);
-                  }
-
-                  // Center crop the image
-                  int xOffset = (originalWidth - targetWidth) / 2;
-                  int yOffset = (originalHeight - targetHeight) / 2;
-
-                  Bitmap croppedBitmap = Bitmap.createBitmap(
-                    originalBitmap,
-                    xOffset,
-                    yOffset,
-                    targetWidth,
-                    targetHeight
-                  );
-
-                  ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                  croppedBitmap.compress(
-                    Bitmap.CompressFormat.JPEG,
-                    quality,
-                    stream
-                  );
-                  bytes = stream.toByteArray();
-
-                  // Write EXIF data back to cropped image
-                  bytes = writeExifToImageBytes(bytes, exifInterface);
-
-                  originalBitmap.recycle();
-                  croppedBitmap.recycle();
-                } catch (NumberFormatException e) {
-                  Log.e(
-                    TAG,
-                    "Invalid aspect ratio format: " + captureAspectRatio,
-                    e
-                  );
-                }
-              }
-            } else if (width != null && height != null) {
+            if (width != null || height != null) {
               Bitmap bitmap = BitmapFactory.decodeByteArray(
                 bytes,
                 0,
                 bytes.length
               );
-              Bitmap resizedBitmap = resizeBitmap(bitmap, width, height);
+              Bitmap resizedBitmap = resizeBitmapToMaxDimensions(bitmap, width, height);
               ByteArrayOutputStream stream = new ByteArrayOutputStream();
               resizedBitmap.compress(
                 Bitmap.CompressFormat.JPEG,
@@ -1220,6 +1129,39 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
   private Bitmap resizeBitmap(Bitmap bitmap, int width, int height) {
     return Bitmap.createScaledBitmap(bitmap, width, height, true);
+  }
+
+  private Bitmap resizeBitmapToMaxDimensions(Bitmap bitmap, Integer maxWidth, Integer maxHeight) {
+    int originalWidth = bitmap.getWidth();
+    int originalHeight = bitmap.getHeight();
+    float originalAspectRatio = (float) originalWidth / originalHeight;
+
+    int targetWidth = originalWidth;
+    int targetHeight = originalHeight;
+
+    if (maxWidth != null && maxHeight != null) {
+      // Both dimensions specified - fit within both maximums
+      float maxAspectRatio = (float) maxWidth / maxHeight;
+      if (originalAspectRatio > maxAspectRatio) {
+        // Original is wider - fit by width
+        targetWidth = maxWidth;
+        targetHeight = (int) (maxWidth / originalAspectRatio);
+      } else {
+        // Original is taller - fit by height
+        targetWidth = (int) (maxHeight * originalAspectRatio);
+        targetHeight = maxHeight;
+      }
+    } else if (maxWidth != null) {
+      // Only width specified - maintain aspect ratio
+      targetWidth = maxWidth;
+      targetHeight = (int) (maxWidth / originalAspectRatio);
+    } else {
+      // Only height specified - maintain aspect ratio
+      targetWidth = (int) (maxHeight * originalAspectRatio);
+      targetHeight = maxHeight;
+    }
+
+    return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true);
   }
 
   private JSONObject getExifData(ExifInterface exifInterface) {

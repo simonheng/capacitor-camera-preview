@@ -505,48 +505,37 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         // Calculate capture dimensions
         let captureWidth = video.videoWidth;
         let captureHeight = video.videoHeight;
-        let sourceX = 0;
-        let sourceY = 0;
+        const sourceX = 0;
+        const sourceY = 0;
 
-        // Check for conflicting parameters
-        if (options.aspectRatio && (options.width || options.height)) {
-          reject(
-            new Error(
-              "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.",
-            ),
-          );
-          return;
-        }
+        // If width or height is specified, resize to fit within both maximums while maintaining aspect ratio
+        if (options.width || options.height) {
+          const originalAspectRatio = video.videoWidth / video.videoHeight;
+          const targetWidth = options.width || video.videoWidth;
+          const targetHeight = options.height || video.videoHeight;
 
-        // Handle aspect ratio if no width/height specified
-        if (!options.width && !options.height && options.aspectRatio) {
-          const [widthRatio, heightRatio] = options.aspectRatio
-            .split(":")
-            .map(Number);
-          if (widthRatio && heightRatio) {
-            // For capture in portrait orientation, swap the aspect ratio (16:9 becomes 9:16)
-            const isPortrait = video.videoHeight > video.videoWidth;
-            const targetAspectRatio = isPortrait
-              ? heightRatio / widthRatio
-              : widthRatio / heightRatio;
-            const videoAspectRatio = video.videoWidth / video.videoHeight;
-
-            if (videoAspectRatio > targetAspectRatio) {
-              // Video is wider than target - crop sides
-              captureWidth = video.videoHeight * targetAspectRatio;
-              captureHeight = video.videoHeight;
-              sourceX = (video.videoWidth - captureWidth) / 2;
+          // Calculate dimensions that fit within both maximums
+          if (options.width && options.height) {
+            // Both dimensions specified - fit within both
+            const maxAspectRatio = targetWidth / targetHeight;
+            if (originalAspectRatio > maxAspectRatio) {
+              // Original is wider - fit by width
+              captureWidth = targetWidth;
+              captureHeight = targetWidth / originalAspectRatio;
             } else {
-              // Video is taller than target - crop top/bottom
-              captureWidth = video.videoWidth;
-              captureHeight = video.videoWidth / targetAspectRatio;
-              sourceY = (video.videoHeight - captureHeight) / 2;
+              // Original is taller - fit by height
+              captureWidth = targetHeight * originalAspectRatio;
+              captureHeight = targetHeight;
             }
+          } else if (options.width) {
+            // Only width specified - maintain aspect ratio
+            captureWidth = targetWidth;
+            captureHeight = targetWidth / originalAspectRatio;
+          } else {
+            // Only height specified - maintain aspect ratio
+            captureWidth = targetHeight * originalAspectRatio;
+            captureHeight = targetHeight;
           }
-        } else if (options.width || options.height) {
-          // If width or height is specified, use them
-          if (options.width) captureWidth = options.width;
-          if (options.height) captureHeight = options.height;
         }
 
         canvas.width = captureWidth;

@@ -430,6 +430,82 @@
             </p>
           </div>
           }
+
+          <ion-item-divider>Maximum Size Presets (Maintains Aspect Ratio)</ion-item-divider>
+          <ion-grid>
+            <ion-row class="ion-justify-content-around">
+              <ion-col size="auto">
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  color="secondary"
+                  (click)="setMaxCapturePreset('max-width-800')"
+                  >Max Width 800</ion-button
+                >
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  color="secondary"
+                  (click)="setMaxCapturePreset('max-height-600')"
+                  >Max Height 600</ion-button
+                >
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  color="secondary"
+                  (click)="setMaxCapturePreset('max-800x600')"
+                  >Max 800x600</ion-button
+                >
+              </ion-col>
+            </ion-row>
+            <ion-row class="ion-justify-content-around ion-margin-top">
+              <ion-col size="auto">
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  color="secondary"
+                  (click)="setMaxCapturePreset('max-1200x800')"
+                  >Max 1200x800</ion-button
+                >
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  color="secondary"
+                  (click)="setMaxCapturePreset('max-square-500')"
+                  >Max Square 500</ion-button
+                >
+              </ion-col>
+              <ion-col size="auto">
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  color="danger"
+                  (click)="setMaxCapturePreset('disable')"
+                  >Disable Custom</ion-button
+                >
+              </ion-col>
+            </ion-row>
+          </ion-grid>
+
+          @if (useCustomSize()) {
+          <div class="ion-margin-top">
+            <p>
+              <strong>Maximum Size:</strong> {{ pictureWidth() || 'unlimited' }} x {{
+              pictureHeight() || 'unlimited' }} px
+            </p>
+            <p class="ion-text-wrap">
+              <small>
+                Images will be resized to fit within these maximum dimensions while maintaining aspect ratio.
+              </small>
+            </p>
+          </div>
+          }
         </ion-card-content>
       </ion-card>
 

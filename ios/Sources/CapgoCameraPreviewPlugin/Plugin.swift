@@ -100,13 +100,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
     // MARK: - Helper Methods for Aspect Ratio
 
-    /// Validates that aspectRatio and size (width/height) are not both set
-    private func validateAspectRatioParameters(aspectRatio: String?, width: Int?, height: Int?) -> String? {
-        if aspectRatio != nil && (width != nil || height != nil) {
-            return "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start."
-        }
-        return nil
-    }
+
 
     /// Parses aspect ratio string and returns the appropriate ratio for the current orientation
     private func parseAspectRatio(_ ratio: String, isPortrait: Bool) -> CGFloat {
@@ -579,11 +573,17 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         let initialZoomLevel = call.getFloat("initialZoomLevel")
 
-        // Validate aspect ratio parameters using centralized method
-        if let validationError = validateAspectRatioParameters(aspectRatio: self.aspectRatio, width: call.getInt("width"), height: call.getInt("height")) {
-            call.reject(validationError)
+        // Check for conflict between aspectRatio and size (width/height)
+        let hasAspectRatio = call.getString("aspectRatio") != nil
+        let hasWidth = call.getInt("width") != nil
+        let hasHeight = call.getInt("height") != nil
+        
+        if hasAspectRatio && (hasWidth || hasHeight) {
+            call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
             return
         }
+
+
 
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
 
@@ -833,27 +833,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         let withExifLocation = call.getBool("withExifLocation", false)
         let width = call.getInt("width")
         let height = call.getInt("height")
-        let aspectRatio = call.getString("aspectRatio")
 
-        print("[CameraPreview] Raw parameter values - width: \(String(describing: width)), height: \(String(describing: height)), aspectRatio: \(String(describing: aspectRatio))")
+        print("[CameraPreview] Raw parameter values - width: \(String(describing: width)), height: \(String(describing: height))")
 
-        // Check for conflicting parameters using centralized validation
-        if let validationError = validateAspectRatioParameters(aspectRatio: aspectRatio, width: width, height: height) {
-            print("[CameraPreview] Error: \(validationError)")
-            call.reject(validationError)
-            return
-        }
-
-        // When no dimensions are specified, we should capture exactly what's visible in the preview
-        // Don't pass aspectRatio in this case - let the capture method handle preview matching
-        print("[CameraPreview] Capture decision - width: \(width == nil), height: \(height == nil), aspectRatio param: \(aspectRatio == nil)")
-        print("[CameraPreview] Stored aspectRatio: \(self.aspectRatio ?? "nil")")
-
-        // Only pass aspectRatio if explicitly provided in the capture call
-        // Never use the stored aspectRatio when capturing without dimensions
-        let captureAspectRatio: String? = aspectRatio
-
-        print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1), aspectRatio: \(aspectRatio ?? "nil"), using aspectRatio: \(captureAspectRatio ?? "nil")")
+        print("[CameraPreview] Capture params - quality: \(quality), saveToGallery: \(saveToGallery), withExifLocation: \(withExifLocation), width: \(width ?? -1), height: \(height ?? -1)")
         print("[CameraPreview] Current location: \(self.currentLocation?.description ?? "nil")")
         // Safely read frame from main thread for logging
         let (previewWidth, previewHeight): (CGFloat, CGFloat) = {
@@ -870,7 +853,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }()
         print("[CameraPreview] Preview dimensions: \(previewWidth)x\(previewHeight)")
 
-        self.cameraController.captureImage(width: width, height: height, aspectRatio: captureAspectRatio, quality: quality, gpsLocation: self.currentLocation) { (image, originalPhotoData, _, error) in
+        self.cameraController.captureImage(width: width, height: height, quality: quality, gpsLocation: self.currentLocation) { (image, originalPhotoData, _, error) in
             print("[CameraPreview] captureImage callback received")
             DispatchQueue.main.async {
                 print("[CameraPreview] Processing capture on main thread")
