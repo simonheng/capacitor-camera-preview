@@ -219,7 +219,7 @@ export interface CameraPreviewPictureOptions {
    */
   height?: number;
   /**
-  * The maximum width of the picture in pixels. The image will be resized to fit within this width while maintaining aspect ratio.
+   * The maximum width of the picture in pixels. The image will be resized to fit within this width while maintaining aspect ratio.
    * If not specified the captured image will match the preview's visible area.
    */
   width?: number;

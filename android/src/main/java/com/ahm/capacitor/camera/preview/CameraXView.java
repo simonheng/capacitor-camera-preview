@@ -1045,7 +1045,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
                 0,
                 bytes.length
               );
-              Bitmap resizedBitmap = resizeBitmapToMaxDimensions(bitmap, width, height);
+              Bitmap resizedBitmap = resizeBitmapToMaxDimensions(
+                bitmap,
+                width,
+                height
+              );
               ByteArrayOutputStream stream = new ByteArrayOutputStream();
               resizedBitmap.compress(
                 Bitmap.CompressFormat.JPEG,
@@ -1131,7 +1135,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     return Bitmap.createScaledBitmap(bitmap, width, height, true);
   }
 
-  private Bitmap resizeBitmapToMaxDimensions(Bitmap bitmap, Integer maxWidth, Integer maxHeight) {
+  private Bitmap resizeBitmapToMaxDimensions(
+    Bitmap bitmap,
+    Integer maxWidth,
+    Integer maxHeight
+  ) {
     int originalWidth = bitmap.getWidth();
     int originalHeight = bitmap.getHeight();
     float originalAspectRatio = (float) originalWidth / originalHeight;

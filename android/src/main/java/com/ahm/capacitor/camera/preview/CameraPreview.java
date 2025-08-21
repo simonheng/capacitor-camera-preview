@@ -204,13 +204,7 @@ public class CameraPreview
     Integer width = call.getInt("width");
     Integer height = call.getInt("height");
 
-    cameraXView.capturePhoto(
-      quality,
-      saveToGallery,
-      width,
-      height,
-      location
-    );
+    cameraXView.capturePhoto(quality, saveToGallery, width, height, location);
   }
 
   @PluginMethod
