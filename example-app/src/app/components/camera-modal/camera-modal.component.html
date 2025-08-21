@@ -1,0 +1,312 @@
+<div
+  class="container"
+  (touchstart)="handleTouchStart($event)"
+  (touchmove)="handleTouchMove($event)"
+  (touchend)="handleTouchEnd($event)"
+>
+  <div id="cameraView">
+    @if (!cameraStarted()) {
+      <div class="loading-screen">
+        <ion-spinner color="white"></ion-spinner>
+      </div>
+    }
+  </div>
+
+  <!-- Black background mask around camera preview -->
+  @if (
+    cameraStarted() && nativePreviewWidth() > 0 && nativePreviewHeight() > 0
+  ) {
+    <div class="camera-mask">
+      <!-- Top bar -->
+      <div
+        class="mask-segment mask-top"
+        [style.height.px]="nativePreviewY()"
+      ></div>
+      <!-- Bottom bar -->
+      <div
+        class="mask-segment mask-bottom"
+        [style.top.px]="nativePreviewY() + nativePreviewHeight()"
+        [style.height.px]="
+          window.innerHeight - (nativePreviewY() + nativePreviewHeight())
+        "
+      ></div>
+      <!-- Left bar -->
+      <div
+        class="mask-segment mask-left"
+        [style.top.px]="nativePreviewY()"
+        [style.width.px]="nativePreviewX()"
+        [style.height.px]="nativePreviewHeight()"
+      ></div>
+      <!-- Right bar -->
+      <div
+        class="mask-segment mask-right"
+        [style.top.px]="nativePreviewY()"
+        [style.left.px]="nativePreviewX() + nativePreviewWidth()"
+        [style.width.px]="
+          window.innerWidth - (nativePreviewX() + nativePreviewWidth())
+        "
+        [style.height.px]="nativePreviewHeight()"
+      ></div>
+    </div>
+  }
+
+  @if (showBoundary()) {
+    <div
+      class="boundary-overlay"
+      [style.left.px]="currentPreviewX()"
+      [style.top.px]="currentPreviewY()"
+      [style.width]="
+        currentPreviewWidth() ? currentPreviewWidth() + 'px' : '100vw'
+      "
+      [style.height]="
+        currentPreviewHeight() ? currentPreviewHeight() + 'px' : '100vh'
+      "
+    ></div>
+
+    <!-- Blue boundary showing native-returned position from start() -->
+    <div
+      class="native-boundary-overlay"
+      [style.left.px]="nativePreviewX()"
+      [style.top.px]="nativePreviewY()"
+      [style.width]="
+        nativePreviewWidth() ? nativePreviewWidth() + 'px' : '100vw'
+      "
+      [style.height]="
+        nativePreviewHeight() ? nativePreviewHeight() + 'px' : '100vh'
+      "
+    ></div>
+  }
+
+  <!-- Floating Developer Info Panel -->
+  @if (cameraStarted() && showOverlay()) {
+    <div class="floating-info-panel">
+      <ion-card>
+        <ion-card-content>
+          <div class="info-row">
+            <span class="label">Status:</span>
+            <span class="value">{{ isRunning() ? "Running" : "Stopped" }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Device:</span>
+            <span class="value">{{ currentDeviceId() || "Unknown" }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Zoom:</span>
+            <span class="value"
+              >{{ currentZoomFactor() }}x ({{ minZoom() }}-{{
+                maxZoom()
+              }})</span
+            >
+          </div>
+          @if (currentLens()) {
+            <div class="info-row">
+              <span class="label">Lens Type:</span>
+              <span class="value">{{ currentLens()!.deviceType }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Base Zoom:</span>
+              <span class="value">{{ currentLens()!.baseZoomRatio }}x</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Digital Zoom:</span>
+              <span class="value">{{ currentLens()!.digitalZoom }}x</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Focal Length:</span>
+              <span class="value">{{ currentLens()!.focalLength }}mm</span>
+            </div>
+          }
+          <div class="info-row">
+            <span class="label">Flash:</span>
+            <span class="value">{{ flashMode() }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Recording:</span>
+            <span class="value">{{ isRecording() ? "Yes" : "No" }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Opacity:</span>
+            <span class="value">{{ currentOpacity() }}%</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Grid:</span>
+            <span class="value">{{ currentGridMode() }}</span>
+          </div>
+        </ion-card-content>
+      </ion-card>
+    </div>
+  }
+
+  <ion-fab
+    class="camera-actions"
+    slot="fixed"
+    horizontal="end"
+    vertical="center"
+  >
+    <!-- Control Actions -->
+    <ion-fab-button (click)="close()" size="small">
+      <ion-icon name="close-outline"></ion-icon>
+    </ion-fab-button>
+
+    <ion-fab-button (click)="testLensInfo()" size="small">
+      <ion-icon name="camera-outline"></ion-icon>
+    </ion-fab-button>
+
+    <ion-fab-button (click)="testAllFeatures()" size="small">
+      <ion-icon name="bug-outline"></ion-icon>
+    </ion-fab-button>
+
+    <ion-fab-button (click)="refreshDeviceInfo()" size="small">
+      <ion-icon name="refresh-outline"></ion-icon>
+    </ion-fab-button>
+
+    <!-- Camera Actions -->
+    @if (cameraStarted()) {
+      <ion-fab-button (click)="nextFlashMode()" size="small">
+        @let fm = flashMode();
+        @if (fm === "off") {
+          <ion-icon name="flash-off" size="small"></ion-icon>
+        } @else if (fm === "on") {
+          <ion-icon name="flash" size="small"></ion-icon>
+        } @else if (fm === "auto") {
+          <div style="line-height: 0.5; margin-top: -5px">
+            <ion-icon name="flash" size="small"></ion-icon><br />
+            <span style="font-size: 0.6rem">AUTO</span>
+          </div>
+        }
+      </ion-fab-button>
+
+      <ion-fab-button size="small" (click)="flipCamera()">
+        <ion-icon name="camera-reverse"></ion-icon>
+      </ion-fab-button>
+
+      <ion-fab-button [disabled]="!canZoomIn()" size="small" (click)="zoomIn()">
+        <ion-icon name="add"></ion-icon>
+      </ion-fab-button>
+
+      <ion-fab-button
+        [disabled]="!canZoomOut()"
+        size="small"
+        (click)="zoomOut()"
+      >
+        <ion-icon name="remove"></ion-icon>
+      </ion-fab-button>
+
+      <ion-fab-button size="small" (click)="toggleOverlay()">
+        @if (showOverlay()) {
+          <ion-icon name="eye-off-outline"></ion-icon>
+        } @else {
+          <ion-icon name="eye-outline"></ion-icon>
+        }
+      </ion-fab-button>
+    }
+  </ion-fab>
+
+  <ion-fab
+    class="aspect-ratio-toggle"
+    slot="fixed"
+    horizontal="start"
+    vertical="top"
+  >
+    <ion-fab-button (click)="toggleAspectRatio()" size="small">
+      <ion-icon name="scan-outline"></ion-icon>
+      <span>{{ displayAspectRatio() }}</span>
+    </ion-fab-button>
+  </ion-fab>
+
+  <ion-fab
+    class="grid-toggle"
+    slot="fixed"
+    horizontal="start"
+    vertical="center"
+  >
+    <ion-fab-button
+      (click)="toggleGridMode()"
+      size="small"
+      [class.grid-active]="currentGridMode() !== 'none'"
+    >
+      @if (currentGridMode() === "none") {
+        <ion-icon name="grid-outline"></ion-icon>
+      } @else if (currentGridMode() === "3x3") {
+        <ion-icon name="grid"></ion-icon>
+        <span>3×3</span>
+      } @else if (currentGridMode() === "4x4") {
+        <ion-icon name="grid"></ion-icon>
+        <span>4×4</span>
+      }
+    </ion-fab-button>
+  </ion-fab>
+
+  @if (cameraStarted()) {
+    <!-- Video Recording Controls -->
+    <!-- <ion-fab
+      class="video-controls"
+      slot="fixed"
+      horizontal="start"
+      vertical="center"
+    >
+      @if (!isRecording()) {
+        <ion-fab-button (click)="startRecording()" color="danger" size="small">
+          <ion-icon name="videocam"></ion-icon>
+        </ion-fab-button>
+      } @else {
+        <ion-fab-button (click)="stopRecording()" color="dark" size="small">
+          <ion-icon name="stop"></ion-icon>
+        </ion-fab-button>
+      }
+    </ion-fab> -->
+
+    <ion-fab
+      class="camera-trigger"
+      slot="fixed"
+      horizontal="center"
+      vertical="bottom"
+    >
+      <ion-fab-button (click)="capturePhoto()" [disabled]="isCapturingPhoto()">
+        @if (isCapturingPhoto()) {
+          <ion-spinner></ion-spinner>
+        } @else {
+          <ion-icon name="camera-outline"></ion-icon>
+        }
+      </ion-fab-button>
+    </ion-fab>
+
+    <!-- Sample Capture -->
+    <!-- <ion-fab
+      class="capture-options"
+      slot="fixed"
+      horizontal="end"
+      vertical="bottom"
+    >
+      <ion-fab-button (click)="captureSample()" size="small">
+        <ion-icon name="aperture"></ion-icon>
+      </ion-fab-button>
+    </ion-fab> -->
+
+    <!-- Test Results Display -->
+    @if (showTestResults() && testResults()) {
+      <div class="test-results">
+        <ion-card>
+          <ion-card-header>
+            <ion-card-title>Test Results</ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <pre>{{ testResults() }}</pre>
+          </ion-card-content>
+        </ion-card>
+      </div>
+    }
+  }
+
+  <ion-fab
+    class="resize-toggle"
+    slot="fixed"
+    horizontal="start"
+    vertical="bottom"
+  >
+    <ion-fab-button (click)="togglePreviewSize()" size="small">
+      <ion-icon name="resize-outline"></ion-icon>
+      <span>{{ isHalfSize() ? "Extend" : "Small" }}</span>
+    </ion-fab-button>
+  </ion-fab>
+</div>

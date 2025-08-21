@@ -3,27 +3,25 @@ package com.ahm.capacitor.camera.preview;
 import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.RECORD_AUDIO;
 
-import android.app.FragmentManager;
-import android.app.FragmentTransaction;
-import android.content.Context;
+import android.Manifest;
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.graphics.Color;
-import android.graphics.ImageFormat;
-import android.graphics.Point;
-import android.hardware.Camera;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.params.StreamConfigurationMap;
+import android.location.Location;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.util.Size;
-import android.util.TypedValue;
-import android.view.Display;
-import android.view.MotionEvent;
+import android.view.OrientationEventListener;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
-import androidx.annotation.NonNull;
+import android.webkit.WebView;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import com.ahm.capacitor.camera.preview.model.CameraDevice;
+import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
+import com.ahm.capacitor.camera.preview.model.LensInfo;
+import com.ahm.capacitor.camera.preview.model.ZoomFactors;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
@@ -34,11 +32,11 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
-import java.io.File;
-import java.util.ArrayList;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import java.util.List;
 import java.util.Objects;
-import org.json.JSONArray;
+import org.json.JSONObject;
 
 @CapacitorPlugin(
   name = "CameraPreview",
@@ -51,33 +49,63 @@ import org.json.JSONArray;
       strings = { CAMERA },
       alias = CameraPreview.CAMERA_ONLY_PERMISSION_ALIAS
     ),
+    @Permission(
+      strings = {
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+      },
+      alias = CameraPreview.CAMERA_WITH_LOCATION_PERMISSION_ALIAS
+    ),
   }
 )
 public class CameraPreview
   extends Plugin
-  implements CameraActivity.CameraPreviewListener {
+  implements CameraXView.CameraXViewListener {
+
+  private static final String TAG = "CameraPreview CameraXView";
 
   static final String CAMERA_WITH_AUDIO_PERMISSION_ALIAS = "cameraWithAudio";
   static final String CAMERA_ONLY_PERMISSION_ALIAS = "cameraOnly";
-
-  private static String VIDEO_FILE_PATH = "";
-  private static final String VIDEO_FILE_EXTENSION = ".mp4";
+  static final String CAMERA_WITH_LOCATION_PERMISSION_ALIAS =
+    "cameraWithLocation";
 
   private String captureCallbackId = "";
   private String snapshotCallbackId = "";
-  private String recordCallbackId = "";
   private String cameraStartCallbackId = "";
-
-  // keep track of previously specified orientation to support locking orientation:
   private int previousOrientationRequest =
     ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+  private CameraXView cameraXView;
+  private View rotationOverlay;
+  private FusedLocationProviderClient fusedLocationClient;
+  private Location lastLocation;
+  private OrientationEventListener orientationListener;
+  private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
 
-  private CameraActivity fragment;
-  private final int containerViewId = 20;
+  @PluginMethod
+  public void getOrientation(PluginCall call) {
+    int orientation = getContext()
+      .getResources()
+      .getConfiguration()
+      .orientation;
+    String o;
+    if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+      // We don't distinguish upside-down reliably on Android, report generic portrait
+      o = "portrait";
+    } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+      o = "landscape";
+    } else {
+      o = "unknown";
+    }
+    JSObject ret = new JSObject();
+    ret.put("orientation", o);
+    call.resolve(ret);
+  }
 
   @PluginMethod
   public void start(PluginCall call) {
-    boolean disableAudio = call.getBoolean("disableAudio", false);
+    boolean disableAudio = Boolean.TRUE.equals(
+      call.getBoolean("disableAudio", true)
+    );
     String permissionAlias = disableAudio
       ? CAMERA_ONLY_PERMISSION_ALIAS
       : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
@@ -95,309 +123,420 @@ public class CameraPreview
 
   @PluginMethod
   public void flip(PluginCall call) {
-    try {
-      fragment.switchCamera();
-      call.resolve();
-    } catch (Exception e) {
-      Logger.debug(getLogTag(), "Camera flip exception: " + e);
-      call.reject("failed to flip camera");
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
     }
+    cameraXView.flipCamera();
+    call.resolve();
   }
 
   @PluginMethod
-  public void setOpacity(PluginCall call) {
-    if (!this.hasCamera(call)) {
+  public void capture(final PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
       call.reject("Camera is not running");
       return;
     }
 
-    bridge.saveCall(call);
-    Float opacity = Objects.requireNonNull(call.getFloat("opacity", 1F));
-    fragment.setOpacity(opacity);
+    final boolean withExifLocation = call.getBoolean("withExifLocation", false);
+
+    if (withExifLocation) {
+      if (
+        getPermissionState(CAMERA_WITH_LOCATION_PERMISSION_ALIAS) !=
+        PermissionState.GRANTED
+      ) {
+        requestPermissionForAlias(
+          CAMERA_WITH_LOCATION_PERMISSION_ALIAS,
+          call,
+          "captureWithLocationPermission"
+        );
+      } else {
+        getLocationAndCapture(call);
+      }
+    } else {
+      captureWithoutLocation(call);
+    }
   }
 
-  @PluginMethod
-  public void capture(PluginCall call) {
-    if (!this.hasCamera(call)) {
-      call.reject("Camera is not running");
-      return;
+  @PermissionCallback
+  private void captureWithLocationPermission(PluginCall call) {
+    if (
+      getPermissionState(CAMERA_WITH_LOCATION_PERMISSION_ALIAS) ==
+      PermissionState.GRANTED
+    ) {
+      getLocationAndCapture(call);
+    } else {
+      Logger.warn(
+        "Location permission denied. Capturing photo without location data."
+      );
+      captureWithoutLocation(call);
     }
+  }
+
+  private void getLocationAndCapture(PluginCall call) {
+    if (fusedLocationClient == null) {
+      fusedLocationClient = LocationServices.getFusedLocationProviderClient(
+        getContext()
+      );
+    }
+    fusedLocationClient
+      .getLastLocation()
+      .addOnSuccessListener(getActivity(), location -> {
+        lastLocation = location;
+        proceedWithCapture(call, lastLocation);
+      })
+      .addOnFailureListener(e -> {
+        Logger.error("Failed to get location: " + e.getMessage());
+        proceedWithCapture(call, null);
+      });
+  }
+
+  private void captureWithoutLocation(PluginCall call) {
+    proceedWithCapture(call, null);
+  }
+
+  private void proceedWithCapture(PluginCall call, Location location) {
     bridge.saveCall(call);
     captureCallbackId = call.getCallbackId();
 
     Integer quality = Objects.requireNonNull(call.getInt("quality", 85));
-    // Image Dimensions - Optional
-    Integer width = Objects.requireNonNull(call.getInt("width", 0));
-    Integer height = Objects.requireNonNull(call.getInt("height", 0));
-    fragment.takePicture(width, height, quality);
+    final boolean saveToGallery = call.getBoolean("saveToGallery", false);
+    Integer width = call.getInt("width");
+    Integer height = call.getInt("height");
+    String aspectRatio = call.getString("aspectRatio");
+
+    cameraXView.capturePhoto(
+      quality,
+      saveToGallery,
+      width,
+      height,
+      aspectRatio,
+      location
+    );
   }
 
   @PluginMethod
   public void captureSample(PluginCall call) {
-    if (!this.hasCamera(call)) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
       call.reject("Camera is not running");
       return;
     }
     bridge.saveCall(call);
     snapshotCallbackId = call.getCallbackId();
-
     Integer quality = Objects.requireNonNull(call.getInt("quality", 85));
-    fragment.takeSnapshot(quality);
-  }
-
-  @PluginMethod
-  public void getSupportedPictureSizes(final PluginCall call) {
-    CameraManager cameraManager = (CameraManager) this.getContext()
-      .getSystemService(Context.CAMERA_SERVICE);
-
-    JSArray ret = new JSArray();
-    try {
-      String[] cameraIdList = cameraManager.getCameraIdList();
-      for (String cameraId : cameraIdList) {
-        CameraCharacteristics characteristics =
-          cameraManager.getCameraCharacteristics(cameraId);
-
-        // Determine the facing of the camera
-        Integer lensFacing = characteristics.get(
-          CameraCharacteristics.LENS_FACING
-        );
-        String facing = "Unknown";
-        if (lensFacing != null) {
-          switch (lensFacing) {
-            case CameraCharacteristics.LENS_FACING_FRONT:
-              facing = "Front";
-              break;
-            case CameraCharacteristics.LENS_FACING_BACK:
-              facing = "Back";
-              break;
-            case CameraCharacteristics.LENS_FACING_EXTERNAL:
-              facing = "External";
-              break;
-          }
-        }
-
-        StreamConfigurationMap map = characteristics.get(
-          CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
-        );
-        if (map == null) {
-          continue;
-        }
-
-        Size[] jpegSizes = map.getOutputSizes(ImageFormat.JPEG);
-        JSObject camera = new JSObject();
-        camera.put("facing", facing);
-        JSArray supportedPictureSizes = new JSArray();
-        if (jpegSizes != null) {
-          for (Size size : jpegSizes) {
-            JSObject sizeJson = new JSObject();
-            sizeJson.put("width", size.getWidth());
-            sizeJson.put("height", size.getHeight());
-            supportedPictureSizes.put(sizeJson);
-          }
-          camera.put("supportedPictureSizes", supportedPictureSizes);
-          ret.put(camera);
-        }
-      }
-      JSObject finalRet = new JSObject();
-      finalRet.put("supportedPictureSizes", ret);
-      call.resolve(finalRet);
-    } catch (CameraAccessException ex) {
-      Logger.error(getLogTag(), "Cannot call getSupportedPictureSizes", ex);
-      call.reject(
-        String.format("Cannot call getSupportedPictureSizes. Error: %s", ex)
-      );
-    }
+    cameraXView.captureSample(quality);
   }
 
   @PluginMethod
   public void stop(final PluginCall call) {
     bridge
       .getActivity()
-      .runOnUiThread(
-        new Runnable() {
-          @Override
-          public void run() {
-            FrameLayout containerView = getBridge()
-              .getActivity()
-              .findViewById(containerViewId);
+      .runOnUiThread(() -> {
+        getBridge()
+          .getActivity()
+          .setRequestedOrientation(previousOrientationRequest);
 
-            // allow orientation changes after closing camera:
-            getBridge()
-              .getActivity()
-              .setRequestedOrientation(previousOrientationRequest);
-
-            if (containerView != null) {
-              ((ViewGroup) getBridge().getWebView().getParent()).removeView(
-                  containerView
-                );
-              getBridge().getWebView().setBackgroundColor(Color.WHITE);
-              FragmentManager fragmentManager = getActivity()
-                .getFragmentManager();
-              FragmentTransaction fragmentTransaction =
-                fragmentManager.beginTransaction();
-              fragmentTransaction.remove(fragment);
-              fragmentTransaction.commit();
-              fragment = null;
-
-              call.resolve();
-            } else {
-              call.reject("camera already stopped");
-            }
-          }
+        // Disable and clear orientation listener
+        if (orientationListener != null) {
+          orientationListener.disable();
+          orientationListener = null;
+          lastOrientation = Configuration.ORIENTATION_UNDEFINED;
         }
-      );
+
+        // Remove any rotation overlay if present
+        if (rotationOverlay != null && rotationOverlay.getParent() != null) {
+          ((ViewGroup) rotationOverlay.getParent()).removeView(rotationOverlay);
+          rotationOverlay = null;
+        }
+
+        if (cameraXView != null && cameraXView.isRunning()) {
+          cameraXView.stopSession();
+          cameraXView = null;
+        }
+        call.resolve();
+      });
   }
 
   @PluginMethod
   public void getSupportedFlashModes(PluginCall call) {
-    if (!this.hasCamera(call)) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
       call.reject("Camera is not running");
       return;
     }
-
-    Camera camera = fragment.getCamera();
-    Camera.Parameters params = camera.getParameters();
-    List<String> supportedFlashModes;
-    supportedFlashModes = params.getSupportedFlashModes();
-    JSONArray jsonFlashModes = new JSONArray();
-
-    if (supportedFlashModes != null) {
-      for (int i = 0; i < supportedFlashModes.size(); i++) {
-        jsonFlashModes.put(supportedFlashModes.get(i));
-      }
+    List<String> supportedFlashModes = cameraXView.getSupportedFlashModes();
+    JSArray jsonFlashModes = new JSArray();
+    for (String mode : supportedFlashModes) {
+      jsonFlashModes.put(mode);
     }
-
     JSObject jsObject = new JSObject();
     jsObject.put("result", jsonFlashModes);
     call.resolve(jsObject);
   }
 
   @PluginMethod
-  public void getHorizontalFov(PluginCall call) {
-    if (!this.hasCamera(call)) {
-      call.reject("Camera is not running");
-      return;
-    }
-
-    Camera camera = fragment.getCamera();
-    Camera.Parameters params = camera.getParameters();
-
-    float horizontalViewAngle = params.getHorizontalViewAngle();
-
-    JSObject jsObject = new JSObject();
-    jsObject.put("result", horizontalViewAngle);
-    call.resolve(jsObject);
-  }
-
-  @PluginMethod
   public void setFlashMode(PluginCall call) {
-    if (!this.hasCamera(call)) {
-      call.reject("Camera is not running");
-      return;
-    }
-
     String flashMode = call.getString("flashMode");
     if (flashMode == null || flashMode.isEmpty()) {
       call.reject("flashMode required parameter is missing");
       return;
     }
-
-    Camera camera = fragment.getCamera();
-    Camera.Parameters params = camera.getParameters();
-
-    List<String> supportedFlashModes;
-    supportedFlashModes = camera.getParameters().getSupportedFlashModes();
-    if (
-      supportedFlashModes != null && supportedFlashModes.contains(flashMode)
-    ) {
-      params.setFlashMode(flashMode);
-    } else {
-      call.reject("Flash mode not recognised: " + flashMode);
-      return;
-    }
-
-    fragment.setCameraParameters(params);
-
+    cameraXView.setFlashMode(flashMode);
     call.resolve();
   }
 
   @PluginMethod
-  public void startRecordVideo(final PluginCall call) {
-    if (!this.hasCamera(call)) {
+  public void getAvailableDevices(PluginCall call) {
+    List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(
+      getContext()
+    );
+    JSArray devicesArray = new JSArray();
+    for (CameraDevice device : devices) {
+      JSObject deviceJson = new JSObject();
+      deviceJson.put("deviceId", device.getDeviceId());
+      deviceJson.put("label", device.getLabel());
+      deviceJson.put("position", device.getPosition());
+      JSArray lensesArray = new JSArray();
+      for (com.ahm.capacitor.camera.preview.model.LensInfo lens : device.getLenses()) {
+        JSObject lensJson = new JSObject();
+        lensJson.put("focalLength", lens.getFocalLength());
+        lensJson.put("deviceType", lens.getDeviceType());
+        lensJson.put("baseZoomRatio", lens.getBaseZoomRatio());
+        lensJson.put("digitalZoom", lens.getDigitalZoom());
+        lensesArray.put(lensJson);
+      }
+      deviceJson.put("lenses", lensesArray);
+      deviceJson.put("minZoom", device.getMinZoom());
+      deviceJson.put("maxZoom", device.getMaxZoom());
+      devicesArray.put(deviceJson);
+    }
+    JSObject result = new JSObject();
+    result.put("devices", devicesArray);
+    call.resolve(result);
+  }
+
+  @PluginMethod
+  public void getZoom(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
       call.reject("Camera is not running");
       return;
     }
-    final String filename = "videoTmp";
-    VIDEO_FILE_PATH = getActivity().getCacheDir().toString() + "/";
+    ZoomFactors zoomFactors = cameraXView.getZoomFactors();
+    JSObject result = new JSObject();
+    result.put("min", zoomFactors.getMin());
+    result.put("max", zoomFactors.getMax());
+    result.put("current", zoomFactors.getCurrent());
+    call.resolve(result);
+  }
 
-    final String position = Objects.requireNonNull(
-      call.getString("position", "front")
-    );
-    final Integer width = Objects.requireNonNull(call.getInt("width", 0));
-    final Integer height = Objects.requireNonNull(call.getInt("height", 0));
-    final Boolean withFlash = Objects.requireNonNull(
-      call.getBoolean("withFlash", false)
-    );
-    final Integer maxDuration = Objects.requireNonNull(
-      call.getInt("maxDuration", 0)
-    );
-    // final Integer quality = Objects.requireNonNull(call.getInt("quality", 0));
-    bridge.saveCall(call);
-    recordCallbackId = call.getCallbackId();
+  @PluginMethod
+  public void getZoomButtonValues(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    // Build a sorted set to dedupe and order ascending
+    java.util.Set<Double> sorted = new java.util.TreeSet<>();
+    sorted.add(1.0);
+    sorted.add(2.0);
 
-    bridge
-      .getActivity()
-      .runOnUiThread(
-        new Runnable() {
-          @Override
-          public void run() {
-            fragment.startRecord(
-              getFilePath(),
-              position,
-              width,
-              height,
-              70,
-              withFlash,
-              maxDuration
-            );
+    // Try to detect ultra-wide to include its min zoom (often 0.5)
+    try {
+      List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(
+        getContext()
+      );
+      ZoomFactors zoomFactors = cameraXView.getZoomFactors();
+      boolean hasUltraWide = false;
+      boolean hasTelephoto = false;
+      float minUltra = 0.5f;
+
+      for (CameraDevice device : devices) {
+        for (com.ahm.capacitor.camera.preview.model.LensInfo lens : device.getLenses()) {
+          if ("ultraWide".equals(lens.getDeviceType())) {
+            hasUltraWide = true;
+            // Use overall minZoom for that device as the button value to represent UW
+            minUltra = Math.max(minUltra, zoomFactors.getMin());
+          } else if ("telephoto".equals(lens.getDeviceType())) {
+            hasTelephoto = true;
           }
         }
-      );
+      }
+      if (hasUltraWide) {
+        sorted.add((double) minUltra);
+      }
+      if (hasTelephoto) {
+        sorted.add(3.0);
+      }
+    } catch (Exception ignored) {
+      // Ignore and keep defaults
+    }
 
+    JSObject result = new JSObject();
+    JSArray values = new JSArray();
+    for (Double v : sorted) {
+      values.put(v);
+    }
+    result.put("values", values);
+    call.resolve(result);
+  }
+
+  @PluginMethod
+  public void setZoom(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    Float level = call.getFloat("level");
+    if (level == null) {
+      call.reject("level parameter is required");
+      return;
+    }
+    try {
+      cameraXView.setZoom(level);
+      call.resolve();
+    } catch (Exception e) {
+      call.reject("Failed to set zoom: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void setFocus(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    Float x = call.getFloat("x");
+    Float y = call.getFloat("y");
+    if (x == null || y == null) {
+      call.reject("x and y parameters are required");
+      return;
+    }
+    // Reject if values are outside 0-1 range
+    if (x < 0f || x > 1f || y < 0f || y > 1f) {
+      call.reject("Focus coordinates must be between 0 and 1");
+      return;
+    }
+
+    getActivity()
+      .runOnUiThread(() -> {
+        try {
+          cameraXView.setFocus(x, y);
+          call.resolve();
+        } catch (Exception e) {
+          call.reject("Failed to set focus: " + e.getMessage());
+        }
+      });
+  }
+
+  @PluginMethod
+  public void setDeviceId(PluginCall call) {
+    String deviceId = call.getString("deviceId");
+    if (deviceId == null || deviceId.isEmpty()) {
+      call.reject("deviceId parameter is required");
+      return;
+    }
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    cameraXView.switchToDevice(deviceId);
     call.resolve();
   }
 
   @PluginMethod
-  public void stopRecordVideo(PluginCall call) {
-    if (!this.hasCamera(call)) {
+  public void getSupportedPictureSizes(final PluginCall call) {
+    JSArray supportedPictureSizesResult = new JSArray();
+    List<Size> rearSizes = CameraXView.getSupportedPictureSizes("rear");
+    JSObject rear = new JSObject();
+    rear.put("facing", "rear");
+    JSArray rearSizesJs = new JSArray();
+    for (Size size : rearSizes) {
+      JSObject sizeJs = new JSObject();
+      sizeJs.put("width", size.getWidth());
+      sizeJs.put("height", size.getHeight());
+      rearSizesJs.put(sizeJs);
+    }
+    rear.put("supportedPictureSizes", rearSizesJs);
+    supportedPictureSizesResult.put(rear);
+
+    List<Size> frontSizes = CameraXView.getSupportedPictureSizes("front");
+    JSObject front = new JSObject();
+    front.put("facing", "front");
+    JSArray frontSizesJs = new JSArray();
+    for (Size size : frontSizes) {
+      JSObject sizeJs = new JSObject();
+      sizeJs.put("width", size.getWidth());
+      sizeJs.put("height", size.getHeight());
+      frontSizesJs.put(sizeJs);
+    }
+    front.put("supportedPictureSizes", frontSizesJs);
+    supportedPictureSizesResult.put(front);
+
+    JSObject ret = new JSObject();
+    ret.put("supportedPictureSizes", supportedPictureSizesResult);
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void setOpacity(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
       call.reject("Camera is not running");
       return;
     }
+    Float opacity = call.getFloat("opacity", 1.0f);
+    cameraXView.setOpacity(opacity);
+    call.resolve();
+  }
 
-    System.out.println("stopRecordVideo - Callbackid=" + call.getCallbackId());
+  @PluginMethod
+  public void getHorizontalFov(PluginCall call) {
+    // CameraX does not provide a simple way to get FoV.
+    // This would require Camera2 interop to access camera characteristics.
+    // Returning a default/estimated value.
+    JSObject ret = new JSObject();
+    ret.put("result", 60.0); // A common default FoV
+    call.resolve(ret);
+  }
 
-    bridge.saveCall(call);
-    recordCallbackId = call.getCallbackId();
+  @PluginMethod
+  public void getDeviceId(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    JSObject ret = new JSObject();
+    ret.put("deviceId", cameraXView.getCurrentDeviceId());
+    call.resolve(ret);
+  }
 
-    // bridge.getActivity().runOnUiThread(new Runnable() {
-    //     @Override
-    //     public void run() {
-    //         fragment.stopRecord();
-    //     }
-    // });
+  @PluginMethod
+  public void getFlashMode(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    JSObject ret = new JSObject();
+    ret.put("flashMode", cameraXView.getFlashMode());
+    call.resolve(ret);
+  }
 
-    fragment.stopRecord();
-    // call.resolve();
+  @PluginMethod
+  public void isRunning(PluginCall call) {
+    boolean running = cameraXView != null && cameraXView.isRunning();
+    JSObject jsObject = new JSObject();
+    jsObject.put("isRunning", running);
+    call.resolve(jsObject);
   }
 
   @PermissionCallback
   private void handleCameraPermissionResult(PluginCall call) {
-    boolean disableAudio = call.getBoolean("disableAudio", false);
-    String permissionAlias = disableAudio
-      ? CAMERA_ONLY_PERMISSION_ALIAS
-      : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
-
-    if (PermissionState.GRANTED.equals(getPermissionState(permissionAlias))) {
+    if (
+      PermissionState.GRANTED.equals(
+        getPermissionState(CAMERA_ONLY_PERMISSION_ALIAS)
+      ) ||
+      PermissionState.GRANTED.equals(
+        getPermissionState(CAMERA_WITH_AUDIO_PERMISSION_ALIAS)
+      )
+    ) {
       startCamera(call);
     } else {
       call.reject("Permission failed");
@@ -405,327 +544,1225 @@ public class CameraPreview
   }
 
   private void startCamera(final PluginCall call) {
-    String position = call.getString("position");
+    String positionParam = call.getString("position");
+    String originalDeviceId = call.getString("deviceId");
+    String deviceId = originalDeviceId; // Use a mutable variable
 
-    if (position == null || position.isEmpty() || "rear".equals(position)) {
-      position = "back";
-    } else {
-      position = "front";
-    }
+    final String position = (positionParam == null ||
+        positionParam.isEmpty() ||
+        "rear".equals(positionParam) ||
+        "back".equals(positionParam))
+      ? "back"
+      : "front";
+    // Use -1 as default to indicate centering is needed when x/y not provided
+    final Integer xParam = call.getInt("x");
+    final Integer yParam = call.getInt("y");
+    final int x = xParam != null ? xParam : -1;
+    final int y = yParam != null ? yParam : -1;
 
-    @NonNull
-    final Integer x = Objects.requireNonNull(call.getInt("x", 0));
-    @NonNull
-    final Integer y = Objects.requireNonNull(call.getInt("y", 0));
-    @NonNull
-    final Integer width = Objects.requireNonNull(call.getInt("width", 0));
-    @NonNull
-    final Integer height = Objects.requireNonNull(call.getInt("height", 0));
-    @NonNull
-    final Integer paddingBottom = Objects.requireNonNull(
-      call.getInt("paddingBottom", 0)
+    Log.d("CameraPreview", "========================");
+    Log.d("CameraPreview", "CAMERA POSITION TRACKING START:");
+    Log.d(
+      "CameraPreview",
+      "1. RAW PARAMS - xParam: " + xParam + ", yParam: " + yParam
     );
-    final Boolean toBack = Objects.requireNonNull(
-      call.getBoolean("toBack", false)
+    Log.d(
+      "CameraPreview",
+      "2. AFTER DEFAULT - x: " +
+      x +
+      " (center=" +
+      (x == -1) +
+      "), y: " +
+      y +
+      " (center=" +
+      (y == -1) +
+      ")"
     );
-    final Boolean storeToFile = Objects.requireNonNull(
+    final int width = call.getInt("width", 0);
+    final int height = call.getInt("height", 0);
+    final int paddingBottom = call.getInt("paddingBottom", 0);
+    final boolean toBack = Boolean.TRUE.equals(call.getBoolean("toBack", true));
+    final boolean storeToFile = Boolean.TRUE.equals(
       call.getBoolean("storeToFile", false)
     );
-    final Boolean enableOpacity = Objects.requireNonNull(
+    final boolean enableOpacity = Boolean.TRUE.equals(
       call.getBoolean("enableOpacity", false)
     );
-    final Boolean enableZoom = Objects.requireNonNull(
+    final boolean enableZoom = Boolean.TRUE.equals(
       call.getBoolean("enableZoom", false)
     );
-    final Boolean disableExifHeaderStripping = Objects.requireNonNull(
+    final boolean disableExifHeaderStripping = Boolean.TRUE.equals(
       call.getBoolean("disableExifHeaderStripping", false)
     );
-    final Boolean lockOrientation = Objects.requireNonNull(
+    final boolean lockOrientation = Boolean.TRUE.equals(
       call.getBoolean("lockAndroidOrientation", false)
     );
-    previousOrientationRequest = getBridge()
-      .getActivity()
-      .getRequestedOrientation();
+    final boolean disableAudio = Boolean.TRUE.equals(
+      call.getBoolean("disableAudio", true)
+    );
+    final String aspectRatio = call.getString("aspectRatio", "4:3");
+    final String gridMode = call.getString("gridMode", "none");
+    final String positioning = call.getString("positioning", "top");
+    final float initialZoomLevel = call.getFloat("initialZoomLevel", 1.0f);
 
-    fragment = new CameraActivity();
-    fragment.setEventListener(this);
-    fragment.defaultCamera = position;
-    fragment.tapToTakePicture = false;
-    fragment.dragEnabled = false;
-    fragment.tapToFocus = true;
-    fragment.disableExifHeaderStripping = disableExifHeaderStripping;
-    fragment.storeToFile = storeToFile;
-    fragment.toBack = toBack;
-    fragment.enableOpacity = enableOpacity;
-    fragment.enableZoom = enableZoom;
-    fragment.disableAudio = call.getBoolean("disableAudio", false);
+    // Check for conflict between aspectRatio and size
+    if (
+      call.getData().has("aspectRatio") &&
+      (call.getData().has("width") || call.getData().has("height"))
+    ) {
+      call.reject(
+        "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start."
+      );
+      return;
+    }
 
-    bridge
-      .getActivity()
-      .runOnUiThread(
-        new Runnable() {
-          @Override
-          public void run() {
-            DisplayMetrics metrics = getBridge()
-              .getActivity()
-              .getResources()
-              .getDisplayMetrics();
-            // lock orientation if specified in options:
-            if (lockOrientation) {
-              getBridge()
-                .getActivity()
-                .setRequestedOrientation(
-                  ActivityInfo.SCREEN_ORIENTATION_LOCKED
-                );
-            }
-
-            // offset
-            int computedX = (int) TypedValue.applyDimension(
-              TypedValue.COMPLEX_UNIT_DIP,
-              x,
-              metrics
-            );
-            int computedY = (int) TypedValue.applyDimension(
-              TypedValue.COMPLEX_UNIT_DIP,
-              y,
-              metrics
-            );
-
-            // size
-            int computedWidth;
-            int computedHeight;
-            int computedPaddingBottom;
-
-            if (paddingBottom != 0) {
-              computedPaddingBottom = (int) TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                paddingBottom,
-                metrics
+    float targetZoom = initialZoomLevel;
+    // Check if the selected device is a physical ultra-wide
+    if (originalDeviceId != null) {
+      List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(
+        getContext()
+      );
+      for (CameraDevice device : devices) {
+        if (
+          originalDeviceId.equals(device.getDeviceId()) && !device.isLogical()
+        ) {
+          for (LensInfo lens : device.getLenses()) {
+            if ("ultraWide".equals(lens.getDeviceType())) {
+              Log.d(
+                "CameraPreview",
+                "Ultra-wide lens selected. Targeting 0.5x zoom on logical camera."
               );
-            } else {
-              computedPaddingBottom = 0;
-            }
-
-            if (width != 0) {
-              computedWidth = (int) TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                width,
-                metrics
-              );
-            } else {
-              Display defaultDisplay = getBridge()
-                .getActivity()
-                .getWindowManager()
-                .getDefaultDisplay();
-              final Point size = new Point();
-              defaultDisplay.getSize(size);
-
-              computedWidth = (int) TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_PX,
-                size.x,
-                metrics
-              );
-            }
-
-            if (height != 0) {
-              computedHeight =
-                (int) TypedValue.applyDimension(
-                  TypedValue.COMPLEX_UNIT_DIP,
-                  height,
-                  metrics
-                ) -
-                computedPaddingBottom;
-            } else {
-              Display defaultDisplay = getBridge()
-                .getActivity()
-                .getWindowManager()
-                .getDefaultDisplay();
-              final Point size = new Point();
-              defaultDisplay.getSize(size);
-
-              computedHeight =
-                (int) TypedValue.applyDimension(
-                  TypedValue.COMPLEX_UNIT_PX,
-                  size.y,
-                  metrics
-                ) -
-                computedPaddingBottom;
-            }
-
-            fragment.setRect(
-              computedX,
-              computedY,
-              computedWidth,
-              computedHeight
-            );
-
-            FrameLayout containerView = getBridge()
-              .getActivity()
-              .findViewById(containerViewId);
-            if (containerView == null) {
-              containerView = new FrameLayout(
-                getActivity().getApplicationContext()
-              );
-              containerView.setId(containerViewId);
-
-              getBridge().getWebView().setBackgroundColor(Color.TRANSPARENT);
-              ((ViewGroup) getBridge().getWebView().getParent()).addView(
-                  containerView
-                );
-              if (toBack) {
-                getBridge()
-                  .getWebView()
-                  .getParent()
-                  .bringChildToFront(getBridge().getWebView());
-                setupBroadcast();
-              }
-
-              FragmentManager fragmentManager = getBridge()
-                .getActivity()
-                .getFragmentManager();
-              FragmentTransaction fragmentTransaction =
-                fragmentManager.beginTransaction();
-              fragmentTransaction.add(containerView.getId(), fragment);
-              fragmentTransaction.commit();
-
-              // NOTE: we don't return invoke call.resolve here because it must be invoked in onCameraStarted
-              // otherwise the plugin start method might resolve/return before the camera is actually set in CameraActivity
-              // onResume method (see this line mCamera = Camera.open(defaultCameraId);) and the next subsequent plugin
-              // method invocations (for example, getSupportedFlashModes) might fails with "Camera is not running" error
-              // because camera is not available yet and hasCamera method will return false
-              // Please also see https://developer.android.com/reference/android/hardware/Camera.html#open%28int%29
-              bridge.saveCall(call);
-              cameraStartCallbackId = call.getCallbackId();
-            } else {
-              call.reject("camera already started");
+              targetZoom = 0.5f;
+              // Force the use of the logical camera by clearing the specific deviceId
+              deviceId = null;
+              break;
             }
           }
         }
-      );
+        if (deviceId == null) break; // Exit outer loop once we've made our decision
+      }
+    }
+
+    previousOrientationRequest = getBridge()
+      .getActivity()
+      .getRequestedOrientation();
+    cameraXView = new CameraXView(getContext(), getBridge().getWebView());
+    cameraXView.setListener(this);
+
+    String finalDeviceId = deviceId;
+    float finalTargetZoom = targetZoom;
+    getBridge()
+      .getActivity()
+      .runOnUiThread(() -> {
+        DisplayMetrics metrics = getBridge()
+          .getActivity()
+          .getResources()
+          .getDisplayMetrics();
+        if (lockOrientation) {
+          getBridge()
+            .getActivity()
+            .setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+        }
+
+        // Debug: Let's check all the positioning information
+        ViewGroup webViewParent = (ViewGroup) getBridge()
+          .getWebView()
+          .getParent();
+
+        // Get webview position in different coordinate systems
+        int[] webViewLocationInWindow = new int[2];
+        int[] webViewLocationOnScreen = new int[2];
+        getBridge().getWebView().getLocationInWindow(webViewLocationInWindow);
+        getBridge().getWebView().getLocationOnScreen(webViewLocationOnScreen);
+
+        int webViewLeft = getBridge().getWebView().getLeft();
+        int webViewTop = getBridge().getWebView().getTop();
+
+        // Check parent position too
+        int[] parentLocationInWindow = new int[2];
+        int[] parentLocationOnScreen = new int[2];
+        webViewParent.getLocationInWindow(parentLocationInWindow);
+        webViewParent.getLocationOnScreen(parentLocationOnScreen);
+
+        // Calculate pixel ratio
+        float pixelRatio = metrics.density;
+
+        // The key insight: JavaScript coordinates are relative to the WebView's viewport
+        // If the WebView is positioned below the status bar (webViewLocationOnScreen[1] > 0),
+        // we need to add that offset when placing native views
+        int webViewTopInset = webViewLocationOnScreen[1];
+        boolean isEdgeToEdgeActive = webViewLocationOnScreen[1] > 0;
+
+        // Log all the positioning information for debugging
+        Log.d("CameraPreview", "WebView Position Debug:");
+        Log.d("CameraPreview", "  - webView.getTop(): " + webViewTop);
+        Log.d("CameraPreview", "  - webView.getLeft(): " + webViewLeft);
+        Log.d(
+          "CameraPreview",
+          "  - webView locationInWindow: (" +
+          webViewLocationInWindow[0] +
+          ", " +
+          webViewLocationInWindow[1] +
+          ")"
+        );
+        Log.d(
+          "CameraPreview",
+          "  - webView locationOnScreen: (" +
+          webViewLocationOnScreen[0] +
+          ", " +
+          webViewLocationOnScreen[1] +
+          ")"
+        );
+        Log.d(
+          "CameraPreview",
+          "  - parent locationInWindow: (" +
+          parentLocationInWindow[0] +
+          ", " +
+          parentLocationInWindow[1] +
+          ")"
+        );
+        Log.d(
+          "CameraPreview",
+          "  - parent locationOnScreen: (" +
+          parentLocationOnScreen[0] +
+          ", " +
+          parentLocationOnScreen[1] +
+          ")"
+        );
+
+        // Check if WebView has margins
+        View webView = getBridge().getWebView();
+        ViewGroup.LayoutParams webViewLayoutParams = webView.getLayoutParams();
+        if (webViewLayoutParams instanceof ViewGroup.MarginLayoutParams) {
+          ViewGroup.MarginLayoutParams marginParams =
+            (ViewGroup.MarginLayoutParams) webViewLayoutParams;
+          Log.d(
+            "CameraPreview",
+            "  - webView margins: left=" +
+            marginParams.leftMargin +
+            ", top=" +
+            marginParams.topMargin +
+            ", right=" +
+            marginParams.rightMargin +
+            ", bottom=" +
+            marginParams.bottomMargin
+          );
+        }
+
+        // Check WebView padding
+        Log.d(
+          "CameraPreview",
+          "  - webView padding: left=" +
+          webView.getPaddingLeft() +
+          ", top=" +
+          webView.getPaddingTop() +
+          ", right=" +
+          webView.getPaddingRight() +
+          ", bottom=" +
+          webView.getPaddingBottom()
+        );
+
+        Log.d("CameraPreview", "  - Using webViewTopInset: " + webViewTopInset);
+        Log.d("CameraPreview", "  - isEdgeToEdgeActive: " + isEdgeToEdgeActive);
+
+        // Calculate position - center if x or y is -1
+        int computedX;
+        int computedY;
+
+        // Calculate dimensions first
+        int computedWidth = width != 0
+          ? (int) (width * pixelRatio)
+          : getBridge().getWebView().getWidth();
+        int computedHeight = height != 0
+          ? (int) (height * pixelRatio)
+          : getBridge().getWebView().getHeight();
+        computedHeight -= (int) (paddingBottom * pixelRatio);
+
+        Log.d("CameraPreview", "========================");
+        Log.d("CameraPreview", "POSITIONING CALCULATIONS:");
+        Log.d(
+          "CameraPreview",
+          "1. INPUT - x: " +
+          x +
+          ", y: " +
+          y +
+          ", width: " +
+          width +
+          ", height: " +
+          height
+        );
+        Log.d("CameraPreview", "2. PIXEL RATIO: " + pixelRatio);
+        Log.d(
+          "CameraPreview",
+          "3. SCREEN - width: " +
+          metrics.widthPixels +
+          ", height: " +
+          metrics.heightPixels
+        );
+        Log.d(
+          "CameraPreview",
+          "4. WEBVIEW - width: " +
+          getBridge().getWebView().getWidth() +
+          ", height: " +
+          getBridge().getWebView().getHeight()
+        );
+        Log.d(
+          "CameraPreview",
+          "5. COMPUTED DIMENSIONS - width: " +
+          computedWidth +
+          ", height: " +
+          computedHeight
+        );
+
+        if (x == -1) {
+          // Center horizontally
+          int screenWidth = metrics.widthPixels;
+          computedX = (screenWidth - computedWidth) / 2;
+          Log.d(
+            "CameraPreview",
+            "Centering horizontally: screenWidth=" +
+            screenWidth +
+            ", computedWidth=" +
+            computedWidth +
+            ", computedX=" +
+            computedX
+          );
+        } else {
+          computedX = (int) (x * pixelRatio);
+          Log.d(
+            "CameraPreview",
+            "Using provided X position: " +
+            x +
+            " * " +
+            pixelRatio +
+            " = " +
+            computedX
+          );
+        }
+
+        if (y == -1) {
+          // Position vertically based on positioning parameter
+          int screenHeight = metrics.heightPixels;
+
+          switch (positioning) {
+            case "top":
+              computedY = 0;
+              Log.d("CameraPreview", "Positioning at top: computedY=0");
+              break;
+            case "bottom":
+              computedY = screenHeight - computedHeight;
+              Log.d(
+                "CameraPreview",
+                "Positioning at bottom: screenHeight=" +
+                screenHeight +
+                ", computedHeight=" +
+                computedHeight +
+                ", computedY=" +
+                computedY
+              );
+              break;
+            case "center":
+            default:
+              // Center vertically
+              if (isEdgeToEdgeActive) {
+                // When WebView is offset from top, center within the available space
+                // The camera should be centered in the full screen, not just the WebView area
+                computedY = (screenHeight - computedHeight) / 2;
+                Log.d(
+                  "CameraPreview",
+                  "Centering vertically with WebView offset: screenHeight=" +
+                  screenHeight +
+                  ", webViewTop=" +
+                  webViewTopInset +
+                  ", computedHeight=" +
+                  computedHeight +
+                  ", computedY=" +
+                  computedY
+                );
+              } else {
+                // Normal mode - use full screen height
+                computedY = (screenHeight - computedHeight) / 2;
+                Log.d(
+                  "CameraPreview",
+                  "Centering vertically (normal): screenHeight=" +
+                  screenHeight +
+                  ", computedHeight=" +
+                  computedHeight +
+                  ", computedY=" +
+                  computedY
+                );
+              }
+              break;
+          }
+        } else {
+          computedY = (int) (y * pixelRatio);
+          // If edge-to-edge is active, JavaScript Y is relative to WebView content area
+          // We need to add the inset to get absolute screen position
+          if (isEdgeToEdgeActive) {
+            computedY += webViewTopInset;
+            Log.d(
+              "CameraPreview",
+              "Edge-to-edge adjustment: Y position " +
+              (int) (y * pixelRatio) +
+              " + inset " +
+              webViewTopInset +
+              " = " +
+              computedY
+            );
+          }
+          Log.d(
+            "CameraPreview",
+            "Using provided Y position: " +
+            y +
+            " * " +
+            pixelRatio +
+            " = " +
+            computedY +
+            (isEdgeToEdgeActive ? " (adjusted for edge-to-edge)" : "")
+          );
+        }
+
+        Log.d(
+          "CameraPreview",
+          "2b. EDGE-TO-EDGE - " +
+          (isEdgeToEdgeActive
+              ? "ACTIVE (inset=" + webViewTopInset + ")"
+              : "INACTIVE")
+        );
+        Log.d(
+          "CameraPreview",
+          "3. COMPUTED POSITION - x=" + computedX + ", y=" + computedY
+        );
+        Log.d(
+          "CameraPreview",
+          "4. COMPUTED SIZE - width=" +
+          computedWidth +
+          ", height=" +
+          computedHeight
+        );
+        Log.d("CameraPreview", "=== COORDINATE DEBUG ===");
+        Log.d(
+          "CameraPreview",
+          "WebView getLeft/getTop: (" + webViewLeft + ", " + webViewTop + ")"
+        );
+        Log.d(
+          "CameraPreview",
+          "WebView locationInWindow: (" +
+          webViewLocationInWindow[0] +
+          ", " +
+          webViewLocationInWindow[1] +
+          ")"
+        );
+        Log.d(
+          "CameraPreview",
+          "WebView locationOnScreen: (" +
+          webViewLocationOnScreen[0] +
+          ", " +
+          webViewLocationOnScreen[1] +
+          ")"
+        );
+        Log.d(
+          "CameraPreview",
+          "Parent locationInWindow: (" +
+          parentLocationInWindow[0] +
+          ", " +
+          parentLocationInWindow[1] +
+          ")"
+        );
+        Log.d(
+          "CameraPreview",
+          "Parent locationOnScreen: (" +
+          parentLocationOnScreen[0] +
+          ", " +
+          parentLocationOnScreen[1] +
+          ")"
+        );
+        Log.d(
+          "CameraPreview",
+          "Parent class: " + webViewParent.getClass().getSimpleName()
+        );
+        Log.d(
+          "CameraPreview",
+          "Requested position (logical): (" + x + ", " + y + ")"
+        );
+        Log.d("CameraPreview", "Pixel ratio: " + pixelRatio);
+        Log.d(
+          "CameraPreview",
+          "Final computed position (no offset): (" +
+          computedX +
+          ", " +
+          computedY +
+          ")"
+        );
+        Log.d("CameraPreview", "5. IS_CENTERED - " + (x == -1 || y == -1));
+        Log.d("CameraPreview", "========================");
+
+        // Pass along whether we're centering so CameraXView knows not to add insets
+        boolean isCentered = (x == -1 || y == -1);
+
+        CameraSessionConfiguration config = new CameraSessionConfiguration(
+          finalDeviceId,
+          position,
+          computedX,
+          computedY,
+          computedWidth,
+          computedHeight,
+          paddingBottom,
+          toBack,
+          storeToFile,
+          enableOpacity,
+          enableZoom,
+          disableExifHeaderStripping,
+          disableAudio,
+          1.0f,
+          aspectRatio,
+          gridMode
+        );
+        config.setTargetZoom(finalTargetZoom);
+        config.setCentered(isCentered);
+
+        bridge.saveCall(call);
+        cameraStartCallbackId = call.getCallbackId();
+        cameraXView.startSession(config);
+
+        // Setup orientation listener to mirror iOS screenResize emission
+        if (orientationListener == null) {
+          lastOrientation = getContext()
+            .getResources()
+            .getConfiguration()
+            .orientation;
+          orientationListener = new OrientationEventListener(getContext()) {
+            @Override
+            public void onOrientationChanged(int orientation) {
+              if (orientation == ORIENTATION_UNKNOWN) return;
+              int current = getContext()
+                .getResources()
+                .getConfiguration()
+                .orientation;
+              if (current != lastOrientation) {
+                lastOrientation = current;
+                // Post to next frame so WebView has updated bounds before we recompute layout
+                getBridge()
+                  .getActivity()
+                  .getWindow()
+                  .getDecorView()
+                  .post(() -> handleOrientationChange());
+              }
+            }
+          };
+          if (orientationListener.canDetectOrientation()) {
+            orientationListener.enable();
+          }
+        }
+      });
+  }
+
+  private void handleOrientationChange() {
+    if (cameraXView == null || !cameraXView.isRunning()) return;
+
+    Log.d(
+      TAG,
+      "======================== ORIENTATION CHANGE DETECTED ========================"
+    );
+
+    // Get comprehensive display and orientation information
+    android.util.DisplayMetrics metrics = getContext()
+      .getResources()
+      .getDisplayMetrics();
+    int screenWidthPx = metrics.widthPixels;
+    int screenHeightPx = metrics.heightPixels;
+    float density = metrics.density;
+    int screenWidthDp = (int) (screenWidthPx / density);
+    int screenHeightDp = (int) (screenHeightPx / density);
+
+    int current = getContext().getResources().getConfiguration().orientation;
+    Log.d(TAG, "New orientation: " + current + " (1=PORTRAIT, 2=LANDSCAPE)");
+    Log.d(
+      TAG,
+      "Screen dimensions - Pixels: " +
+      screenWidthPx +
+      "x" +
+      screenHeightPx +
+      ", DP: " +
+      screenWidthDp +
+      "x" +
+      screenHeightDp +
+      ", Density: " +
+      density
+    );
+
+    // Get WebView dimensions before rotation
+    WebView webView = getBridge().getWebView();
+    int webViewWidth = webView.getWidth();
+    int webViewHeight = webView.getHeight();
+    Log.d(TAG, "WebView dimensions: " + webViewWidth + "x" + webViewHeight);
+
+    // Get current preview bounds before rotation
+    int[] oldBounds = cameraXView.getCurrentPreviewBounds();
+    Log.d(
+      TAG,
+      "Current preview bounds before rotation: x=" +
+      oldBounds[0] +
+      ", y=" +
+      oldBounds[1] +
+      ", width=" +
+      oldBounds[2] +
+      ", height=" +
+      oldBounds[3]
+    );
+
+    getBridge()
+      .getActivity()
+      .runOnUiThread(() -> {
+        // Create and show a black full-screen overlay during rotation
+        ViewGroup rootView = (ViewGroup) getBridge()
+          .getActivity()
+          .getWindow()
+          .getDecorView()
+          .getRootView();
+
+        // Remove any existing overlay
+        if (rotationOverlay != null && rotationOverlay.getParent() != null) {
+          ((ViewGroup) rotationOverlay.getParent()).removeView(rotationOverlay);
+        }
+
+        // Create new black overlay
+        rotationOverlay = new View(getContext());
+        rotationOverlay.setBackgroundColor(Color.BLACK);
+        ViewGroup.LayoutParams overlayParams = new ViewGroup.LayoutParams(
+          ViewGroup.LayoutParams.MATCH_PARENT,
+          ViewGroup.LayoutParams.MATCH_PARENT
+        );
+        rotationOverlay.setLayoutParams(overlayParams);
+        rootView.addView(rotationOverlay);
+
+        // Reapply current aspect ratio to recompute layout, then emit screenResize
+        String ar = cameraXView.getAspectRatio();
+        Log.d(TAG, "Reapplying aspect ratio: " + ar);
+
+        // Re-get dimensions after potential layout pass
+        android.util.DisplayMetrics newMetrics = getContext()
+          .getResources()
+          .getDisplayMetrics();
+        int newScreenWidthPx = newMetrics.widthPixels;
+        int newScreenHeightPx = newMetrics.heightPixels;
+        int newWebViewWidth = webView.getWidth();
+        int newWebViewHeight = webView.getHeight();
+
+        Log.d(
+          TAG,
+          "New screen dimensions after rotation: " +
+          newScreenWidthPx +
+          "x" +
+          newScreenHeightPx
+        );
+        Log.d(
+          TAG,
+          "New WebView dimensions after rotation: " +
+          newWebViewWidth +
+          "x" +
+          newWebViewHeight
+        );
+
+        // Force aspect ratio recalculation on orientation change
+        cameraXView.forceAspectRatioRecalculation(ar, null, null, () -> {
+          int[] bounds = cameraXView.getCurrentPreviewBounds();
+          Log.d(
+            TAG,
+            "New bounds after orientation change: x=" +
+            bounds[0] +
+            ", y=" +
+            bounds[1] +
+            ", width=" +
+            bounds[2] +
+            ", height=" +
+            bounds[3]
+          );
+          Log.d(
+            TAG,
+            "Bounds change: deltaX=" +
+            (bounds[0] - oldBounds[0]) +
+            ", deltaY=" +
+            (bounds[1] - oldBounds[1]) +
+            ", deltaWidth=" +
+            (bounds[2] - oldBounds[2]) +
+            ", deltaHeight=" +
+            (bounds[3] - oldBounds[3])
+          );
+
+          JSObject data = new JSObject();
+          data.put("x", bounds[0]);
+          data.put("y", bounds[1]);
+          data.put("width", bounds[2]);
+          data.put("height", bounds[3]);
+          notifyListeners("screenResize", data);
+
+          // Also emit orientationChange with a unified string value
+          String o;
+          if (current == Configuration.ORIENTATION_PORTRAIT) {
+            o = "portrait";
+          } else if (current == Configuration.ORIENTATION_LANDSCAPE) {
+            o = "landscape";
+          } else {
+            o = "unknown";
+          }
+          JSObject oData = new JSObject();
+          oData.put("orientation", o);
+          notifyListeners("orientationChange", oData);
+
+          // Don't remove the overlay here - wait for camera to fully start
+          // The overlay will be removed after a delay to ensure camera is stable
+          if (rotationOverlay != null && rotationOverlay.getParent() != null) {
+            // Shorter delay for faster transition
+            int delay = "4:3".equals(ar) ? 200 : 150;
+            rotationOverlay.postDelayed(
+              () -> {
+                if (
+                  rotationOverlay != null && rotationOverlay.getParent() != null
+                ) {
+                  rotationOverlay
+                    .animate()
+                    .alpha(0f)
+                    .setDuration(100) // Faster fade out
+                    .withEndAction(() -> {
+                      if (
+                        rotationOverlay != null &&
+                        rotationOverlay.getParent() != null
+                      ) {
+                        ((ViewGroup) rotationOverlay.getParent()).removeView(
+                            rotationOverlay
+                          );
+                        rotationOverlay = null;
+                      }
+                    })
+                    .start();
+                }
+              },
+              delay
+            );
+          }
+
+          Log.d(
+            TAG,
+            "================================================================================"
+          );
+        });
+      });
   }
 
   @Override
-  protected void handleOnResume() {
-    super.handleOnResume();
-  }
-
-  @Override
-  public void onPictureTaken(String originalPicture) {
-    JSObject jsObject = new JSObject();
-    jsObject.put("value", originalPicture);
-    bridge.getSavedCall(captureCallbackId).resolve(jsObject);
-  }
-
-  @Override
-  public void onPictureTakenError(String message) {
-    bridge.getSavedCall(captureCallbackId).reject(message);
-  }
-
-  @Override
-  public void onSnapshotTaken(String originalPicture) {
-    JSObject jsObject = new JSObject();
-    jsObject.put("value", originalPicture);
-    bridge.getSavedCall(snapshotCallbackId).resolve(jsObject);
-  }
-
-  @Override
-  public void onSnapshotTakenError(String message) {
-    bridge.getSavedCall(snapshotCallbackId).reject(message);
-  }
-
-  @Override
-  public void onFocusSet(int pointX, int pointY) {}
-
-  @Override
-  public void onFocusSetError(String message) {}
-
-  @Override
-  public void onBackButton() {}
-
-  @Override
-  public void onCameraStarted() {
-    PluginCall pluginCall = bridge.getSavedCall(cameraStartCallbackId);
-    pluginCall.resolve();
+  public void onPictureTaken(String base64, JSONObject exif) {
+    PluginCall pluginCall = bridge.getSavedCall(captureCallbackId);
+    if (pluginCall == null) {
+      Log.e("CameraPreview", "onPictureTaken: captureCallbackId is null");
+      return;
+    }
+    JSObject result = new JSObject();
+    result.put("value", base64);
+    result.put("exif", exif);
+    pluginCall.resolve(result);
     bridge.releaseCall(pluginCall);
   }
 
   @Override
-  public void onStartRecordVideo() {}
+  public void onPictureTakenError(String message) {
+    PluginCall pluginCall = bridge.getSavedCall(captureCallbackId);
+    if (pluginCall == null) {
+      Log.e("CameraPreview", "onPictureTakenError: captureCallbackId is null");
+      return;
+    }
+    pluginCall.reject(message);
+    bridge.releaseCall(pluginCall);
+  }
+
+  private JSObject getViewSize(
+    double x,
+    double y,
+    double width,
+    double height
+  ) {
+    JSObject ret = new JSObject();
+    // Return values with proper rounding to avoid gaps
+    // For positions (x, y): ceil to avoid gaps at top/left
+    // For dimensions (width, height): floor to avoid gaps at bottom/right
+    ret.put("x", Math.ceil(x));
+    ret.put("y", Math.ceil(y));
+    ret.put("width", Math.floor(width));
+    ret.put("height", Math.floor(height));
+    return ret;
+  }
 
   @Override
-  public void onStartRecordVideoError(String message) {
-    bridge.getSavedCall(recordCallbackId).reject(message);
-  }
+  public void onCameraStarted(int width, int height, int x, int y) {
+    PluginCall call = bridge.getSavedCall(cameraStartCallbackId);
+    if (call != null) {
+      // Convert pixel values back to logical units
+      DisplayMetrics metrics = getBridge()
+        .getActivity()
+        .getResources()
+        .getDisplayMetrics();
+      float pixelRatio = metrics.density;
 
-  @Override
-  public void onStopRecordVideo(String file) {
-    PluginCall pluginCall = bridge.getSavedCall(recordCallbackId);
-    JSObject jsObject = new JSObject();
-    jsObject.put("videoFilePath", file);
-    pluginCall.resolve(jsObject);
-  }
+      // When WebView is offset from the top (e.g., below status bar),
+      // we need to convert between JavaScript coordinates (relative to WebView)
+      // and native coordinates (relative to screen)
+      WebView webView = getBridge().getWebView();
+      int webViewTopInset = 0;
+      boolean isEdgeToEdgeActive = false;
+      if (webView != null) {
+        int[] location = new int[2];
+        webView.getLocationOnScreen(location);
+        webViewTopInset = location[1];
+        isEdgeToEdgeActive = webViewTopInset > 0;
+      }
 
-  @Override
-  public void onStopRecordVideoError(String error) {
-    bridge.getSavedCall(recordCallbackId).reject(error);
-  }
+      // Only convert to relative position if edge-to-edge is active
+      int relativeY = isEdgeToEdgeActive ? (y - webViewTopInset) : y;
 
-  private boolean hasView(PluginCall call) {
-    if (fragment == null) {
-      return false;
-    }
+      Log.d("CameraPreview", "========================");
+      Log.d("CameraPreview", "CAMERA STARTED - POSITION RETURNED:");
+      Log.d(
+        "CameraPreview",
+        "7. RETURNED (pixels) - x=" +
+        x +
+        ", y=" +
+        y +
+        ", width=" +
+        width +
+        ", height=" +
+        height
+      );
+      Log.d(
+        "CameraPreview",
+        "8. EDGE-TO-EDGE - " + (isEdgeToEdgeActive ? "ACTIVE" : "INACTIVE")
+      );
+      Log.d("CameraPreview", "9. WEBVIEW INSET - " + webViewTopInset);
+      Log.d(
+        "CameraPreview",
+        "10. RELATIVE Y - " +
+        relativeY +
+        " (y=" +
+        y +
+        (isEdgeToEdgeActive ? " - inset=" + webViewTopInset : " unchanged") +
+        ")"
+      );
+      Log.d(
+        "CameraPreview",
+        "11. RETURNED (logical) - x=" +
+        (x / pixelRatio) +
+        ", y=" +
+        (relativeY / pixelRatio) +
+        ", width=" +
+        (width / pixelRatio) +
+        ", height=" +
+        (height / pixelRatio)
+      );
+      Log.d("CameraPreview", "12. PIXEL RATIO - " + pixelRatio);
+      Log.d("CameraPreview", "========================");
 
-    return true;
-  }
+      // Calculate logical values with proper rounding to avoid sub-pixel issues
+      double logicalWidth = width / pixelRatio;
+      double logicalHeight = height / pixelRatio;
+      double logicalX = x / pixelRatio;
+      double logicalY = relativeY / pixelRatio;
 
-  private boolean hasCamera(PluginCall call) {
-    if (!this.hasView(call)) {
-      return false;
-    }
+      JSObject result = getViewSize(
+        logicalX,
+        logicalY,
+        logicalWidth,
+        logicalHeight
+      );
 
-    if (fragment.getCamera() == null) {
-      return false;
-    }
+      // Log exact calculations to debug one-pixel difference
+      Log.d("CameraPreview", "========================");
+      Log.d("CameraPreview", "FINAL POSITION CALCULATIONS:");
+      Log.d(
+        "CameraPreview",
+        "Pixel values: x=" +
+        x +
+        ", y=" +
+        relativeY +
+        ", width=" +
+        width +
+        ", height=" +
+        height
+      );
+      Log.d("CameraPreview", "Pixel ratio: " + pixelRatio);
+      Log.d(
+        "CameraPreview",
+        "Logical values (exact): x=" +
+        logicalX +
+        ", y=" +
+        logicalY +
+        ", width=" +
+        logicalWidth +
+        ", height=" +
+        logicalHeight
+      );
+      Log.d(
+        "CameraPreview",
+        "Logical values (rounded): x=" +
+        Math.round(logicalX) +
+        ", y=" +
+        Math.round(logicalY) +
+        ", width=" +
+        Math.round(logicalWidth) +
+        ", height=" +
+        Math.round(logicalHeight)
+      );
 
-    return true;
-  }
-
-  private String getFilePath() {
-    String fileName = "videoTmp";
-
-    int i = 1;
-
-    while (
-      new File(VIDEO_FILE_PATH + fileName + VIDEO_FILE_EXTENSION).exists()
-    ) {
-      // Add number suffix if file exists
-      fileName = "videoTmp" + '_' + i;
-      i++;
-    }
-
-    return VIDEO_FILE_PATH + fileName + VIDEO_FILE_EXTENSION;
-  }
-
-  private void setupBroadcast() {
-    /** When touch event is triggered, relay it to camera view if needed so it can support pinch zoom */
-
-    getBridge().getWebView().setClickable(true);
-    getBridge()
-      .getWebView()
-      .setOnTouchListener(
-        new View.OnTouchListener() {
-          @Override
-          public boolean onTouch(View v, MotionEvent event) {
-            if (
-              (null != fragment) &&
-              (fragment.toBack == true) &&
-              null != fragment.frameContainerLayout
-            ) {
-              fragment.frameContainerLayout.dispatchTouchEvent(event);
-            }
-            return false;
+      // Check if previewContainer has any padding or margin that might cause offset
+      if (cameraXView != null) {
+        View previewContainer = cameraXView.getPreviewContainer();
+        if (previewContainer != null) {
+          Log.d(
+            "CameraPreview",
+            "PreviewContainer padding: left=" +
+            previewContainer.getPaddingLeft() +
+            ", top=" +
+            previewContainer.getPaddingTop() +
+            ", right=" +
+            previewContainer.getPaddingRight() +
+            ", bottom=" +
+            previewContainer.getPaddingBottom()
+          );
+          ViewGroup.LayoutParams params = previewContainer.getLayoutParams();
+          if (params instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams marginParams =
+              (ViewGroup.MarginLayoutParams) params;
+            Log.d(
+              "CameraPreview",
+              "PreviewContainer margins: left=" +
+              marginParams.leftMargin +
+              ", top=" +
+              marginParams.topMargin +
+              ", right=" +
+              marginParams.rightMargin +
+              ", bottom=" +
+              marginParams.bottomMargin
+            );
           }
         }
+      }
+      Log.d("CameraPreview", "========================");
+
+      // Log what we're returning
+      Log.d(
+        "CameraPreview",
+        "Returning to JS - x: " +
+        logicalX +
+        " (from " +
+        logicalX +
+        "), y: " +
+        logicalY +
+        " (from " +
+        logicalY +
+        "), width: " +
+        logicalWidth +
+        " (from " +
+        logicalWidth +
+        "), height: " +
+        logicalHeight +
+        " (from " +
+        logicalHeight +
+        ")"
       );
+
+      call.resolve(result);
+      bridge.releaseCall(call);
+      cameraStartCallbackId = null; // Prevent re-use
+    }
+  }
+
+  @Override
+  public void onSampleTaken(String result) {
+    // Handle sample taken if needed
+    Log.i("CameraPreview", "Sample taken: " + result);
+  }
+
+  @Override
+  public void onSampleTakenError(String message) {
+    // Handle sample taken error if needed
+    Log.e("CameraPreview", "Sample taken error: " + message);
+  }
+
+  @Override
+  public void onCameraStartError(String message) {
+    PluginCall call = bridge.getSavedCall(cameraStartCallbackId);
+    if (call != null) {
+      call.reject(message);
+      bridge.releaseCall(call);
+      cameraStartCallbackId = null;
+    }
+  }
+
+  @PluginMethod
+  public void setAspectRatio(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    String aspectRatio = call.getString("aspectRatio", "4:3");
+    Float x = call.getFloat("x");
+    Float y = call.getFloat("y");
+
+    getActivity()
+      .runOnUiThread(() -> {
+        cameraXView.setAspectRatio(aspectRatio, x, y, () -> {
+          // Return the actual preview bounds after layout and camera operations are complete
+          int[] bounds = cameraXView.getCurrentPreviewBounds();
+          JSObject ret = new JSObject();
+          ret.put("x", bounds[0]);
+          ret.put("y", bounds[1]);
+          ret.put("width", bounds[2]);
+          ret.put("height", bounds[3]);
+          call.resolve(ret);
+        });
+      });
+  }
+
+  @PluginMethod
+  public void getAspectRatio(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    String aspectRatio = cameraXView.getAspectRatio();
+    JSObject ret = new JSObject();
+    ret.put("aspectRatio", aspectRatio);
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void setGridMode(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    String gridMode = call.getString("gridMode", "none");
+    getActivity()
+      .runOnUiThread(() -> {
+        cameraXView.setGridMode(gridMode);
+        call.resolve();
+      });
+  }
+
+  @PluginMethod
+  public void getGridMode(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    JSObject ret = new JSObject();
+    ret.put("gridMode", cameraXView.getGridMode());
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void getPreviewSize(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+
+    // Convert pixel values back to logical units
+    DisplayMetrics metrics = getBridge()
+      .getActivity()
+      .getResources()
+      .getDisplayMetrics();
+    float pixelRatio = metrics.density;
+
+    JSObject ret = new JSObject();
+    // Use same rounding strategy as start method
+    double x = Math.ceil(cameraXView.getPreviewX() / pixelRatio);
+    double y = Math.ceil(cameraXView.getPreviewY() / pixelRatio);
+    double width = Math.floor(cameraXView.getPreviewWidth() / pixelRatio);
+    double height = Math.floor(cameraXView.getPreviewHeight() / pixelRatio);
+
+    Log.d(
+      "CameraPreview",
+      "getPreviewSize: x=" +
+      x +
+      ", y=" +
+      y +
+      ", width=" +
+      width +
+      ", height=" +
+      height
+    );
+    ret.put("x", x);
+    ret.put("y", y);
+    ret.put("width", width);
+    ret.put("height", height);
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void setPreviewSize(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+
+    // Get values from call - null values will become 0
+    Integer xParam = call.getInt("x");
+    Integer yParam = call.getInt("y");
+    Integer widthParam = call.getInt("width");
+    Integer heightParam = call.getInt("height");
+
+    // Apply pixel ratio conversion to non-null values
+    DisplayMetrics metrics = getBridge()
+      .getActivity()
+      .getResources()
+      .getDisplayMetrics();
+    float pixelRatio = metrics.density;
+
+    // Check if edge-to-edge mode is active
+    WebView webView = getBridge().getWebView();
+    int webViewTopInset = 0;
+    boolean isEdgeToEdgeActive = false;
+    if (webView != null) {
+      int[] location = new int[2];
+      webView.getLocationOnScreen(location);
+      webViewTopInset = location[1];
+      isEdgeToEdgeActive = webViewTopInset > 0;
+    }
+
+    int x = (xParam != null && xParam > 0) ? (int) (xParam * pixelRatio) : 0;
+    int y = (yParam != null && yParam > 0) ? (int) (yParam * pixelRatio) : 0;
+
+    // Add edge-to-edge inset to Y if active
+    if (isEdgeToEdgeActive && y > 0) {
+      y += webViewTopInset;
+    }
+    int width = (widthParam != null && widthParam > 0)
+      ? (int) (widthParam * pixelRatio)
+      : 0;
+    int height = (heightParam != null && heightParam > 0)
+      ? (int) (heightParam * pixelRatio)
+      : 0;
+
+    cameraXView.setPreviewSize(x, y, width, height, () -> {
+      // Return the actual preview bounds after layout operations are complete
+      int[] bounds = cameraXView.getCurrentPreviewBounds();
+      JSObject ret = new JSObject();
+      ret.put("x", bounds[0]);
+      ret.put("y", bounds[1]);
+      ret.put("width", bounds[2]);
+      ret.put("height", bounds[3]);
+      call.resolve(ret);
+    });
+  }
+
+  @PluginMethod
+  public void deleteFile(PluginCall call) {
+    String path = call.getString("path");
+    if (path == null || path.isEmpty()) {
+      call.reject("path parameter is required");
+      return;
+    }
+    try {
+      java.io.File f = new java.io.File(android.net.Uri.parse(path).getPath());
+      boolean deleted = f.exists() && f.delete();
+      JSObject ret = new JSObject();
+      ret.put("success", deleted);
+      call.resolve(ret);
+    } catch (Exception e) {
+      call.reject("Failed to delete file: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void getSafeAreaInsets(PluginCall call) {
+    JSObject ret = new JSObject();
+    int orientation = getContext()
+      .getResources()
+      .getConfiguration()
+      .orientation;
+
+    int notchInsetPx = 0;
+
+    try {
+      View decorView = getBridge().getActivity().getWindow().getDecorView();
+      WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
+
+      if (insets != null) {
+        // Get display cutout insets (notch, punch hole, etc.)
+        // this.Capacitor.Plugins.CameraPreview.getSafeAreaInsets()
+        Insets cutout = insets.getInsets(
+          WindowInsetsCompat.Type.displayCutout()
+        );
+
+        // Get system bars insets (status bar, navigation bars)
+        Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+
+        // In portrait mode, notch is at the top
+        // In landscape mode, notch is typically at the left side (or right, but left is more common)
+        if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+          // Portrait: return top inset (notch/status bar)
+          notchInsetPx = Math.max(cutout.top, sysBars.top);
+
+          // If no cutout detected but we have system bars, use status bar height as fallback
+          if (cutout.top == 0 && sysBars.top > 0) {
+            notchInsetPx = sysBars.top;
+          }
+        } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+          // Landscape: return left inset (notch moved to side)
+          notchInsetPx = Math.max(cutout.left, sysBars.left);
+
+          // If no cutout detected but we have system bars, use left system bar as fallback
+          if (cutout.left == 0 && sysBars.left > 0) {
+            notchInsetPx = sysBars.left;
+          }
+
+          // Additional fallback: some devices might have the notch on the right in landscape
+          // If left is 0, check right side as well
+          if (notchInsetPx == 0) {
+            notchInsetPx = Math.max(cutout.right, sysBars.right);
+          }
+        } else {
+          // Unknown orientation, default to top
+          notchInsetPx = Math.max(cutout.top, sysBars.top);
+        }
+      } else {
+        // Fallback to status bar height if WindowInsets are not available
+        notchInsetPx = getStatusBarHeightPx();
+      }
+    } catch (Exception e) {
+      // Final fallback
+      notchInsetPx = getStatusBarHeightPx();
+    }
+
+    // Convert pixels to dp for consistency with JS layout units
+    float density = getContext().getResources().getDisplayMetrics().density;
+    ret.put("orientation", orientation);
+    ret.put("top", notchInsetPx / density);
+    call.resolve(ret);
+  }
+
+  private boolean approxEqualPx(int a, int b) {
+    return Math.abs(a - b) <= 2; // within 2px tolerance
+  }
+
+  private int getStatusBarHeightPx() {
+    int result = 0;
+    int resourceId = getContext()
+      .getResources()
+      .getIdentifier("status_bar_height", "dimen", "android");
+    if (resourceId > 0) {
+      result = getContext().getResources().getDimensionPixelSize(resourceId);
+    }
+    return result;
+  }
+
+  private int getNavigationBarHeightPx() {
+    int result = 0;
+    int resourceId = getContext()
+      .getResources()
+      .getIdentifier("navigation_bar_height", "dimen", "android");
+    if (resourceId > 0) {
+      result = getContext().getResources().getDimensionPixelSize(resourceId);
+    }
+    return result;
   }
 }

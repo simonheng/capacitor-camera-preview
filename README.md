@@ -37,7 +37,7 @@ Take into account that this will make transparent all ion-content on application
 ```
 
 If the camera preview is not displaying after applying the above styles, apply transparent background color to the root div element of the parent component
-Ex: VueJS >> App.vue component 
+Ex: VueJS >> App.vue component
 ```html
 <template>
   <ion-app id="app">
@@ -76,6 +76,24 @@ Video and photo taken with the plugin are never removed, so do not forget to rem
 use https://capacitorjs.com/docs/apis/filesystem#deletefile for that
 
 
+## Fast base64 from file path (no bridge)
+
+When using `storeToFile: true`, you can avoid sending large base64 strings over the Capacitor bridge:
+
+```ts
+import { CameraPreview, getBase64FromFilePath } from '@capgo/camera-preview'
+
+// Take a picture and get a file path
+const { value: filePath } = await CameraPreview.capture({ quality: 85, storeToFile: true })
+
+// Convert the file to base64 entirely on the JS side (fast, no bridge)
+const base64 = await getBase64FromFilePath(filePath)
+
+// Optionally cleanup the temp file natively
+await CameraPreview.deleteFile({ path: filePath })
+```
+
+
 # Installation
 
 ```
@@ -91,6 +109,52 @@ Then run
 ```
 npx cap sync
 ```
+
+## Optional Configuration
+
+To use certain features of this plugin, you will need to add the following permissions/keys to your native project configurations.
+
+### Android
+
+In your `android/app/src/main/AndroidManifest.xml`:
+
+- **Audio Recording** (`disableAudio: false`):
+  ```xml
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  ```
+
+- **Saving to Gallery** (`saveToGallery: true`):
+  ```xml
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+  ```
+
+- **Location in EXIF Data** (`withExifLocation: true`):
+  ```xml
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  ```
+
+### iOS
+
+In your `ios/App/App/Info.plist`, you must provide descriptions for the permissions your app requires. The keys are added automatically, but you need to provide the `string` values.
+
+- **Audio Recording** (`disableAudio: false`):
+  ```xml
+  <key>NSMicrophoneUsageDescription</key>
+  <string>To record audio with videos</string>
+  ```
+
+- **Saving to Gallery** (`saveToGallery: true`):
+  ```xml
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>To save photos to your gallery</string>
+  ```
+
+- **Location in EXIF Data** (`withExifLocation: true`):
+  ```xml
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>To add location data to your photos</string>
+  ```
 
 ## Extra Android installation steps
 
@@ -174,6 +238,10 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`capture(...)`](#capture)
 * [`captureSample(...)`](#capturesample)
 * [`getSupportedFlashModes()`](#getsupportedflashmodes)
+* [`setAspectRatio(...)`](#setaspectratio)
+* [`getAspectRatio()`](#getaspectratio)
+* [`setGridMode(...)`](#setgridmode)
+* [`getGridMode()`](#getgridmode)
 * [`getHorizontalFov()`](#gethorizontalfov)
 * [`getSupportedPictureSizes()`](#getsupportedpicturesizes)
 * [`setFlashMode(...)`](#setflashmode)
@@ -181,25 +249,47 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`setOpacity(...)`](#setopacity)
 * [`stopRecordVideo()`](#stoprecordvideo)
 * [`startRecordVideo(...)`](#startrecordvideo)
+* [`isRunning()`](#isrunning)
+* [`getAvailableDevices()`](#getavailabledevices)
+* [`getZoom()`](#getzoom)
+* [`getZoomButtonValues()`](#getzoombuttonvalues)
+* [`setZoom(...)`](#setzoom)
+* [`getFlashMode()`](#getflashmode)
+* [`removeAllListeners()`](#removealllisteners)
+* [`setDeviceId(...)`](#setdeviceid)
+* [`getDeviceId()`](#getdeviceid)
+* [`getPreviewSize()`](#getpreviewsize)
+* [`setPreviewSize(...)`](#setpreviewsize)
+* [`setFocus(...)`](#setfocus)
+* [`addListener('screenResize', ...)`](#addlistenerscreenresize-)
+* [`addListener('orientationChange', ...)`](#addlistenerorientationchange-)
+* [`deleteFile(...)`](#deletefile)
+* [`getSafeAreaInsets()`](#getsafeareainsets)
+* [`getOrientation()`](#getorientation)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
+* [Enums](#enums)
 
 </docgen-index>
 
 <docgen-api>
 <!--Update the source file JSDoc comments and rerun docgen to update the docs below-->
 
+The main interface for the CameraPreview plugin.
+
 ### start(...)
 
 ```typescript
-start(options: CameraPreviewOptions) => Promise<void>
+start(options: CameraPreviewOptions) => Promise<{ width: number; height: number; x: number; y: number; }>
 ```
 
-Start the camera preview instance.
+Starts the camera preview.
 
-| Param         | Type                                                                  | Description                                  |
-| ------------- | --------------------------------------------------------------------- | -------------------------------------------- |
-| **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | the options to start the camera preview with |
+| Param         | Type                                                                  | Description                                 |
+| ------------- | --------------------------------------------------------------------- | ------------------------------------------- |
+| **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | - The configuration for the camera preview. |
+
+**Returns:** <code>Promise&lt;{ width: number; height: number; x: number; y: number; }&gt;</code>
 
 **Since:** 0.0.1
 
@@ -212,7 +302,7 @@ Start the camera preview instance.
 stop() => Promise<void>
 ```
 
-Stop the camera preview instance.
+Stops the camera preview.
 
 **Since:** 0.0.1
 
@@ -222,16 +312,16 @@ Stop the camera preview instance.
 ### capture(...)
 
 ```typescript
-capture(options: CameraPreviewPictureOptions) => Promise<{ value: string; }>
+capture(options: CameraPreviewPictureOptions) => Promise<{ value: string; exif: ExifData; }>
 ```
 
-Switch camera.
+Captures a picture from the camera.
 
-| Param         | Type                                                                                | Description                           |
-| ------------- | ----------------------------------------------------------------------------------- | ------------------------------------- |
-| **`options`** | <code><a href="#camerapreviewpictureoptions">CameraPreviewPictureOptions</a></code> | the options to switch the camera with |
+| Param         | Type                                                                                | Description                              |
+| ------------- | ----------------------------------------------------------------------------------- | ---------------------------------------- |
+| **`options`** | <code><a href="#camerapreviewpictureoptions">CameraPreviewPictureOptions</a></code> | - The options for capturing the picture. |
 
-**Returns:** <code>Promise&lt;{ value: string; }&gt;</code>
+**Returns:** <code>Promise&lt;{ value: string; exif: <a href="#exifdata">ExifData</a>; }&gt;</code>
 
 **Since:** 0.0.1
 
@@ -244,11 +334,11 @@ Switch camera.
 captureSample(options: CameraSampleOptions) => Promise<{ value: string; }>
 ```
 
-Capture a sample image.
+Captures a single frame from the camera preview stream.
 
-| Param         | Type                                                                | Description                                  |
-| ------------- | ------------------------------------------------------------------- | -------------------------------------------- |
-| **`options`** | <code><a href="#camerasampleoptions">CameraSampleOptions</a></code> | the options to capture the sample image with |
+| Param         | Type                                                                | Description                             |
+| ------------- | ------------------------------------------------------------------- | --------------------------------------- |
+| **`options`** | <code><a href="#camerasampleoptions">CameraSampleOptions</a></code> | - The options for capturing the sample. |
 
 **Returns:** <code>Promise&lt;{ value: string; }&gt;</code>
 
@@ -263,7 +353,7 @@ Capture a sample image.
 getSupportedFlashModes() => Promise<{ result: CameraPreviewFlashMode[]; }>
 ```
 
-Get supported flash modes.
+Gets the flash modes supported by the active camera.
 
 **Returns:** <code>Promise&lt;{ result: CameraPreviewFlashMode[]; }&gt;</code>
 
@@ -272,15 +362,82 @@ Get supported flash modes.
 --------------------
 
 
+### setAspectRatio(...)
+
+```typescript
+setAspectRatio(options: { aspectRatio: "4:3" | "16:9"; x?: number; y?: number; }) => Promise<{ width: number; height: number; x: number; y: number; }>
+```
+
+Set the aspect ratio of the camera preview.
+
+| Param         | Type                                                                   | Description                                                                                                                                                                                                                                                                                                           |
+| ------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`options`** | <code>{ aspectRatio: '4:3' \| '16:9'; x?: number; y?: number; }</code> | - The desired aspect ratio and optional position. - aspectRatio: The desired aspect ratio ('4:3' or '16:9') - x: Optional x coordinate for positioning. If not provided, view will be auto-centered horizontally. - y: Optional y coordinate for positioning. If not provided, view will be auto-centered vertically. |
+
+**Returns:** <code>Promise&lt;{ width: number; height: number; x: number; y: number; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### getAspectRatio()
+
+```typescript
+getAspectRatio() => Promise<{ aspectRatio: "4:3" | "16:9"; }>
+```
+
+Gets the current aspect ratio of the camera preview.
+
+**Returns:** <code>Promise&lt;{ aspectRatio: '4:3' | '16:9'; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### setGridMode(...)
+
+```typescript
+setGridMode(options: { gridMode: GridMode; }) => Promise<void>
+```
+
+Sets the grid mode of the camera preview overlay.
+
+| Param         | Type                                                         | Description                                        |
+| ------------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| **`options`** | <code>{ gridMode: <a href="#gridmode">GridMode</a>; }</code> | - The desired grid mode ('none', '3x3', or '4x4'). |
+
+**Since:** 8.0.0
+
+--------------------
+
+
+### getGridMode()
+
+```typescript
+getGridMode() => Promise<{ gridMode: GridMode; }>
+```
+
+Gets the current grid mode of the camera preview overlay.
+
+**Returns:** <code>Promise&lt;{ gridMode: <a href="#gridmode">GridMode</a>; }&gt;</code>
+
+**Since:** 8.0.0
+
+--------------------
+
+
 ### getHorizontalFov()
 
 ```typescript
-getHorizontalFov() => Promise<{ result: any; }>
+getHorizontalFov() => Promise<{ result: number; }>
 ```
 
-Get horizontal field of view.
+Gets the horizontal field of view (FoV) for the active camera.
+Note: This can be an estimate on some devices.
 
-**Returns:** <code>Promise&lt;{ result: any; }&gt;</code>
+**Returns:** <code>Promise&lt;{ result: number; }&gt;</code>
 
 **Since:** 0.0.1
 
@@ -290,12 +447,14 @@ Get horizontal field of view.
 ### getSupportedPictureSizes()
 
 ```typescript
-getSupportedPictureSizes() => Promise<{ supportedPictureSizes: { facing: string; supportedPictureSizes: { width: number; height: number; }[]; }[]; }>
+getSupportedPictureSizes() => Promise<{ supportedPictureSizes: SupportedPictureSizes[]; }>
 ```
 
-Gets the supported picture sizes for a given device.
+Gets the supported picture sizes for all cameras.
 
-**Returns:** <code>Promise&lt;{ supportedPictureSizes: { facing: string; supportedPictureSizes: { width: number; height: number; }[]; }[]; }&gt;</code>
+**Returns:** <code>Promise&lt;{ supportedPictureSizes: SupportedPictureSizes[]; }&gt;</code>
+
+**Since:** 7.4.0
 
 --------------------
 
@@ -306,11 +465,11 @@ Gets the supported picture sizes for a given device.
 setFlashMode(options: { flashMode: CameraPreviewFlashMode | string; }) => Promise<void>
 ```
 
-Set flash mode.
+Sets the flash mode for the active camera.
 
-| Param         | Type                                | Description                            |
-| ------------- | ----------------------------------- | -------------------------------------- |
-| **`options`** | <code>{ flashMode: string; }</code> | the options to set the flash mode with |
+| Param         | Type                                | Description               |
+| ------------- | ----------------------------------- | ------------------------- |
+| **`options`** | <code>{ flashMode: string; }</code> | - The desired flash mode. |
 
 **Since:** 0.0.1
 
@@ -323,7 +482,7 @@ Set flash mode.
 flip() => Promise<void>
 ```
 
-Flip camera.
+Toggles between the front and rear cameras.
 
 **Since:** 0.0.1
 
@@ -336,11 +495,11 @@ Flip camera.
 setOpacity(options: CameraOpacityOptions) => Promise<void>
 ```
 
-Set opacity.
+Sets the opacity of the camera preview.
 
-| Param         | Type                                                                  | Description                                |
-| ------------- | --------------------------------------------------------------------- | ------------------------------------------ |
-| **`options`** | <code><a href="#cameraopacityoptions">CameraOpacityOptions</a></code> | the options to set the camera opacity with |
+| Param         | Type                                                                  | Description            |
+| ------------- | --------------------------------------------------------------------- | ---------------------- |
+| **`options`** | <code><a href="#cameraopacityoptions">CameraOpacityOptions</a></code> | - The opacity options. |
 
 **Since:** 0.0.1
 
@@ -353,7 +512,7 @@ Set opacity.
 stopRecordVideo() => Promise<{ videoFilePath: string; }>
 ```
 
-Stop recording video.
+Stops an ongoing video recording.
 
 **Returns:** <code>Promise&lt;{ videoFilePath: string; }&gt;</code>
 
@@ -368,13 +527,299 @@ Stop recording video.
 startRecordVideo(options: CameraPreviewOptions) => Promise<void>
 ```
 
-Start recording video.
+Starts recording a video.
 
-| Param         | Type                                                                  | Description                               |
-| ------------- | --------------------------------------------------------------------- | ----------------------------------------- |
-| **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | the options to start recording video with |
+| Param         | Type                                                                  | Description                        |
+| ------------- | --------------------------------------------------------------------- | ---------------------------------- |
+| **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | - The options for video recording. |
 
 **Since:** 0.0.1
+
+--------------------
+
+
+### isRunning()
+
+```typescript
+isRunning() => Promise<{ isRunning: boolean; }>
+```
+
+Checks if the camera preview is currently running.
+
+**Returns:** <code>Promise&lt;{ isRunning: boolean; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### getAvailableDevices()
+
+```typescript
+getAvailableDevices() => Promise<{ devices: CameraDevice[]; }>
+```
+
+Gets all available camera devices.
+
+**Returns:** <code>Promise&lt;{ devices: CameraDevice[]; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### getZoom()
+
+```typescript
+getZoom() => Promise<{ min: number; max: number; current: number; lens: LensInfo; }>
+```
+
+Gets the current zoom state, including min/max and current lens info.
+
+**Returns:** <code>Promise&lt;{ min: number; max: number; current: number; lens: <a href="#lensinfo">LensInfo</a>; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### getZoomButtonValues()
+
+```typescript
+getZoomButtonValues() => Promise<{ values: number[]; }>
+```
+
+Returns zoom button values for quick switching.
+- iOS/Android: includes 0.5 if ultra-wide available; 1 and 2 if wide available; 3 if telephoto available
+- Web: unsupported
+
+**Returns:** <code>Promise&lt;{ values: number[]; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### setZoom(...)
+
+```typescript
+setZoom(options: { level: number; ramp?: boolean; autoFocus?: boolean; }) => Promise<void>
+```
+
+Sets the zoom level of the camera.
+
+| Param         | Type                                                                 | Description                                                                         |
+| ------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **`options`** | <code>{ level: number; ramp?: boolean; autoFocus?: boolean; }</code> | - The desired zoom level. `ramp` is currently unused. `autoFocus` defaults to true. |
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### getFlashMode()
+
+```typescript
+getFlashMode() => Promise<{ flashMode: FlashMode; }>
+```
+
+Gets the current flash mode.
+
+**Returns:** <code>Promise&lt;{ flashMode: <a href="#camerapreviewflashmode">CameraPreviewFlashMode</a>; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### removeAllListeners()
+
+```typescript
+removeAllListeners() => Promise<void>
+```
+
+Removes all registered listeners.
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### setDeviceId(...)
+
+```typescript
+setDeviceId(options: { deviceId: string; }) => Promise<void>
+```
+
+Switches the active camera to the one with the specified `deviceId`.
+
+| Param         | Type                               | Description                          |
+| ------------- | ---------------------------------- | ------------------------------------ |
+| **`options`** | <code>{ deviceId: string; }</code> | - The ID of the device to switch to. |
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### getDeviceId()
+
+```typescript
+getDeviceId() => Promise<{ deviceId: string; }>
+```
+
+Gets the ID of the currently active camera device.
+
+**Returns:** <code>Promise&lt;{ deviceId: string; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### getPreviewSize()
+
+```typescript
+getPreviewSize() => Promise<{ x: number; y: number; width: number; height: number; }>
+```
+
+Gets the current preview size and position.
+
+**Returns:** <code>Promise&lt;{ x: number; y: number; width: number; height: number; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### setPreviewSize(...)
+
+```typescript
+setPreviewSize(options: { x?: number; y?: number; width: number; height: number; }) => Promise<{ width: number; height: number; x: number; y: number; }>
+```
+
+Sets the preview size and position.
+
+| Param         | Type                                                                    | Description                      |
+| ------------- | ----------------------------------------------------------------------- | -------------------------------- |
+| **`options`** | <code>{ x?: number; y?: number; width: number; height: number; }</code> | The new position and dimensions. |
+
+**Returns:** <code>Promise&lt;{ width: number; height: number; x: number; y: number; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### setFocus(...)
+
+```typescript
+setFocus(options: { x: number; y: number; }) => Promise<void>
+```
+
+Sets the camera focus to a specific point in the preview.
+
+| Param         | Type                                   | Description          |
+| ------------- | -------------------------------------- | -------------------- |
+| **`options`** | <code>{ x: number; y: number; }</code> | - The focus options. |
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### addListener('screenResize', ...)
+
+```typescript
+addListener(eventName: "screenResize", listenerFunc: (data: { width: number; height: number; x: number; y: number; }) => void) => Promise<PluginListenerHandle>
+```
+
+Adds a listener for screen resize events.
+
+| Param              | Type                                                                                     | Description                                         |
+| ------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **`eventName`**    | <code>'screenResize'</code>                                                              | - The event name to listen for.                     |
+| **`listenerFunc`** | <code>(data: { width: number; height: number; x: number; y: number; }) =&gt; void</code> | - The function to call when the event is triggered. |
+
+**Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### addListener('orientationChange', ...)
+
+```typescript
+addListener(eventName: "orientationChange", listenerFunc: (data: { orientation: DeviceOrientation; }) => void) => Promise<PluginListenerHandle>
+```
+
+Adds a listener for orientation change events.
+
+| Param              | Type                                                                                                 | Description                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **`eventName`**    | <code>'orientationChange'</code>                                                                     | - The event name to listen for.                     |
+| **`listenerFunc`** | <code>(data: { orientation: <a href="#deviceorientation">DeviceOrientation</a>; }) =&gt; void</code> | - The function to call when the event is triggered. |
+
+**Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### deleteFile(...)
+
+```typescript
+deleteFile(options: { path: string; }) => Promise<{ success: boolean; }>
+```
+
+Deletes a file at the given absolute path on the device.
+Use this to quickly clean up temporary images created with `storeToFile`.
+On web, this is not supported and will throw.
+
+| Param         | Type                           |
+| ------------- | ------------------------------ |
+| **`options`** | <code>{ path: string; }</code> |
+
+**Returns:** <code>Promise&lt;{ success: boolean; }&gt;</code>
+
+**Since:** 7.5.0
+
+--------------------
+
+
+### getSafeAreaInsets()
+
+```typescript
+getSafeAreaInsets() => Promise<SafeAreaInsets>
+```
+
+Gets the safe area insets for devices.
+Returns the orientation-aware notch/camera cutout inset and the current orientation.
+In portrait mode: returns top inset (notch at top).
+In landscape mode: returns left inset (notch moved to side).
+This specifically targets the cutout area (notch, punch hole, etc.) that all modern phones have.
+
+Android: Values returned in dp (logical pixels).
+iOS: Values returned in physical pixels, excluding status bar (only pure notch/cutout size).
+
+**Returns:** <code>Promise&lt;<a href="#safeareainsets">SafeAreaInsets</a>&gt;</code>
+
+--------------------
+
+
+### getOrientation()
+
+```typescript
+getOrientation() => Promise<{ orientation: DeviceOrientation; }>
+```
+
+Gets the current device orientation in a cross-platform format.
+
+**Returns:** <code>Promise&lt;{ orientation: <a href="#deviceorientation">DeviceOrientation</a>; }&gt;</code>
+
+**Since:** 7.5.0
 
 --------------------
 
@@ -384,59 +829,169 @@ Start recording video.
 
 #### CameraPreviewOptions
 
-| Prop                               | Type                 | Description                                                                                                                                                   |
-| ---------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`parent`**                       | <code>string</code>  | Parent element to attach the video preview element to (applicable to the web platform only)                                                                   |
-| **`className`**                    | <code>string</code>  | Class name to add to the video preview element (applicable to the web platform only)                                                                          |
-| **`width`**                        | <code>number</code>  | The preview width in pixels, default window.screen.width                                                                                                      |
-| **`height`**                       | <code>number</code>  | The preview height in pixels, default window.screen.height                                                                                                    |
-| **`x`**                            | <code>number</code>  | The x origin, default 0 (applicable to the android and ios platforms only)                                                                                    |
-| **`y`**                            | <code>number</code>  | The y origin, default 0 (applicable to the android and ios platforms only)                                                                                    |
-| **`includeSafeAreaInsets`**        | <code>boolean</code> | Whether to include safe area insets in y-position calculation, default false (applicable to the ios platform only)                                            |
-| **`toBack`**                       | <code>boolean</code> | Brings your html in front of your preview, default false (applicable to the android only)                                                                     |
-| **`paddingBottom`**                | <code>number</code>  | The preview bottom padding in pixes. Useful to keep the appropriate preview sizes when orientation changes (applicable to the android and ios platforms only) |
-| **`rotateWhenOrientationChanged`** | <code>boolean</code> | Rotate preview when orientation changes (applicable to the ios platforms only; default value is true)                                                         |
-| **`position`**                     | <code>string</code>  | Choose the camera to use 'front' or 'rear', default 'front'                                                                                                   |
-| **`storeToFile`**                  | <code>boolean</code> | Defaults to false - Capture images to a file and return the file path instead of returning base64 encoded data                                                |
-| **`disableExifHeaderStripping`**   | <code>boolean</code> | Defaults to false - Android Only - Disable automatic rotation of the image, and let the browser deal with it (keep reading on how to achieve it)              |
-| **`enableHighResolution`**         | <code>boolean</code> | Defaults to false - iOS only - Activate high resolution image capture so that output images are from the highest resolution possible on the device *          |
-| **`disableAudio`**                 | <code>boolean</code> | Defaults to false - Disables audio stream to prevent permission requests and output switching                                                                 |
-| **`lockAndroidOrientation`**       | <code>boolean</code> | Android Only - Locks device orientation when camera is showing.                                                                                               |
-| **`enableOpacity`**                | <code>boolean</code> | Defaults to false - Android and Web only. Set if camera preview can change opacity.                                                                           |
-| **`enableZoom`**                   | <code>boolean</code> | Defaults to false - Android only. Set if camera preview will support pinch to zoom.                                                                           |
-| **`cameraMode`**                   | <code>boolean</code> | default to false - IOS only. Set the CameraPreview to use the video mode preset                                                                               |
+Defines the configuration options for starting the camera preview.
+
+| Prop                               | Type                                                            | Description                                                                                                                                                                                             | Default               | Since |
+| ---------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ----- |
+| **`parent`**                       | <code>string</code>                                             | The parent element to attach the video preview to.                                                                                                                                                      |                       |       |
+| **`className`**                    | <code>string</code>                                             | A CSS class name to add to the preview element.                                                                                                                                                         |                       |       |
+| **`width`**                        | <code>number</code>                                             | The width of the preview in pixels. Defaults to the screen width.                                                                                                                                       |                       |       |
+| **`height`**                       | <code>number</code>                                             | The height of the preview in pixels. Defaults to the screen height.                                                                                                                                     |                       |       |
+| **`x`**                            | <code>number</code>                                             | The horizontal origin of the preview, in pixels.                                                                                                                                                        |                       |       |
+| **`y`**                            | <code>number</code>                                             | The vertical origin of the preview, in pixels.                                                                                                                                                          |                       |       |
+| **`aspectRatio`**                  | <code>'4:3' \| '16:9'</code>                                    | The aspect ratio of the camera preview, '4:3' or '16:9' or 'fill'. Cannot be set if width or height is provided, otherwise the call will be rejected. Use setPreviewSize to adjust size after starting. |                       | 2.0.0 |
+| **`gridMode`**                     | <code><a href="#gridmode">GridMode</a></code>                   | The grid overlay to display on the camera preview.                                                                                                                                                      | <code>"none"</code>   | 2.1.0 |
+| **`includeSafeAreaInsets`**        | <code>boolean</code>                                            | Adjusts the y-position to account for safe areas (e.g., notches).                                                                                                                                       | <code>false</code>    |       |
+| **`toBack`**                       | <code>boolean</code>                                            | If true, places the preview behind the webview.                                                                                                                                                         | <code>true</code>     |       |
+| **`paddingBottom`**                | <code>number</code>                                             | Bottom padding for the preview, in pixels.                                                                                                                                                              |                       |       |
+| **`rotateWhenOrientationChanged`** | <code>boolean</code>                                            | Whether to rotate the preview when the device orientation changes.                                                                                                                                      | <code>true</code>     |       |
+| **`position`**                     | <code>string</code>                                             | The camera to use.                                                                                                                                                                                      | <code>"rear"</code>   |       |
+| **`storeToFile`**                  | <code>boolean</code>                                            | If true, saves the captured image to a file and returns the file path. If false, returns a base64 encoded string.                                                                                       | <code>false</code>    |       |
+| **`disableExifHeaderStripping`**   | <code>boolean</code>                                            | If true, prevents the plugin from rotating the image based on EXIF data.                                                                                                                                | <code>false</code>    |       |
+| **`disableAudio`**                 | <code>boolean</code>                                            | If true, disables the audio stream, preventing audio permission requests.                                                                                                                               | <code>true</code>     |       |
+| **`lockAndroidOrientation`**       | <code>boolean</code>                                            | If true, locks the device orientation while the camera is active.                                                                                                                                       | <code>false</code>    |       |
+| **`enableOpacity`**                | <code>boolean</code>                                            | If true, allows the camera preview's opacity to be changed.                                                                                                                                             | <code>false</code>    |       |
+| **`enableZoom`**                   | <code>boolean</code>                                            | If true, enables pinch-to-zoom functionality on the preview.                                                                                                                                            | <code>false</code>    |       |
+| **`enableVideoMode`**              | <code>boolean</code>                                            | If true, uses the video-optimized preset for the camera session.                                                                                                                                        | <code>false</code>    |       |
+| **`deviceId`**                     | <code>string</code>                                             | The `deviceId` of the camera to use. If provided, `position` is ignored.                                                                                                                                |                       |       |
+| **`initialZoomLevel`**             | <code>number</code>                                             | The initial zoom level when starting the camera preview. If the requested zoom level is not available, the native plugin will reject.                                                                   | <code>1.0</code>      | 2.2.0 |
+| **`positioning`**                  | <code><a href="#camerapositioning">CameraPositioning</a></code> | The vertical positioning of the camera preview.                                                                                                                                                         | <code>"center"</code> | 2.3.0 |
+
+
+#### ExifData
+
+Represents EXIF data extracted from an image.
 
 
 #### CameraPreviewPictureOptions
 
-| Prop          | Type                                                    | Description                                                                          |
-| ------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **`height`**  | <code>number</code>                                     | The picture height, optional, default 0 (Device default)                             |
-| **`width`**   | <code>number</code>                                     | The picture width, optional, default 0 (Device default)                              |
-| **`quality`** | <code>number</code>                                     | The picture quality, 0 - 100, default 85                                             |
-| **`format`**  | <code><a href="#pictureformat">PictureFormat</a></code> | The picture format, jpeg or png, default jpeg on `Web`. quality has no effect on png |
+Defines the options for capturing a picture.
+
+| Prop                   | Type                                                    | Description                                                                                                                                | Default             | Since |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- | ----- |
+| **`height`**           | <code>number</code>                                     |                                                                                                                                            |                     |       |
+| **`width`**            | <code>number</code>                                     |                                                                                                                                            |                     |       |
+| **`aspectRatio`**      | <code>string</code>                                     |                                                                                                                                            |                     | 7.7.0 |
+| **`quality`**          | <code>number</code>                                     | The quality of the captured image, from 0 to 100. Does not apply to `png` format.                                                          | <code>85</code>     |       |
+| **`format`**           | <code><a href="#pictureformat">PictureFormat</a></code> | The format of the captured image.                                                                                                          | <code>"jpeg"</code> |       |
+| **`saveToGallery`**    | <code>boolean</code>                                    | If true, the captured image will be saved to the user's gallery.                                                                           | <code>false</code>  | 7.5.0 |
+| **`withExifLocation`** | <code>boolean</code>                                    | If true, the plugin will attempt to add GPS location data to the image's EXIF metadata. This may prompt the user for location permissions. | <code>false</code>  | 7.6.0 |
 
 
 #### CameraSampleOptions
 
-| Prop          | Type                | Description                              |
-| ------------- | ------------------- | ---------------------------------------- |
-| **`quality`** | <code>number</code> | The picture quality, 0 - 100, default 85 |
+Defines the options for capturing a sample frame from the camera preview.
+
+| Prop          | Type                | Description                                        | Default         |
+| ------------- | ------------------- | -------------------------------------------------- | --------------- |
+| **`quality`** | <code>number</code> | The quality of the captured sample, from 0 to 100. | <code>85</code> |
+
+
+#### SupportedPictureSizes
+
+Represents the supported picture sizes for a camera facing a certain direction.
+
+| Prop                        | Type                       | Description                                        |
+| --------------------------- | -------------------------- | -------------------------------------------------- |
+| **`facing`**                | <code>string</code>        | The camera direction ("front" or "rear").          |
+| **`supportedPictureSizes`** | <code>PictureSize[]</code> | A list of supported picture sizes for this camera. |
+
+
+#### PictureSize
+
+Defines a standard picture size with width and height.
+
+| Prop         | Type                | Description                          |
+| ------------ | ------------------- | ------------------------------------ |
+| **`width`**  | <code>number</code> | The width of the picture in pixels.  |
+| **`height`** | <code>number</code> | The height of the picture in pixels. |
 
 
 #### CameraOpacityOptions
 
-| Prop          | Type                | Description                                           |
-| ------------- | ------------------- | ----------------------------------------------------- |
-| **`opacity`** | <code>number</code> | The percent opacity to set for camera view, default 1 |
+Defines the options for setting the camera preview's opacity.
+
+| Prop          | Type                | Description                                                                 | Default          |
+| ------------- | ------------------- | --------------------------------------------------------------------------- | ---------------- |
+| **`opacity`** | <code>number</code> | The opacity percentage, from 0.0 (fully transparent) to 1.0 (fully opaque). | <code>1.0</code> |
+
+
+#### CameraDevice
+
+Represents a physical camera on the device (e.g., the front-facing camera).
+
+| Prop            | Type                                                      | Description                                                                               |
+| --------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **`deviceId`**  | <code>string</code>                                       | A unique identifier for the camera device.                                                |
+| **`label`**     | <code>string</code>                                       | A human-readable name for the camera device.                                              |
+| **`position`**  | <code><a href="#cameraposition">CameraPosition</a></code> | The physical position of the camera on the device.                                        |
+| **`lenses`**    | <code>CameraLens[]</code>                                 | A list of all available lenses for this camera device.                                    |
+| **`minZoom`**   | <code>number</code>                                       | The overall minimum zoom factor available across all lenses on this device.               |
+| **`maxZoom`**   | <code>number</code>                                       | The overall maximum zoom factor available across all lenses on this device.               |
+| **`isLogical`** | <code>boolean</code>                                      | Identifies whether the device is a logical camera (composed of multiple physical lenses). |
+
+
+#### CameraLens
+
+Represents a single camera lens on a device. A {@link <a href="#cameradevice">CameraDevice</a>} can have multiple lenses.
+
+| Prop                | Type                                              | Description                                                                  |
+| ------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **`label`**         | <code>string</code>                               | A human-readable name for the lens, e.g., "Ultra-Wide".                      |
+| **`deviceType`**    | <code><a href="#devicetype">DeviceType</a></code> | The type of the camera lens.                                                 |
+| **`focalLength`**   | <code>number</code>                               | The focal length of the lens in millimeters.                                 |
+| **`baseZoomRatio`** | <code>number</code>                               | The base zoom factor for this lens (e.g., 0.5 for ultra-wide, 1.0 for wide). |
+| **`minZoom`**       | <code>number</code>                               | The minimum zoom factor supported by this specific lens.                     |
+| **`maxZoom`**       | <code>number</code>                               | The maximum zoom factor supported by this specific lens.                     |
+
+
+#### LensInfo
+
+Represents the detailed information of the currently active lens.
+
+| Prop                | Type                                              | Description                                                      |
+| ------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
+| **`focalLength`**   | <code>number</code>                               | The focal length of the active lens in millimeters.              |
+| **`deviceType`**    | <code><a href="#devicetype">DeviceType</a></code> | The device type of the active lens.                              |
+| **`baseZoomRatio`** | <code>number</code>                               | The base zoom ratio of the active lens (e.g., 0.5x, 1.0x).       |
+| **`digitalZoom`**   | <code>number</code>                               | The current digital zoom factor applied on top of the base zoom. |
+
+
+#### PluginListenerHandle
+
+| Prop         | Type                                      |
+| ------------ | ----------------------------------------- |
+| **`remove`** | <code>() =&gt; Promise&lt;void&gt;</code> |
+
+
+#### SafeAreaInsets
+
+Represents safe area insets for devices.
+Android: Values are expressed in logical pixels (dp) to match JS layout units.
+iOS: Values are expressed in physical pixels and exclude status bar.
+
+| Prop              | Type                | Description                                                                                                                                                                                                                                      |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`orientation`** | <code>number</code> | Current device orientation (1 = portrait, 2 = landscape, 0 = unknown).                                                                                                                                                                           |
+| **`top`**         | <code>number</code> | Orientation-aware notch/camera cutout inset (excluding status bar). In portrait mode: returns top inset (notch at top). In landscape mode: returns left inset (notch at side). Android: Value in dp, iOS: Value in pixels (status bar excluded). |
 
 
 ### Type Aliases
 
 
+#### GridMode
+
+<code>"none" | "3x3" | "4x4"</code>
+
+
 #### CameraPosition
 
 <code>"rear" | "front"</code>
+
+
+#### CameraPositioning
+
+<code>"center" | "top" | "bottom"</code>
 
 
 #### PictureFormat
@@ -446,6 +1001,37 @@ Start recording video.
 
 #### CameraPreviewFlashMode
 
-<code>"off" | "on" | "auto" | "red-eye" | "torch"</code>
+The available flash modes for the camera.
+'torch' is a continuous light mode.
+
+<code>"off" | "on" | "auto" | "torch"</code>
+
+
+#### FlashMode
+
+<code><a href="#camerapreviewflashmode">CameraPreviewFlashMode</a></code>
+
+
+#### DeviceOrientation
+
+Canonical device orientation values across platforms.
+
+<code>"portrait" | "landscape" | "landscape-left" | "landscape-right" | "portrait-upside-down" | "unknown"</code>
+
+
+### Enums
+
+
+#### DeviceType
+
+| Members          | Value                    |
+| ---------------- | ------------------------ |
+| **`ULTRA_WIDE`** | <code>"ultraWide"</code> |
+| **`WIDE_ANGLE`** | <code>"wideAngle"</code> |
+| **`TELEPHOTO`**  | <code>"telephoto"</code> |
+| **`TRUE_DEPTH`** | <code>"trueDepth"</code> |
+| **`DUAL`**       | <code>"dual"</code>      |
+| **`DUAL_WIDE`**  | <code>"dualWide"</code>  |
+| **`TRIPLE`**     | <code>"triple"</code>    |
 
 </docgen-api>
