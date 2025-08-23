@@ -70,6 +70,37 @@ class CameraController: NSObject {
 
     // Track whether an aspect ratio was explicitly requested
     var requestedAspectRatio: String?
+    
+    private func calculateAspectRatioFrame(for aspectRatio: String, in bounds: CGRect) -> CGRect {
+        guard let ratio = parseAspectRatio(aspectRatio) else {
+            return bounds
+        }
+        
+        let targetAspectRatio = ratio.width / ratio.height
+        let viewAspectRatio = bounds.width / bounds.height
+        
+        var frame: CGRect
+        
+        if viewAspectRatio > targetAspectRatio {
+            // View is wider than target - fit by height
+            let targetWidth = bounds.height * targetAspectRatio
+            let xOffset = (bounds.width - targetWidth) / 2
+            frame = CGRect(x: xOffset, y: 0, width: targetWidth, height: bounds.height)
+        } else {
+            // View is taller than target - fit by width
+            let targetHeight = bounds.width / targetAspectRatio
+            let yOffset = (bounds.height - targetHeight) / 2
+            frame = CGRect(x: 0, y: yOffset, width: bounds.width, height: targetHeight)
+        }
+        
+        return frame
+    }
+    
+    private func parseAspectRatio(_ aspectRatio: String) -> (width: CGFloat, height: CGFloat)? {
+        let components = aspectRatio.split(separator: ":").compactMap { Float(String($0)) }
+        guard components.count == 2 else { return nil }
+        return (width: CGFloat(components[0]), height: CGFloat(components[1]))
+    }
 }
 
 extension CameraController {
@@ -416,9 +447,17 @@ extension CameraController {
         }
 
         // Fast configuration without CATransaction overhead
-        // Use resizeAspect to avoid crop when no aspect ratio is requested; otherwise fill
-        previewLayer.videoGravity = (requestedAspectRatio == nil) ? .resizeAspect : .resizeAspectFill
-        previewLayer.frame = view.bounds
+        // Configure video gravity and frame based on aspect ratio
+        if let aspectRatio = requestedAspectRatio {
+            // Calculate the frame based on requested aspect ratio
+            let frame = calculateAspectRatioFrame(for: aspectRatio, in: view.bounds)
+            previewLayer.frame = frame
+            previewLayer.videoGravity = .resizeAspectFill
+        } else {
+            // No specific aspect ratio requested - fill the entire view
+            previewLayer.frame = view.bounds
+            previewLayer.videoGravity = .resizeAspect
+        }
 
         // Insert layer immediately (only if new)
         if previewLayer.superlayer != view.layer {
@@ -433,7 +472,16 @@ extension CameraController {
         // Disable animation for grid overlay creation and positioning
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        gridOverlayView = GridOverlayView(frame: view.bounds)
+        
+        // Use preview layer frame if aspect ratio is specified, otherwise use full view bounds
+        let gridFrame: CGRect
+        if requestedAspectRatio != nil, let previewLayer = previewLayer {
+            gridFrame = previewLayer.frame
+        } else {
+            gridFrame = view.bounds
+        }
+        
+        gridOverlayView = GridOverlayView(frame: gridFrame)
         gridOverlayView?.gridMode = gridMode
         view.addSubview(gridOverlayView!)
         CATransaction.commit()
@@ -637,9 +685,12 @@ extension CameraController {
         }
 
         let settings = AVCapturePhotoSettings()
-        // Request highest quality photo capture
+        // Configure photo capture settings
         if #available(iOS 13.0, *) {
-            settings.isHighResolutionPhotoEnabled = true
+            // Enable high resolution capture if max dimensions are specified or no aspect ratio constraint
+            // When aspect ratio is specified WITHOUT max dimensions, use session preset dimensions
+            let shouldUseHighRes = (width != nil || height != nil) || (self.requestedAspectRatio == nil)
+            settings.isHighResolutionPhotoEnabled = shouldUseHighRes
         }
         if #available(iOS 15.0, *) {
             settings.photoQualityPrioritization = .balanced
@@ -684,16 +735,28 @@ extension CameraController {
 
             // Determine what to do based on parameters
             if width != nil || height != nil {
-                // Resize to fit within maximum dimensions while maintaining aspect ratio
-                finalImage = self.resizeImageToMaxDimensions(image: image, maxWidth: width, maxHeight: height)!
+                // When max dimensions are specified, we used high-res capture
+                // First crop to aspect ratio if needed, then resize to max dimensions
+                if let aspectRatio = self.requestedAspectRatio {
+                    finalImage = self.cropImageToAspectRatio(image: image, aspectRatio: aspectRatio) ?? image
+                    print("[CameraPreview] Cropped high-res image to aspect ratio \(aspectRatio)")
+                }
+                // Then resize to fit within maximum dimensions while maintaining aspect ratio
+                finalImage = self.resizeImageToMaxDimensions(image: finalImage, maxWidth: width, maxHeight: height)!
                 print("[CameraPreview] Resized to max dimensions: \(finalImage.size.width)x\(finalImage.size.height)")
-            } else {
-                // No parameters specified - crop to match what's visible in the preview
-                // This ensures we capture exactly what the user sees
-                if let previewLayer = self.previewLayer,
-                   let previewCroppedImage = self.cropImageToMatchPreview(image: image, previewLayer: previewLayer) {
-                    finalImage = previewCroppedImage
-                    print("[CameraPreview] Cropped to match preview: \(finalImage.size.width)x\(finalImage.size.height)")
+            } else if let aspectRatio = self.requestedAspectRatio {
+                // No max dimensions specified, but aspect ratio is specified
+                // If we used session preset (low-res), image should already be correct aspect ratio
+                // If we used high-res (shouldn't happen without max dimensions), crop it
+                let imageAspectRatio = image.size.width / image.size.height
+                if let targetRatio = self.parseAspectRatio(aspectRatio) {
+                    let targetAspectRatio = targetRatio.width / targetRatio.height
+                    
+                    // Allow small tolerance for aspect ratio comparison
+                    if abs(imageAspectRatio - targetAspectRatio) > 0.01 {
+                        finalImage = self.cropImageToAspectRatio(image: image, aspectRatio: aspectRatio) ?? image
+                        print("[CameraPreview] Cropped to match aspect ratio \(aspectRatio): \(finalImage.size.width)x\(finalImage.size.height)")
+                    }
                 }
             }
 
@@ -774,7 +837,36 @@ extension CameraController {
         return resizeImage(image: image, to: targetSize)
     }
 
-
+    func cropImageToAspectRatio(image: UIImage, aspectRatio: String) -> UIImage? {
+        guard let ratio = parseAspectRatio(aspectRatio) else {
+            return image
+        }
+        
+        let imageSize = image.size
+        let imageAspectRatio = imageSize.width / imageSize.height
+        let targetAspectRatio = ratio.width / ratio.height
+        
+        var cropRect: CGRect
+        
+        if imageAspectRatio > targetAspectRatio {
+            // Image is wider than target - crop horizontally (center crop)
+            let targetWidth = imageSize.height * targetAspectRatio
+            let xOffset = (imageSize.width - targetWidth) / 2
+            cropRect = CGRect(x: xOffset, y: 0, width: targetWidth, height: imageSize.height)
+        } else {
+            // Image is taller than target - crop vertically (center crop)
+            let targetHeight = imageSize.width / targetAspectRatio
+            let yOffset = (imageSize.height - targetHeight) / 2
+            cropRect = CGRect(x: 0, y: yOffset, width: imageSize.width, height: targetHeight)
+        }
+        
+        guard let cgImage = image.cgImage,
+              let croppedCGImage = cgImage.cropping(to: cropRect) else {
+            return nil
+        }
+        
+        return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
+    }
 
     func cropImageToMatchPreview(image: UIImage, previewLayer: AVCaptureVideoPreviewLayer) -> UIImage? {
         // When using resizeAspectFill, the preview layer shows a cropped portion of the video

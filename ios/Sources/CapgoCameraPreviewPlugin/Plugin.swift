@@ -878,62 +878,38 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                 print("[CameraPreview] Image data created, size: \(imageDataWithExif.count) bytes")
 
-                if saveToGallery {
-                    print("[CameraPreview] Saving to gallery...")
-                    self.saveImageDataToGallery(imageData: imageDataWithExif) { success, error in
-                        print("[CameraPreview] Save to gallery completed, success: \(success), error: \(error?.localizedDescription ?? "none")")
-                        let exifData = self.getExifData(from: imageDataWithExif)
-
-                        var result = JSObject()
-                        result["exif"] = exifData
-                        result["gallerySaved"] = success
-                        if !success, let error = error {
-                            result["galleryError"] = error.localizedDescription
-                        }
-
-                        if self.storeToFile == false {
-                            let base64Image = imageDataWithExif.base64EncodedString()
-                            result["value"] = base64Image
-                        } else {
-                            do {
-                                let fileUrl = self.getTempFilePath()
-                                try imageDataWithExif.write(to: fileUrl)
-                                result["value"] = fileUrl.absoluteString
-                            } catch {
-                                call.reject("Error writing image to file")
-                            }
-                        }
-
-                        print("[CameraPreview] Resolving capture call with gallery save")
-                        call.resolve(result)
-                    }
+                // Prepare the result first
+                let exifData = self.getExifData(from: imageDataWithExif)
+                
+                var result = JSObject()
+                result["exif"] = exifData
+                
+                if self.storeToFile == false {
+                    let base64Image = imageDataWithExif.base64EncodedString()
+                    result["value"] = base64Image
                 } else {
-                    print("[CameraPreview] Not saving to gallery, returning image data")
-                    let exifData = self.getExifData(from: imageDataWithExif)
+                    do {
+                        let fileUrl = self.getTempFilePath()
+                        try imageDataWithExif.write(to: fileUrl)
+                        result["value"] = fileUrl.absoluteString
+                    } catch {
+                        call.reject("Error writing image to file")
+                        return
+                    }
+                }
 
-                    if self.storeToFile == false {
-                        let base64Image = imageDataWithExif.base64EncodedString()
-                        var result = JSObject()
-                        result["value"] = base64Image
-                        result["exif"] = exifData
-
-                        print("[CameraPreview] base64 - Resolving capture call")
-                        call.resolve(result)
-                    } else {
-                        do {
-                            let fileUrl = self.getTempFilePath()
-                            try imageDataWithExif.write(to: fileUrl)
-                            var result = JSObject()
-                            result["value"] = fileUrl.absoluteString
-                            result["exif"] = exifData
-                            print("[CameraPreview] filePath - Resolving capture call")
-                            call.resolve(result)
-                        } catch {
-                            call.reject("Error writing image to file")
+                // Save to gallery asynchronously if requested
+                if saveToGallery {
+                    print("[CameraPreview] Saving to gallery asynchronously...")
+                    DispatchQueue.global(qos: .utility).async {
+                        self.saveImageDataToGallery(imageData: imageDataWithExif) { success, error in
+                            print("[CameraPreview] Save to gallery completed, success: \(success), error: \(error?.localizedDescription ?? "none")")
                         }
                     }
-
                 }
+                
+                print("[CameraPreview] Resolving capture call immediately")
+                call.resolve(result)
             }
         }
     }

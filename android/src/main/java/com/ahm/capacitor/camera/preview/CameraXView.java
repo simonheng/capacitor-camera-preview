@@ -1079,8 +1079,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               bytes = writeExifToImageBytes(bytes, exifInterface);
             }
 
+            // Save to gallery asynchronously if requested
             if (saveToGallery) {
-              saveImageToGallery(bytes);
+              final byte[] finalBytes = bytes;
+              new Thread(() -> {
+                saveImageToGallery(finalBytes);
+              }).start();
             }
 
             String resultValue;
