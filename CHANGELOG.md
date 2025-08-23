@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.5.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.3...7.5.0) (2025-08-23)
+
+
+### Features
+
+* add aspect ratio calculation and improve image saving process in CameraPreview and CameraXView ([e06253d](https://github.com/Cap-go/capacitor-camera-preview/commit/e06253d9411a98c4c6d61b2e7bb7d59a3c493a72))
+
 ## [7.4.3](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.2...7.4.3) (2025-08-21)
 
 ## [7.4.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.1...7.4.2) (2025-08-21)
