@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.6.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.5.0...7.6.0) (2025-08-26)
+
+
+### Features
+
+* add option to disable focus indicator ([c178120](https://github.com/Cap-go/capacitor-camera-preview/commit/c178120c47b269d013ab78d995ed9c7bd292db28))
+
 ## [7.5.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.4.3...7.5.0) (2025-08-23)
 
 
