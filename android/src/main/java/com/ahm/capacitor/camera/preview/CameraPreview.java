@@ -596,6 +596,10 @@ public class CameraPreview
     final String gridMode = call.getString("gridMode", "none");
     final String positioning = call.getString("positioning", "top");
     final float initialZoomLevel = call.getFloat("initialZoomLevel", 1.0f);
+    final boolean disableFocusIndicator = call.getBoolean(
+      "disableFocusIndicator",
+      false
+    );
 
     // Check for conflict between aspectRatio and size
     if (
@@ -1008,7 +1012,8 @@ public class CameraPreview
           disableAudio,
           1.0f,
           aspectRatio,
-          gridMode
+          gridMode,
+          disableFocusIndicator
         );
         config.setTargetZoom(finalTargetZoom);
         config.setCentered(isCentered);

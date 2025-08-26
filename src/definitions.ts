@@ -181,6 +181,13 @@ export interface CameraPreviewOptions {
    * @default false
    */
   enableZoom?: boolean;
+
+  /**
+   * If true, disables the visual focus indicator when tapping to focus.
+   * @platform android, ios
+   * @default false
+   */
+  disableFocusIndicator?: boolean;
   /**
    * If true, uses the video-optimized preset for the camera session.
    * @platform ios
