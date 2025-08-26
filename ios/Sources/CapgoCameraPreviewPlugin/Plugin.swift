@@ -90,6 +90,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     var storeToFile: Bool?
     var enableZoom: Bool?
     var disableAudio: Bool = false
+    var disableFocusIndicator: Bool = false
     var locationManager: CLLocationManager?
     var currentLocation: CLLocation?
     private var aspectRatio: String?
@@ -515,6 +516,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         print("  - gridMode: \(call.getString("gridMode") ?? "none")")
         print("  - positioning: \(call.getString("positioning") ?? "top")")
         print("  - initialZoomLevel: \(call.getFloat("initialZoomLevel") ?? 1.0)")
+        print("  - disableFocusIndicator: \(call.getBool("disableFocusIndicator") ?? false)")
 
         if self.isInitializing {
             call.reject("camera initialization in progress")
@@ -570,6 +572,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         self.aspectRatio = call.getString("aspectRatio") ?? "4:3"
         self.gridMode = call.getString("gridMode") ?? "none"
         self.positioning = call.getString("positioning") ?? "top"
+        self.disableFocusIndicator = call.getBool("disableFocusIndicator") ?? false
 
         let initialZoomLevel = call.getFloat("initialZoomLevel")
 
@@ -577,7 +580,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         let hasAspectRatio = call.getString("aspectRatio") != nil
         let hasWidth = call.getInt("width") != nil
         let hasHeight = call.getInt("height") != nil
-        
+
         if hasAspectRatio && (hasWidth || hasHeight) {
             call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
             return
@@ -595,7 +598,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             if self.cameraController.captureSession?.isRunning ?? false {
                 call.reject("camera already started")
             } else {
-                self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio, initialZoomLevel: initialZoomLevel) {error in
+                self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio, initialZoomLevel: initialZoomLevel, disableFocusIndicator: self.disableFocusIndicator) {error in
                     if let error = error {
                         print(error)
                         call.reject(error.localizedDescription)
@@ -880,10 +883,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
                 // Prepare the result first
                 let exifData = self.getExifData(from: imageDataWithExif)
-                
+
                 var result = JSObject()
                 result["exif"] = exifData
-                
+
                 if self.storeToFile == false {
                     let base64Image = imageDataWithExif.base64EncodedString()
                     result["value"] = base64Image
@@ -907,7 +910,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                         }
                     }
                 }
-                
+
                 print("[CameraPreview] Resolving capture call immediately")
                 call.resolve(result)
             }
@@ -1789,7 +1792,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 }
                 let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: focusPoint)
 
-                try self.cameraController.setFocus(at: devicePoint, showIndicator: true, in: self.previewView)
+                try self.cameraController.setFocus(at: devicePoint, showIndicator: !self.disableFocusIndicator, in: self.previewView)
                 call.resolve()
             } catch {
                 call.reject("Failed to set focus: \(error.localizedDescription)")

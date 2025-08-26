@@ -285,6 +285,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       toBack: true,
       gridMode: this.gridMode(),
       storeToFile: true,
+      disableFocusIndicator: false,
     };
 
     // Only add x and y if they are not null
@@ -993,7 +994,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
               const centerX = Math.floor((data.width - 200) / 2);
               const centerY = Math.floor((data.height - 200) / 2);
               const newSize = { x: centerX, y: centerY, width: 200, height: 200 };
-              
+
               const nativeResult = await this.#cameraViewService.setPreviewSize(newSize);
 
               // Update both requested and native positions
@@ -1014,7 +1015,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
                 width: data.width,
                 height: data.height,
               };
-              
+
               const nativeResult = await this.#cameraViewService.setPreviewSize(newSize);
 
               // Update both requested and native positions
@@ -1068,7 +1069,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       try {
         const homeIndicatorInfo = await HomeIndicator.isHidden();
         this.#previousHomeIndicatorVisible = !homeIndicatorInfo.hidden;
-        
+
         if (!homeIndicatorInfo.hidden) {
           await HomeIndicator.hide();
         }

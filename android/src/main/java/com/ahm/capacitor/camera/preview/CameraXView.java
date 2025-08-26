@@ -101,6 +101,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private FrameLayout previewContainer;
   private View focusIndicatorView;
   private long focusIndicatorAnimationId = 0; // Incrementing token to invalidate previous animations
+  private boolean disableFocusIndicator = false; // Default to false for backward compatibility
   private CameraSelector currentCameraSelector;
   private String currentDeviceId;
   private int currentFlashMode = ImageCapture.FLASH_MODE_OFF;
@@ -1878,6 +1879,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   }
 
   private void showFocusIndicator(float x, float y) {
+    if (disableFocusIndicator || sessionConfig.getDisableFocusIndicator()) {
+      return;
+    }
     if (previewContainer == null) {
       Log.w(TAG, "showFocusIndicator: previewContainer is null");
       return;
@@ -2262,7 +2266,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       sessionConfig.isDisableAudio(), // disableAudio
       sessionConfig.getZoomFactor(), // zoomFactor
       sessionConfig.getAspectRatio(), // aspectRatio
-      sessionConfig.getGridMode() // gridMode
+      sessionConfig.getGridMode(), // gridMode
+      sessionConfig.getDisableFocusIndicator() // disableFocusIndicator
     );
 
     // Clear current device ID to force position-based selection
@@ -2420,7 +2425,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       sessionConfig.getDisableAudio(),
       sessionConfig.getZoomFactor(),
       aspectRatio,
-      currentGridMode
+      currentGridMode,
+      sessionConfig.getDisableFocusIndicator()
     );
     sessionConfig.setCentered(true);
 
@@ -2522,7 +2528,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       sessionConfig.getDisableAudio(),
       sessionConfig.getZoomFactor(),
       aspectRatio,
-      currentGridMode
+      currentGridMode,
+      sessionConfig.getDisableFocusIndicator()
     );
     sessionConfig.setCentered(true);
 
@@ -2596,7 +2603,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         sessionConfig.getDisableAudio(),
         sessionConfig.getZoomFactor(),
         sessionConfig.getAspectRatio(),
-        gridMode
+        gridMode,
+        sessionConfig.getDisableFocusIndicator()
       );
 
       // Update the grid overlay immediately
@@ -2978,7 +2986,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             sessionConfig.getDisableAudio(),
             sessionConfig.getZoomFactor(),
             calculatedAspectRatio,
-            sessionConfig.getGridMode()
+            sessionConfig.getGridMode(),
+            sessionConfig.getDisableFocusIndicator()
           );
 
           // If aspect ratio changed due to size update, rebind camera

@@ -4,6 +4,7 @@ import CoreLocation
 
 class CameraController: NSObject {
     var captureSession: AVCaptureSession?
+    var disableFocusIndicator: Bool = false
 
     var currentCameraPosition: CameraPosition?
 
@@ -70,17 +71,17 @@ class CameraController: NSObject {
 
     // Track whether an aspect ratio was explicitly requested
     var requestedAspectRatio: String?
-    
+
     private func calculateAspectRatioFrame(for aspectRatio: String, in bounds: CGRect) -> CGRect {
         guard let ratio = parseAspectRatio(aspectRatio) else {
             return bounds
         }
-        
+
         let targetAspectRatio = ratio.width / ratio.height
         let viewAspectRatio = bounds.width / bounds.height
-        
+
         var frame: CGRect
-        
+
         if viewAspectRatio > targetAspectRatio {
             // View is wider than target - fit by height
             let targetWidth = bounds.height * targetAspectRatio
@@ -92,10 +93,10 @@ class CameraController: NSObject {
             let yOffset = (bounds.height - targetHeight) / 2
             frame = CGRect(x: 0, y: yOffset, width: bounds.width, height: targetHeight)
         }
-        
+
         return frame
     }
-    
+
     private func parseAspectRatio(_ aspectRatio: String) -> (width: CGFloat, height: CGFloat)? {
         let components = aspectRatio.split(separator: ":").compactMap { Float(String($0)) }
         guard components.count == 2 else { return nil }
@@ -219,7 +220,7 @@ extension CameraController {
         self.outputsPrepared = true
     }
 
-    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, completionHandler: @escaping (Error?) -> Void) {
+    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, disableFocusIndicator: Bool = false, completionHandler: @escaping (Error?) -> Void) {
         print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? "nil"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? "nil"), zoom: \(initialZoomLevel)")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -249,6 +250,9 @@ extension CameraController {
                 // Set aspect ratio preset and remember requested ratio
                 self.requestedAspectRatio = aspectRatio
                 self.configureSessionPreset(for: aspectRatio)
+
+                // Set disableFocusIndicator
+                self.disableFocusIndicator = disableFocusIndicator
 
                 // Configure device inputs
                 try self.configureDeviceInputs(cameraPosition: cameraPosition, deviceId: deviceId, disableAudio: disableAudio)
@@ -472,7 +476,7 @@ extension CameraController {
         // Disable animation for grid overlay creation and positioning
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        
+
         // Use preview layer frame if aspect ratio is specified, otherwise use full view bounds
         let gridFrame: CGRect
         if requestedAspectRatio != nil, let previewLayer = previewLayer {
@@ -480,7 +484,7 @@ extension CameraController {
         } else {
             gridFrame = view.bounds
         }
-        
+
         gridOverlayView = GridOverlayView(frame: gridFrame)
         gridOverlayView?.gridMode = gridMode
         view.addSubview(gridOverlayView!)
@@ -751,7 +755,7 @@ extension CameraController {
                 let imageAspectRatio = image.size.width / image.size.height
                 if let targetRatio = self.parseAspectRatio(aspectRatio) {
                     let targetAspectRatio = targetRatio.width / targetRatio.height
-                    
+
                     // Allow small tolerance for aspect ratio comparison
                     if abs(imageAspectRatio - targetAspectRatio) > 0.01 {
                         finalImage = self.cropImageToAspectRatio(image: image, aspectRatio: aspectRatio) ?? image
@@ -809,9 +813,9 @@ extension CameraController {
     func resizeImageToMaxDimensions(image: UIImage, maxWidth: Int?, maxHeight: Int?) -> UIImage? {
         let originalSize = image.size
         let originalAspectRatio = originalSize.width / originalSize.height
-        
+
         var targetSize = originalSize
-        
+
         if let maxWidth = maxWidth, let maxHeight = maxHeight {
             // Both dimensions specified - fit within both maximums
             let maxAspectRatio = CGFloat(maxWidth) / CGFloat(maxHeight)
@@ -833,7 +837,7 @@ extension CameraController {
             targetSize.width = CGFloat(maxHeight) * originalAspectRatio
             targetSize.height = CGFloat(maxHeight)
         }
-        
+
         return resizeImage(image: image, to: targetSize)
     }
 
@@ -841,13 +845,13 @@ extension CameraController {
         guard let ratio = parseAspectRatio(aspectRatio) else {
             return image
         }
-        
+
         let imageSize = image.size
         let imageAspectRatio = imageSize.width / imageSize.height
         let targetAspectRatio = ratio.width / ratio.height
-        
+
         var cropRect: CGRect
-        
+
         if imageAspectRatio > targetAspectRatio {
             // Image is wider than target - crop horizontally (center crop)
             let targetWidth = imageSize.height * targetAspectRatio
@@ -859,12 +863,12 @@ extension CameraController {
             let yOffset = (imageSize.height - targetHeight) / 2
             cropRect = CGRect(x: 0, y: yOffset, width: imageSize.width, height: targetHeight)
         }
-        
+
         guard let cgImage = image.cgImage,
               let croppedCGImage = cgImage.cropping(to: cropRect) else {
             return nil
         }
-        
+
         return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
     }
 
@@ -1205,7 +1209,7 @@ extension CameraController {
             return
         }
 
-        // Show focus indicator if requested and view is provided - only after validation
+        // Show focus indicator if enabled, requested and view is provided - only after validation
         if showIndicator, let view = view, let previewLayer = self.previewLayer {
             // Convert the device point to layer point for indicator display
             let layerPoint = previewLayer.layerPointConverted(fromCaptureDevicePoint: point)
@@ -1508,8 +1512,8 @@ extension CameraController: UIGestureRecognizerDelegate {
         let point = tap.location(in: tap.view)
         let devicePoint = self.previewLayer?.captureDevicePointConverted(fromLayerPoint: point)
 
-        // Show focus indicator at the tap point
-        if let view = tap.view {
+        // Show focus indicator at the tap point if not disabled
+        if !self.disableFocusIndicator, let view = tap.view {
             showFocusIndicator(at: point, in: view)
         }
 
