@@ -548,8 +548,6 @@ extension CameraController {
         } else {
             videoOrientation = .portrait
         }
-        
-        videoOrientation = .landscapeLeft
 
         previewLayer?.connection?.videoOrientation = videoOrientation
         dataOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
