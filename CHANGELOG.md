@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.6.1-alpha.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.0...7.6.1-alpha.0) (2025-08-27)
+
+
+### Bug Fixes
+
+* attempt to fix portrait camera preview on startup ([3f18844](https://github.com/Cap-go/capacitor-camera-preview/commit/3f1884435fe8f724ed5e3eab492f337466add9f7))
+
 ## [7.6.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.5.0...7.6.0) (2025-08-26)
 
 
