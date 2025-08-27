@@ -454,12 +454,9 @@ extension CameraController {
         // Configure video gravity and frame based on aspect ratio
         if let aspectRatio = requestedAspectRatio {
             // Calculate the frame based on requested aspect ratio
-            let frame = calculateAspectRatioFrame(for: aspectRatio, in: view.bounds)
-            previewLayer.frame = frame
             previewLayer.videoGravity = .resizeAspectFill
         } else {
             // No specific aspect ratio requested - fill the entire view
-            previewLayer.frame = view.bounds
             previewLayer.videoGravity = .resizeAspect
         }
 
@@ -551,6 +548,8 @@ extension CameraController {
         } else {
             videoOrientation = .portrait
         }
+        
+        videoOrientation = .landscapeLeft
 
         previewLayer?.connection?.videoOrientation = videoOrientation
         dataOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
