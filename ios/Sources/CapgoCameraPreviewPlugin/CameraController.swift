@@ -72,31 +72,6 @@ class CameraController: NSObject {
     // Track whether an aspect ratio was explicitly requested
     var requestedAspectRatio: String?
 
-    private func calculateAspectRatioFrame(for aspectRatio: String, in bounds: CGRect) -> CGRect {
-        guard let ratio = parseAspectRatio(aspectRatio) else {
-            return bounds
-        }
-
-        let targetAspectRatio = ratio.width / ratio.height
-        let viewAspectRatio = bounds.width / bounds.height
-
-        var frame: CGRect
-
-        if viewAspectRatio > targetAspectRatio {
-            // View is wider than target - fit by height
-            let targetWidth = bounds.height * targetAspectRatio
-            let xOffset = (bounds.width - targetWidth) / 2
-            frame = CGRect(x: xOffset, y: 0, width: targetWidth, height: bounds.height)
-        } else {
-            // View is taller than target - fit by width
-            let targetHeight = bounds.width / targetAspectRatio
-            let yOffset = (bounds.height - targetHeight) / 2
-            frame = CGRect(x: 0, y: yOffset, width: bounds.width, height: targetHeight)
-        }
-
-        return frame
-    }
-
     private func parseAspectRatio(_ aspectRatio: String) -> (width: CGFloat, height: CGFloat)? {
         let components = aspectRatio.split(separator: ":").compactMap { Float(String($0)) }
         guard components.count == 2 else { return nil }
@@ -527,7 +502,7 @@ extension CameraController {
     }
 
     private func updateVideoOrientationOnMainThread() {
-        let videoOrientation: AVCaptureVideoOrientation
+        var videoOrientation: AVCaptureVideoOrientation
 
         // Use window scene interface orientation
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
@@ -548,6 +523,8 @@ extension CameraController {
         } else {
             videoOrientation = .portrait
         }
+        
+        videoOrientation = .landscapeLeft
 
         previewLayer?.connection?.videoOrientation = videoOrientation
         dataOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
