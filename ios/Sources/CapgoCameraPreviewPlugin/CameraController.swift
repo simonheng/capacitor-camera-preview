@@ -72,10 +72,76 @@ class CameraController: NSObject {
     // Track whether an aspect ratio was explicitly requested
     var requestedAspectRatio: String?
 
+    private func calculateAspectRatioFrame(for aspectRatio: String, in bounds: CGRect) -> CGRect {
+        guard let ratio = parseAspectRatio(aspectRatio) else {
+            return bounds
+        }
+
+        let targetAspectRatio = ratio.width / ratio.height
+        let viewAspectRatio = bounds.width / bounds.height
+
+        var frame: CGRect
+
+        if viewAspectRatio > targetAspectRatio {
+            // View is wider than target - fit by height
+            let targetWidth = bounds.height * targetAspectRatio
+            let xOffset = (bounds.width - targetWidth) / 2
+            frame = CGRect(x: xOffset, y: 0, width: targetWidth, height: bounds.height)
+        } else {
+            // View is taller than target - fit by width
+            let targetHeight = bounds.width / targetAspectRatio
+            let yOffset = (bounds.height - targetHeight) / 2
+            frame = CGRect(x: 0, y: yOffset, width: bounds.width, height: targetHeight)
+        }
+
+        return frame
+    }
+
     private func parseAspectRatio(_ aspectRatio: String) -> (width: CGFloat, height: CGFloat)? {
         let components = aspectRatio.split(separator: ":").compactMap { Float(String($0)) }
         guard components.count == 2 else { return nil }
-        return (width: CGFloat(components[0]), height: CGFloat(components[1]))
+
+        // Check if device is in portrait orientation by looking at the current interface orientation
+        var isPortrait = false
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            print("[CameraPreview] parseAspectRatio - windowScene.interfaceOrientation: \(windowScene.interfaceOrientation)")
+            switch windowScene.interfaceOrientation {
+            case .portrait, .portraitUpsideDown:
+                isPortrait = true
+            case .landscapeLeft, .landscapeRight:
+                isPortrait = false
+            case .unknown:
+                // Fallback to device orientation
+                isPortrait = UIDevice.current.orientation.isPortrait
+            @unknown default:
+                isPortrait = UIDevice.current.orientation.isPortrait
+            }
+        } else {
+            // Fallback to device orientation
+            isPortrait = UIDevice.current.orientation.isPortrait
+        }
+
+        let originalWidth = CGFloat(components[0])
+        let originalHeight = CGFloat(components[1])
+        print("[CameraPreview] parseAspectRatio - isPortrait: \(isPortrait) originalWidth: \(originalWidth) originalHeight: \(originalHeight)")
+
+        let finalWidth: CGFloat
+        let finalHeight: CGFloat
+
+        if isPortrait {
+            // For portrait mode, swap width and height to maintain portrait orientation
+            // 4:3 becomes 3:4, 16:9 becomes 9:16
+            finalWidth = originalHeight
+            finalHeight = originalWidth
+            print("[CameraPreview] parseAspectRatio - Portrait mode: \(aspectRatio) -> \(finalWidth):\(finalHeight) (ratio: \(finalWidth/finalHeight))")
+        } else {
+            // For landscape mode, keep original orientation
+            finalWidth = originalWidth
+            finalHeight = originalHeight
+            print("[CameraPreview] parseAspectRatio - Landscape mode: \(aspectRatio) -> \(finalWidth):\(finalHeight) (ratio: \(finalWidth/finalHeight))")
+        }
+
+        return (width: finalWidth, height: finalHeight)
     }
 }
 
@@ -315,6 +381,38 @@ extension CameraController {
         }
     }
 
+    /// Update the requested aspect ratio at runtime and reconfigure session/preview accordingly
+    func updateAspectRatio(_ aspectRatio: String?) {
+        // Update internal state
+        self.requestedAspectRatio = aspectRatio
+
+        // Reconfigure session preset to match the new ratio for optimal capture resolution
+        if let captureSession = self.captureSession {
+            captureSession.beginConfiguration()
+            self.configureSessionPreset(for: aspectRatio)
+            captureSession.commitConfiguration()
+        }
+
+        // Update preview layer geometry on the main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let previewLayer = self.previewLayer else { return }
+            if let superlayer = previewLayer.superlayer {
+                let bounds = superlayer.bounds
+                if let aspect = aspectRatio {
+                    let frame = self.calculateAspectRatioFrame(for: aspect, in: bounds)
+                    previewLayer.frame = frame
+                    previewLayer.videoGravity = .resizeAspectFill
+                } else {
+                    previewLayer.frame = bounds
+                    previewLayer.videoGravity = .resizeAspect
+                }
+
+                // Keep grid overlay in sync with preview
+                self.gridOverlayView?.frame = previewLayer.frame
+            }
+        }
+    }
+
     private func setInitialZoom(level: Float?) {
         let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera
         guard let device = device else {
@@ -429,9 +527,12 @@ extension CameraController {
         // Configure video gravity and frame based on aspect ratio
         if let aspectRatio = requestedAspectRatio {
             // Calculate the frame based on requested aspect ratio
+            let frame = calculateAspectRatioFrame(for: aspectRatio, in: view.bounds)
+            previewLayer.frame = frame
             previewLayer.videoGravity = .resizeAspectFill
         } else {
             // No specific aspect ratio requested - fill the entire view
+            previewLayer.frame = view.bounds
             previewLayer.videoGravity = .resizeAspect
         }
 
@@ -523,8 +624,6 @@ extension CameraController {
         } else {
             videoOrientation = .portrait
         }
-        
-        videoOrientation = .landscapeLeft
 
         previewLayer?.connection?.videoOrientation = videoOrientation
         dataOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
@@ -655,7 +754,7 @@ extension CameraController {
     }
 
     func captureImage(width: Int?, height: Int?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Data?, [AnyHashable: Any]?, Error?) -> Void) {
-        print("[CameraPreview] captureImage called - width: \(width ?? -1), height: \(height ?? -1)")
+        print("[CameraPreview] captureImage called - width: \(width ?? -1), height: \(height ?? -1), requestedAspectRatio: \(self.requestedAspectRatio ?? "nil")")
 
         guard let photoOutput = self.photoOutput else {
             completion(nil, nil, nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
@@ -724,18 +823,9 @@ extension CameraController {
                 print("[CameraPreview] Resized to max dimensions: \(finalImage.size.width)x\(finalImage.size.height)")
             } else if let aspectRatio = self.requestedAspectRatio {
                 // No max dimensions specified, but aspect ratio is specified
-                // If we used session preset (low-res), image should already be correct aspect ratio
-                // If we used high-res (shouldn't happen without max dimensions), crop it
-                let imageAspectRatio = image.size.width / image.size.height
-                if let targetRatio = self.parseAspectRatio(aspectRatio) {
-                    let targetAspectRatio = targetRatio.width / targetRatio.height
-
-                    // Allow small tolerance for aspect ratio comparison
-                    if abs(imageAspectRatio - targetAspectRatio) > 0.01 {
-                        finalImage = self.cropImageToAspectRatio(image: image, aspectRatio: aspectRatio) ?? image
-                        print("[CameraPreview] Cropped to match aspect ratio \(aspectRatio): \(finalImage.size.width)x\(finalImage.size.height)")
-                    }
-                }
+                // Always apply aspect ratio cropping to ensure correct orientation
+                finalImage = self.cropImageToAspectRatio(image: image, aspectRatio: aspectRatio) ?? image
+                print("[CameraPreview] Applied aspect ratio cropping for \(aspectRatio): \(finalImage.size.width)x\(finalImage.size.height)")
             }
 
             completion(finalImage, photoData, metadata, nil)
@@ -817,12 +907,26 @@ extension CameraController {
 
     func cropImageToAspectRatio(image: UIImage, aspectRatio: String) -> UIImage? {
         guard let ratio = parseAspectRatio(aspectRatio) else {
+            print("[CameraPreview] cropImageToAspectRatio - Failed to parse aspect ratio: \(aspectRatio)")
             return image
         }
 
-        let imageSize = image.size
+        // Only normalize the image orientation if it's not already correct
+        let normalizedImage: UIImage
+        if image.imageOrientation == .up {
+            normalizedImage = image
+            print("[CameraPreview] cropImageToAspectRatio - Image already has correct orientation")
+        } else {
+            normalizedImage = image.fixedOrientation() ?? image
+            print("[CameraPreview] cropImageToAspectRatio - Normalized image orientation from \(image.imageOrientation.rawValue) to .up")
+        }
+
+        let imageSize = normalizedImage.size
         let imageAspectRatio = imageSize.width / imageSize.height
         let targetAspectRatio = ratio.width / ratio.height
+
+        print("[CameraPreview] cropImageToAspectRatio - Original image: \(imageSize.width)x\(imageSize.height) (ratio: \(imageAspectRatio))")
+        print("[CameraPreview] cropImageToAspectRatio - Target ratio: \(ratio.width):\(ratio.height) (ratio: \(targetAspectRatio))")
 
         var cropRect: CGRect
 
@@ -831,19 +935,36 @@ extension CameraController {
             let targetWidth = imageSize.height * targetAspectRatio
             let xOffset = (imageSize.width - targetWidth) / 2
             cropRect = CGRect(x: xOffset, y: 0, width: targetWidth, height: imageSize.height)
+            print("[CameraPreview] cropImageToAspectRatio - Horizontal crop: \(cropRect)")
         } else {
             // Image is taller than target - crop vertically (center crop)
             let targetHeight = imageSize.width / targetAspectRatio
             let yOffset = (imageSize.height - targetHeight) / 2
             cropRect = CGRect(x: 0, y: yOffset, width: imageSize.width, height: targetHeight)
+            print("[CameraPreview] cropImageToAspectRatio - Vertical crop: \(cropRect) - Target height: \(targetHeight)")
         }
 
-        guard let cgImage = image.cgImage,
+        // Validate crop rect is within image bounds
+        if cropRect.minX < 0 || cropRect.minY < 0 ||
+           cropRect.maxX > imageSize.width || cropRect.maxY > imageSize.height {
+            print("[CameraPreview] cropImageToAspectRatio - Warning: Crop rect \(cropRect) exceeds image bounds \(imageSize)")
+            // Adjust crop rect to fit within image bounds
+            cropRect = cropRect.intersection(CGRect(origin: .zero, size: imageSize))
+            print("[CameraPreview] cropImageToAspectRatio - Adjusted crop rect: \(cropRect)")
+        }
+
+        guard let cgImage = normalizedImage.cgImage,
               let croppedCGImage = cgImage.cropping(to: cropRect) else {
+            print("[CameraPreview] cropImageToAspectRatio - Failed to crop image")
             return nil
         }
 
-        return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
+        let croppedImage = UIImage(cgImage: croppedCGImage, scale: normalizedImage.scale, orientation: .up)
+        let finalAspectRatio = croppedImage.size.width / croppedImage.size.height
+        print("[CameraPreview] cropImageToAspectRatio - Final cropped image: \(croppedImage.size.width)x\(croppedImage.size.height) (ratio: \(finalAspectRatio))")
+
+        // Create the cropped image with normalized orientation
+        return croppedImage
     }
 
     func cropImageToMatchPreview(image: UIImage, previewLayer: AVCaptureVideoPreviewLayer) -> UIImage? {
@@ -1644,7 +1765,8 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
         }
 
         // Pass through original file data and metadata so callers can preserve EXIF
-        self.photoCaptureCompletionBlock?(image.fixedOrientation(), imageData, photo.metadata, nil)
+        // Don't call fixedOrientation() here - let the completion block handle it after cropping
+        self.photoCaptureCompletionBlock?(image, imageData, photo.metadata, nil)
     }
 }
 

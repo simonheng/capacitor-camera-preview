@@ -305,6 +305,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
 
         self.aspectRatio = newAspectRatio
+
+        // Propagate to camera controller so capture output and preview align
+        self.cameraController.updateAspectRatio(newAspectRatio)
+
         DispatchQueue.main.async {
             call.resolve(self.rawSetAspectRatio())
         }
