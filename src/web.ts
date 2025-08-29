@@ -1203,7 +1203,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   // Exposure stubs (unsupported on web)
-  async getExposureModes(): Promise<{ modes: ExposureMode }> {
+  async getExposureModes(): Promise<{ modes: ExposureMode[] }> {
     throw new Error("getExposureModes not supported under the web platform");
   }
 
