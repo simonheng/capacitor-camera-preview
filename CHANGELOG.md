@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.7.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.1...7.7.0) (2025-08-29)
+
+
+### Features
+
+* add exposure management ([46c52ee](https://github.com/Cap-go/capacitor-camera-preview/commit/46c52ee088d37f206c32127665014bb4c6f829ee))
+* **example-app:** add exposure support ([d5fb0df](https://github.com/Cap-go/capacitor-camera-preview/commit/d5fb0df8cce182295e10bf197e8732343c39156e))
+
+
+### Bug Fixes
+
+* CI/CD for iOS ([b8f8f14](https://github.com/Cap-go/capacitor-camera-preview/commit/b8f8f14ac197885ea231796f1e0a69f833bff64b))
+
 ## [7.6.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.0...7.6.1) (2025-08-29)
 
 
