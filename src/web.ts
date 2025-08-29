@@ -1201,6 +1201,31 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     }
   }
 
+  // Exposure stubs (unsupported on web)
+  async getExposureModes(): Promise<{ modes: ("AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM")[] }> {
+    throw new Error("getExposureModes not supported under the web platform");
+  }
+
+  async getExposureMode(): Promise<{ mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM" }> {
+    throw new Error("getExposureMode not supported under the web platform");
+  }
+
+  async setExposureMode(_options: { mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM" }): Promise<void> {
+    throw new Error("setExposureMode not supported under the web platform");
+  }
+
+  async getExposureCompensationRange(): Promise<{ min: number; max: number; step: number }> {
+    throw new Error("getExposureCompensationRange not supported under the web platform");
+  }
+
+  async getExposureCompensation(): Promise<{ value: number }> {
+    throw new Error("getExposureCompensation not supported under the web platform");
+  }
+
+  async setExposureCompensation(_options: { value: number }): Promise<void> {
+    throw new Error("setExposureCompensation not supported under the web platform");
+  }
+
   async deleteFile(_options: { path: string }): Promise<{ success: boolean }> {
     // Mark parameter as intentionally unused to satisfy linter
     void _options;

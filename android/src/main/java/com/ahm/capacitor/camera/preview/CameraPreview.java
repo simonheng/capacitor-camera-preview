@@ -82,6 +82,101 @@ public class CameraPreview
   private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
 
   @PluginMethod
+  public void getExposureModes(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    JSArray arr = new JSArray();
+    for (String m : cameraXView.getExposureModes()) arr.put(m);
+    JSObject ret = new JSObject();
+    ret.put("modes", arr);
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void getExposureMode(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    JSObject ret = new JSObject();
+    ret.put("mode", cameraXView.getExposureMode());
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void setExposureMode(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    String mode = call.getString("mode");
+    if (mode == null || mode.isEmpty()) {
+      call.reject("mode parameter is required");
+      return;
+    }
+    try {
+      cameraXView.setExposureMode(mode);
+      call.resolve();
+    } catch (Exception e) {
+      call.reject("Failed to set exposure mode: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void getExposureCompensationRange(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    try {
+      float[] range = cameraXView.getExposureCompensationRange();
+      JSObject ret = new JSObject();
+      ret.put("min", range[0]);
+      ret.put("max", range[1]);
+      ret.put("step", range.length > 2 ? range[2] : 0.1);
+      call.resolve(ret);
+    } catch (Exception e) {
+      call.reject("Failed to get exposure compensation range: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void getExposureCompensation(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    try {
+      float value = cameraXView.getExposureCompensation();
+      JSObject ret = new JSObject();
+      ret.put("value", value);
+      call.resolve(ret);
+    } catch (Exception e) {
+      call.reject("Failed to get exposure compensation: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void setExposureCompensation(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+    Float value = call.getFloat("value");
+    if (value == null) {
+      call.reject("value parameter is required");
+      return;
+    }
+    try {
+      cameraXView.setExposureCompensation(value);
+      call.resolve();
+    } catch (Exception e) {
+      call.reject("Failed to set exposure compensation: " + e.getMessage());
+    }
+  }
+
   public void getOrientation(PluginCall call) {
     int orientation = getContext()
       .getResources()

@@ -707,4 +707,41 @@ export interface CameraPreviewPlugin {
    * @platform android, ios
    */
   getOrientation(): Promise<{ orientation: DeviceOrientation }>;
+
+  /**
+   * Returns the exposure modes supported by the active camera.
+   * Modes can include: 'locked', 'auto', 'continuous', 'custom'.
+   * @platform ios
+   */
+  getExposureModes(): Promise<{ modes: ("AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM")[] }>;
+
+  /**
+   * Returns the current exposure mode.
+   * @platform ios
+   */
+  getExposureMode(): Promise<{ mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM" }>;
+
+  /**
+   * Sets the exposure mode.
+   * @platform ios
+   */
+  setExposureMode(options: { mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM" }): Promise<void>;
+
+  /**
+   * Returns the exposure compensation (EV bias) supported range.
+   * @platform ios
+   */
+  getExposureCompensationRange(): Promise<{ min: number; max: number; step: number }>;
+
+  /**
+   * Returns the current exposure compensation (EV bias).
+   * @platform ios
+   */
+  getExposureCompensation(): Promise<{ value: number }>;
+
+  /**
+   * Sets the exposure compensation (EV bias). Value will be clamped to range.
+   * @platform ios
+   */
+  setExposureCompensation(options: { value: number }): Promise<void>;
 }
