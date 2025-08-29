@@ -1450,9 +1450,23 @@ extension CameraController {
             throw CameraControllerError.fileVideoOutputNotFound
         }
 
+        // Ensure the movie file output is attached to the active session.
+        // If the camera was started without cameraMode=true, the output may not have been added yet.
+        if !captureSession.outputs.contains(where: { $0 === fileVideoOutput }) {
+            captureSession.beginConfiguration()
+            if captureSession.canAddOutput(fileVideoOutput) {
+                captureSession.addOutput(fileVideoOutput)
+            } else {
+                captureSession.commitConfiguration()
+                throw CameraControllerError.invalidOperation
+            }
+            captureSession.commitConfiguration()
+        }
+
         // cpcp_video_A6C01203 - portrait
         //
         if let connection = fileVideoOutput.connection(with: .video) {
+            if connection.isEnabled == false { connection.isEnabled = true }
             switch UIDevice.current.orientation {
             case .landscapeRight:
                 connection.videoOrientation = .landscapeLeft

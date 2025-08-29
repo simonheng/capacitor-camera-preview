@@ -508,7 +508,7 @@ export interface CameraPreviewPlugin {
   /**
    * Starts recording a video.
    *
-   * @param {CameraPreviewOptions} options - The options for video recording.
+   * @param {CameraPreviewOptions} options - The options for video recording. Only iOS.
    * @returns {Promise<void>} A promise that resolves when video recording starts.
    * @since 0.0.1
    */
