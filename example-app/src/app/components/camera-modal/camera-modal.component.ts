@@ -375,22 +375,33 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   async #initializeExposureControls(): Promise<void> {
-    try {
-      const mode = await this.#cameraViewService.getExposureMode();
-      this.exposureMode.set(mode);
-    } catch {}
-    try {
-      const range = await this.#cameraViewService.getExposureCompensationRange();
-      const min = Math.min(range.min, range.max);
-      const max = Math.max(range.min, range.max);
+    const [modeR, rangeR, valueR] = await Promise.allSettled([
+      this.#cameraViewService.getExposureMode(),
+      this.#cameraViewService.getExposureCompensationRange(),
+      this.#cameraViewService.getExposureCompensation(),
+    ]);
+
+    if (modeR.status === 'fulfilled') {
+      this.exposureMode.set(modeR.value);
+    }
+
+    if (rangeR.status === 'fulfilled') {
+      const min = Math.min(rangeR.value.min, rangeR.value.max);
+      const max = Math.max(rangeR.value.min, rangeR.value.max);
       this.exposureMin = min;
       this.exposureMax = max;
-      this.exposureStep = range.step && range.step > 0 ? range.step : 0.1;
-    } catch {}
-    try {
-      const value = await this.#cameraViewService.getExposureCompensation();
-      this.currentEV.set(value);
-    } catch {}
+      this.exposureStep = rangeR.value.step && rangeR.value.step > 0
+        ? rangeR.value.step
+        : 0.1;
+    }
+
+    if (valueR.status === 'fulfilled') {
+      const ev = Math.max(
+        this.exposureMin,
+        Math.min(this.exposureMax, valueR.value)
+      );
+      this.currentEV.set(ev);
+    }
   }
 
   protected async cycleExposureMode(): Promise<void> {
