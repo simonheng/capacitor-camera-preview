@@ -884,13 +884,13 @@ Gets the current device orientation in a cross-platform format.
 ### getExposureModes()
 
 ```typescript
-getExposureModes() => Promise<{ modes: ("AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM")[]; }>
+getExposureModes() => Promise<{ modes: ExposureMode[]; }>
 ```
 
 Returns the exposure modes supported by the active camera.
-Modes can include: 'LOCK', 'AUTO', 'CONTINUOUS', 'CUSTOM'.
+Modes can include: 'locked', 'auto', 'continuous', 'custom'.
 
-**Returns:** <code>Promise&lt;{ modes: ('AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM')[]; }&gt;</code>
+**Returns:** <code>Promise&lt;{ modes: ExposureMode[]; }&gt;</code>
 
 --------------------
 
@@ -898,12 +898,12 @@ Modes can include: 'LOCK', 'AUTO', 'CONTINUOUS', 'CUSTOM'.
 ### getExposureMode()
 
 ```typescript
-getExposureMode() => Promise<{ mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM"; }>
+getExposureMode() => Promise<{ mode: ExposureMode; }>
 ```
 
 Returns the current exposure mode.
 
-**Returns:** <code>Promise&lt;{ mode: 'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'; }&gt;</code>
+**Returns:** <code>Promise&lt;{ mode: <a href="#exposuremode">ExposureMode</a>; }&gt;</code>
 
 --------------------
 
@@ -911,14 +911,14 @@ Returns the current exposure mode.
 ### setExposureMode(...)
 
 ```typescript
-setExposureMode(options: { mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM"; }) => Promise<void>
+setExposureMode(options: { mode: ExposureMode; }) => Promise<void>
 ```
 
 Sets the exposure mode.
 
-| Param         | Type                                                                 |
-| ------------- | -------------------------------------------------------------------- |
-| **`options`** | <code>{ mode: 'AUTO' \| 'LOCK' \| 'CONTINUOUS' \| 'CUSTOM'; }</code> |
+| Param         | Type                                                             |
+| ------------- | ---------------------------------------------------------------- |
+| **`options`** | <code>{ mode: <a href="#exposuremode">ExposureMode</a>; }</code> |
 
 --------------------
 
@@ -1157,6 +1157,13 @@ The available flash modes for the camera.
 Canonical device orientation values across platforms.
 
 <code>"portrait" | "landscape" | "landscape-left" | "landscape-right" | "portrait-upside-down" | "unknown"</code>
+
+
+#### ExposureMode
+
+Reusable exposure mode type for cross-platform support.
+
+<code>"AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM"</code>
 
 
 ### Enums
