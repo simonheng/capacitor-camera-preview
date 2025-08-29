@@ -324,6 +324,13 @@
         <span style="font-size: 0.6rem">{{ exposureMode() }}</span>
       </div>
     </ion-fab-button>
+    <!-- EV readout -->
+    <ion-fab-button size="small" [disabled]="true" aria-label="Current exposure value">
+      <div style="line-height: 1; text-align:center">
+        <span style="font-size: 0.6rem">EV</span><br />
+        <span style="font-size: 0.8rem">{{ (currentEV() | number:'1.1-1') }}</span>
+      </div>
+    </ion-fab-button>
     <!-- Decrease / Increase EV -->
     <ion-fab-button
       (click)="decreaseEV()"

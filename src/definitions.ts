@@ -734,7 +734,11 @@ export interface CameraPreviewPlugin {
    * Returns the exposure compensation (EV bias) supported range.
    * @platform ios
    */
-  getExposureCompensationRange(): Promise<{ min: number; max: number; step: number }>;
+  getExposureCompensationRange(): Promise<{
+    min: number;
+    max: number;
+    step: number;
+  }>;
 
   /**
    * Returns the current exposure compensation (EV bias).

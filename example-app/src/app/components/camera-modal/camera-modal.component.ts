@@ -381,9 +381,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     } catch {}
     try {
       const range = await this.#cameraViewService.getExposureCompensationRange();
-      this.exposureMin = range.min;
-      this.exposureMax = range.max;
-      this.exposureStep = range.step ?? 0.1;
+      const min = Math.min(range.min, range.max);
+      const max = Math.max(range.min, range.max);
+      this.exposureMin = min;
+      this.exposureMax = max;
+      this.exposureStep = range.step && range.step > 0 ? range.step : 0.1;
     } catch {}
     try {
       const value = await this.#cameraViewService.getExposureCompensation();
@@ -394,10 +396,18 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected async cycleExposureMode(): Promise<void> {
     try {
       const modes = await this.#cameraViewService.getExposureModes();
-      const idx = modes.indexOf(this.exposureMode());
-      const next = modes[(idx + 1) % modes.length] as 'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM';
+      if (!modes || modes.length === 0) return;
+      const idx = Math.max(0, modes.indexOf(this.exposureMode()));
+      const next = modes[(idx + 1) % modes.length]!;
       await this.#cameraViewService.setExposureMode(next);
       this.exposureMode.set(next);
+      // Refresh EV and range after mode change (platform may reset EV)
+      const range = await this.#cameraViewService.getExposureCompensationRange();
+      this.exposureMin = Math.min(range.min, range.max);
+      this.exposureMax = Math.max(range.min, range.max);
+      this.exposureStep = range.step && range.step > 0 ? range.step : this.exposureStep;
+      const ev = await this.#cameraViewService.getExposureCompensation();
+      this.currentEV.set(ev);
     } catch (e) {
       console.warn('Failed to set exposure mode', e);
     }

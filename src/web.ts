@@ -1215,16 +1215,26 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
     throw new Error("setExposureMode not supported under the web platform");
   }
 
-  async getExposureCompensationRange(): Promise<{ min: number; max: number; step: number }> {
-    throw new Error("getExposureCompensationRange not supported under the web platform");
+  async getExposureCompensationRange(): Promise<{
+    min: number;
+    max: number;
+    step: number;
+  }> {
+    throw new Error(
+      "getExposureCompensationRange not supported under the web platform",
+    );
   }
 
   async getExposureCompensation(): Promise<{ value: number }> {
-    throw new Error("getExposureCompensation not supported under the web platform");
+    throw new Error(
+      "getExposureCompensation not supported under the web platform",
+    );
   }
 
   async setExposureCompensation(_options: { value: number }): Promise<void> {
-    throw new Error("setExposureCompensation not supported under the web platform");
+    throw new Error(
+      "setExposureCompensation not supported under the web platform",
+    );
   }
 
   async deleteFile(_options: { path: string }): Promise<{ success: boolean }> {

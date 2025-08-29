@@ -12,6 +12,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
 import android.location.Location;
 import android.media.MediaScannerConnection;
 import android.os.Build;
@@ -19,6 +20,8 @@ import android.os.Environment;
 import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.Range;
+import android.util.Rational;
 import android.util.Size;
 import android.view.MotionEvent;
 import android.view.View;
@@ -30,15 +33,15 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.annotation.RequiresApi;
-import androidx.camera.camera2.interop.Camera2CameraInfo;
-import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.camera2.interop.Camera2CameraControl;
+import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.CaptureRequestOptions;
-import android.hardware.camera2.CaptureRequest;
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ExposureState;
 import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.FocusMeteringResult;
 import androidx.camera.core.ImageCapture;
@@ -72,6 +75,7 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -80,10 +84,6 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.Arrays;
-import android.util.Range;
-import android.util.Rational;
-import androidx.camera.core.ExposureState;
 import org.json.JSONObject;
 
 public class CameraXView implements LifecycleOwner, LifecycleObserver {
@@ -1822,7 +1822,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       int zeroIdx = 0;
       if (range != null && !range.contains(0)) {
         // Choose the closest index to 0 if 0 is not available
-        zeroIdx = Math.abs(range.getLower()) < Math.abs(range.getUpper()) ? range.getLower() : range.getUpper();
+        zeroIdx = Math.abs(range.getLower()) < Math.abs(range.getUpper())
+          ? range.getLower()
+          : range.getUpper();
       }
       camera.getCameraControl().setExposureCompensationIndex(zeroIdx);
     } catch (Exception e) {
@@ -1920,12 +1922,17 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     String normalized = mode.toUpperCase(Locale.US);
 
     try {
-      Camera2CameraControl c2 = Camera2CameraControl.from(camera.getCameraControl());
+      Camera2CameraControl c2 = Camera2CameraControl.from(
+        camera.getCameraControl()
+      );
       switch (normalized) {
         case "LOCK": {
           CaptureRequestOptions opts = new CaptureRequestOptions.Builder()
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, true)
-            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            .setCaptureRequestOption(
+              CaptureRequest.CONTROL_AE_MODE,
+              CaptureRequest.CONTROL_AE_MODE_ON
+            )
             .build();
           mainExecutor.execute(() -> c2.setCaptureRequestOptions(opts));
           currentExposureMode = "LOCK";
@@ -1934,7 +1941,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         case "CONTINUOUS": {
           CaptureRequestOptions opts = new CaptureRequestOptions.Builder()
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, false)
-            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            .setCaptureRequestOption(
+              CaptureRequest.CONTROL_AE_MODE,
+              CaptureRequest.CONTROL_AE_MODE_ON
+            )
             .build();
           mainExecutor.execute(() -> c2.setCaptureRequestOptions(opts));
           currentExposureMode = "CONTINUOUS";
@@ -1955,7 +1965,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     ExposureState state = camera.getCameraInfo().getExposureState();
     Range<Integer> idxRange = state.getExposureCompensationRange();
     Rational step = state.getExposureCompensationStep();
-    float evStep = step != null ? (float) step.getNumerator() / (float) step.getDenominator() : 1.0f;
+    float evStep = step != null
+      ? (float) step.getNumerator() / (float) step.getDenominator()
+      : 1.0f;
     float min = idxRange.getLower() * evStep;
     float max = idxRange.getUpper() * evStep;
     return new float[] { min, max, evStep };
@@ -1968,7 +1980,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     ExposureState state = camera.getCameraInfo().getExposureState();
     int idx = state.getExposureCompensationIndex();
     Rational step = state.getExposureCompensationStep();
-    float evStep = step != null ? (float) step.getNumerator() / (float) step.getDenominator() : 1.0f;
+    float evStep = step != null
+      ? (float) step.getNumerator() / (float) step.getDenominator()
+      : 1.0f;
     return idx * evStep;
   }
 
@@ -1979,7 +1993,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     ExposureState state = camera.getCameraInfo().getExposureState();
     Range<Integer> idxRange = state.getExposureCompensationRange();
     Rational step = state.getExposureCompensationStep();
-    float evStep = step != null ? (float) step.getNumerator() / (float) step.getDenominator() : 1.0f;
+    float evStep = step != null
+      ? (float) step.getNumerator() / (float) step.getDenominator()
+      : 1.0f;
     if (evStep <= 0f) evStep = 1.0f;
     int idx = Math.round(ev / evStep);
     // clamp
