@@ -108,8 +108,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
     // MARK: - Helper Methods for Aspect Ratio
 
-
-
     /// Parses aspect ratio string and returns the appropriate ratio for the current orientation
     private func parseAspectRatio(_ ratio: String, isPortrait: Bool) -> CGFloat {
         let parts = ratio.split(separator: ":").compactMap { Double($0) }
@@ -592,8 +590,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
             return
         }
-
-
 
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
 
