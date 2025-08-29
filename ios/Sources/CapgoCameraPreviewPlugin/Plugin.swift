@@ -1844,8 +1844,16 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("mode parameter is required")
             return
         }
+        // Validate against allowed exposure modes before delegating
+        let normalized = mode.uppercased()
+        let allowedModes: Set<String> = ["AUTO", "LOCK", "CONTINUOUS", "CUSTOM"]
+        guard allowedModes.contains(normalized) else {
+            let allowedList = Array(allowedModes).sorted().joined(separator: ", ")
+            call.reject("Invalid exposure mode: \(mode). Allowed values: \(allowedList)")
+            return
+        }
         do {
-            try self.cameraController.setExposureMode(mode: mode)
+            try self.cameraController.setExposureMode(mode: normalized)
             call.resolve()
         } catch {
             call.reject("Failed to set exposure mode: \(error.localizedDescription)")

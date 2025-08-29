@@ -433,8 +433,8 @@ extension CameraController {
         // Set default exposure mode to CONTINUOUS when starting the camera
         do {
             try finalDevice.lockForConfiguration()
-            if finalDevice.isExposureModeSupported(.autoExpose) {
-                finalDevice.exposureMode = .autoExpose
+            if finalDevice.isExposureModeSupported(.continuousAutoExposure) {
+                finalDevice.exposureMode = .continuousAutoExposure
                 if finalDevice.isExposurePointOfInterestSupported {
                     finalDevice.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
                 }

@@ -296,6 +296,9 @@ export interface CameraSampleOptions {
  */
 export type CameraPreviewFlashMode = "off" | "on" | "auto" | "torch";
 
+/** Reusable exposure mode type for cross-platform support. */
+export type ExposureMode = "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM";
+
 /**
  * Defines the options for setting the camera preview's opacity.
  */
@@ -711,21 +714,21 @@ export interface CameraPreviewPlugin {
   /**
    * Returns the exposure modes supported by the active camera.
    * Modes can include: 'locked', 'auto', 'continuous', 'custom'.
-   * @platform ios
+   * @platform android, ios
    */
-  getExposureModes(): Promise<{ modes: ("AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM")[] }>;
+  getExposureModes(): Promise<{ modes: ExposureMode[] }>;
 
   /**
    * Returns the current exposure mode.
-   * @platform ios
+   * @platform android, ios
    */
-  getExposureMode(): Promise<{ mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM" }>;
+  getExposureMode(): Promise<{ mode: ExposureMode }>;
 
   /**
    * Sets the exposure mode.
-   * @platform ios
+   * @platform android, ios
    */
-  setExposureMode(options: { mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM" }): Promise<void>;
+  setExposureMode(options: { mode: ExposureMode }): Promise<void>;
 
   /**
    * Returns the exposure compensation (EV bias) supported range.

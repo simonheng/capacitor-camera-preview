@@ -10,6 +10,7 @@ import type {
   CameraSampleOptions,
   DeviceOrientation,
   GridMode,
+  ExposureMode,
   FlashMode,
   LensInfo,
   SafeAreaInsets,
@@ -1202,15 +1203,15 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
   }
 
   // Exposure stubs (unsupported on web)
-  async getExposureModes(): Promise<{ modes: ("AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM")[] }> {
+  async getExposureModes(): Promise<{ modes: ExposureMode }> {
     throw new Error("getExposureModes not supported under the web platform");
   }
 
-  async getExposureMode(): Promise<{ mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM" }> {
+  async getExposureMode(): Promise<{ mode: ExposureMode }> {
     throw new Error("getExposureMode not supported under the web platform");
   }
 
-  async setExposureMode(_options: { mode: "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM" }): Promise<void> {
+  async setExposureMode(_options: { mode: ExposureMode }): Promise<void> {
     throw new Error("setExposureMode not supported under the web platform");
   }
 

@@ -888,7 +888,7 @@ getExposureModes() => Promise<{ modes: ("AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM
 ```
 
 Returns the exposure modes supported by the active camera.
-Modes can include: 'locked', 'auto', 'continuous', 'custom'.
+Modes can include: 'LOCK', 'AUTO', 'CONTINUOUS', 'CUSTOM'.
 
 **Returns:** <code>Promise&lt;{ modes: ('AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM')[]; }&gt;</code>
 

@@ -9,6 +9,7 @@ import {
   LensInfo,
   CameraPreviewPlugin,
   GridMode,
+  ExposureMode,
   getBase64FromFilePath,
   deleteFile,
 } from '@capgo/camera-preview';
@@ -292,30 +293,30 @@ export class CapacitorCameraViewService {
   }
 
   // ===== Exposure controls =====
-  async getExposureModes(): Promise<Array<'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'>> {
-    const res = await (this.#cameraView as any).getExposureModes();
-    return res.modes as Array<'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'>;
+  async getExposureModes(): Promise<ExposureMode[]> {
+    const { modes } = await this.#cameraView.getExposureModes();
+    return modes;
   }
 
-  async getExposureMode(): Promise<'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'> {
-    const res = await (this.#cameraView as any).getExposureMode();
-    return res.mode as 'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM';
+  async getExposureMode(): Promise<ExposureMode> {
+    const { mode } = await this.#cameraView.getExposureMode();
+    return mode;
   }
 
-  async setExposureMode(mode: 'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'): Promise<void> {
-    await (this.#cameraView as any).setExposureMode({ mode });
+  async setExposureMode(mode: ExposureMode): Promise<void> {
+    await this.#cameraView.setExposureMode({ mode });
   }
 
   async getExposureCompensationRange(): Promise<{ min: number; max: number; step: number }> {
-    return await (this.#cameraView as any).getExposureCompensationRange();
+    return await this.#cameraView.getExposureCompensationRange();
   }
 
   async getExposureCompensation(): Promise<number> {
-    const res = await (this.#cameraView as any).getExposureCompensation();
-    return res.value as number;
+    const { value } = await this.#cameraView.getExposureCompensation();
+    return value;
   }
 
   async setExposureCompensation(value: number): Promise<void> {
-    await (this.#cameraView as any).setExposureCompensation({ value });
+    await this.#cameraView.setExposureCompensation({ value });
   }
 }

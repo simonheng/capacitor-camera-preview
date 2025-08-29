@@ -1927,7 +1927,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, true)
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
             .build();
-          c2.setCaptureRequestOptions(opts);
+          mainExecutor.execute(() -> c2.setCaptureRequestOptions(opts));
           currentExposureMode = "LOCK";
           break;
         }
@@ -1936,7 +1936,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, false)
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
             .build();
-          c2.setCaptureRequestOptions(opts);
+          mainExecutor.execute(() -> c2.setCaptureRequestOptions(opts));
           currentExposureMode = "CONTINUOUS";
           break;
         }

@@ -405,9 +405,13 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async increaseEV(): Promise<void> {
     try {
-      const next = Math.min(this.currentEV() + this.exposureStep, this.exposureMax);
-      await this.#cameraViewService.setExposureCompensation(next);
-      this.currentEV.set(next);
+      if (this.exposureMode() === 'LOCK' || this.exposureMode() === 'CUSTOM') return;
+      const raw = Math.min(this.currentEV() + this.exposureStep, this.exposureMax);
+      const step = this.exposureStep || 0.1;
+      const snapped = Math.max(this.exposureMin,
+        Math.min(this.exposureMax, Math.round(raw / step) * step));
+      await this.#cameraViewService.setExposureCompensation(snapped);
+      this.currentEV.set(Number(snapped.toFixed(3)));
     } catch (e) {
       console.warn('Failed to increase EV', e);
     }
@@ -415,9 +419,13 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async decreaseEV(): Promise<void> {
     try {
-      const next = Math.max(this.currentEV() - this.exposureStep, this.exposureMin);
-      await this.#cameraViewService.setExposureCompensation(next);
-      this.currentEV.set(next);
+      if (this.exposureMode() === 'LOCK' || this.exposureMode() === 'CUSTOM') return;
+      const raw = Math.max(this.currentEV() - this.exposureStep, this.exposureMin);
+      const step = this.exposureStep || 0.1;
+      const snapped = Math.max(this.exposureMin,
+        Math.min(this.exposureMax, Math.round(raw / step) * step));
+      await this.#cameraViewService.setExposureCompensation(snapped);
+      this.currentEV.set(Number(snapped.toFixed(3)));
     } catch (e) {
       console.warn('Failed to decrease EV', e);
     }
