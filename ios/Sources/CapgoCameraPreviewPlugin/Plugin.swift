@@ -1887,12 +1887,23 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("Camera not initialized")
             return
         }
-        guard let value = call.getFloat("value") else {
+        guard var value = call.getFloat("value") else {
             call.reject("value parameter is required")
             return
         }
         do {
-            try self.cameraController.setExposureCompensation(value)
+            // Snap to valid range and step
+            var range = try self.cameraController.getExposureCompensationRange()
+            if range.step <= 0 { range.step = 0.1 }
+            let lo = min(range.min, range.max)
+            let hi = max(range.min, range.max)
+            // Clamp to [lo, hi]
+            value = max(lo, min(hi, value))
+            // Snap to nearest step
+            let steps = round((value - lo) / range.step)
+            let snapped = lo + steps * range.step
+
+            try self.cameraController.setExposureCompensation(snapped)
             call.resolve()
         } catch {
             call.reject("Failed to set exposure compensation: \(error.localizedDescription)")
