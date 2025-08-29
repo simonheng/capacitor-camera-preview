@@ -381,9 +381,11 @@ export class CameraModalComponent implements OnInit, OnDestroy {
     } catch {}
     try {
       const range = await this.#cameraViewService.getExposureCompensationRange();
-      this.exposureMin = range.min;
-      this.exposureMax = range.max;
-      this.exposureStep = range.step ?? 0.1;
+      const min = Math.min(range.min, range.max);
+      const max = Math.max(range.min, range.max);
+      this.exposureMin = min;
+      this.exposureMax = max;
+      this.exposureStep = range.step && range.step > 0 ? range.step : 0.1;
     } catch {}
     try {
       const value = await this.#cameraViewService.getExposureCompensation();
