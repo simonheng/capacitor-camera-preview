@@ -69,7 +69,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         CAPPluginMethod(name: "setFocus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "deleteFile", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getOrientation", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getSafeAreaInsets", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getSafeAreaInsets", returnType: CAPPluginReturnPromise),
+        // Exposure control methods
+        CAPPluginMethod(name: "getExposureModes", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getExposureMode", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setExposureMode", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getExposureCompensationRange", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getExposureCompensation", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setExposureCompensation", returnType: CAPPluginReturnPromise)
 
     ]
     // Camera state tracking
@@ -100,8 +107,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     private var waitingForLocation: Bool = false
 
     // MARK: - Helper Methods for Aspect Ratio
-
-
 
     /// Parses aspect ratio string and returns the appropriate ratio for the current orientation
     private func parseAspectRatio(_ ratio: String, isPortrait: Bool) -> CGFloat {
@@ -585,8 +590,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start.")
             return
         }
-
-
 
         AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted: Bool) in
 
@@ -1797,6 +1800,113 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             } catch {
                 call.reject("Failed to set focus: \(error.localizedDescription)")
             }
+        }
+    }
+
+    // MARK: - Exposure Bridge
+
+    @objc func getExposureModes(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+        do {
+            let modes = try self.cameraController.getExposureModes()
+            call.resolve(["modes": modes])
+        } catch {
+            call.reject("Failed to get exposure modes: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func getExposureMode(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+        do {
+            let mode = try self.cameraController.getExposureMode()
+            call.resolve(["mode": mode])
+        } catch {
+            call.reject("Failed to get exposure mode: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func setExposureMode(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+        guard let mode = call.getString("mode") else {
+            call.reject("mode parameter is required")
+            return
+        }
+        // Validate against allowed exposure modes before delegating
+        let normalized = mode.uppercased()
+        let allowedModes: Set<String> = ["AUTO", "LOCK", "CONTINUOUS", "CUSTOM"]
+        guard allowedModes.contains(normalized) else {
+            let allowedList = Array(allowedModes).sorted().joined(separator: ", ")
+            call.reject("Invalid exposure mode: \(mode). Allowed values: \(allowedList)")
+            return
+        }
+        do {
+            try self.cameraController.setExposureMode(mode: normalized)
+            call.resolve()
+        } catch {
+            call.reject("Failed to set exposure mode: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func getExposureCompensationRange(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+        do {
+            let range = try self.cameraController.getExposureCompensationRange()
+            call.resolve(["min": range.min, "max": range.max, "step": range.step])
+        } catch {
+            call.reject("Failed to get exposure compensation range: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func getExposureCompensation(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+        do {
+            let value = try self.cameraController.getExposureCompensation()
+            call.resolve(["value": value])
+        } catch {
+            call.reject("Failed to get exposure compensation: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func setExposureCompensation(_ call: CAPPluginCall) {
+        guard isInitialized else {
+            call.reject("Camera not initialized")
+            return
+        }
+        guard var value = call.getFloat("value") else {
+            call.reject("value parameter is required")
+            return
+        }
+        do {
+            // Snap to valid range and step
+            var range = try self.cameraController.getExposureCompensationRange()
+            if range.step <= 0 { range.step = 0.1 }
+            let lo = min(range.min, range.max)
+            let hi = max(range.min, range.max)
+            // Clamp to [lo, hi]
+            value = max(lo, min(hi, value))
+            // Snap to nearest step
+            let steps = round((value - lo) / range.step)
+            let snapped = lo + steps * range.step
+
+            try self.cameraController.setExposureCompensation(snapped)
+            call.resolve()
+        } catch {
+            call.reject("Failed to set exposure compensation: \(error.localizedDescription)")
         }
     }
 

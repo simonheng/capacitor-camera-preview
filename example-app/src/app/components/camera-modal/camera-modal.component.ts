@@ -118,6 +118,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly currentOpacity = signal(100);
   protected readonly testResults = signal<string>('');
   protected readonly showTestResults = signal(false);
+  // Exposure state
+  protected readonly exposureMode = signal<'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'>('CONTINUOUS');
+  protected exposureMin = 0;
+  protected exposureMax = 0;
+  protected exposureStep = 0.1;
+  protected currentEV = signal<number>(0);
 
   // Camera switching functionality
   protected readonly availableCameras = signal<CameraDevice[]>([]);
@@ -350,6 +356,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         this.#updateRunningStatus(),
         this.#updateCurrentDeviceId(),
         this.#initializeCurrentPreviewSize(),
+        this.#initializeExposureControls(),
       ]);
 
       this.currentZoomFactor.set(this.initialZoomFactor());
@@ -364,6 +371,84 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         error: error instanceof Error ? error.message : String(error),
         type: 'error',
       });
+    }
+  }
+
+  async #initializeExposureControls(): Promise<void> {
+    const [modeR, rangeR, valueR] = await Promise.allSettled([
+      this.#cameraViewService.getExposureMode(),
+      this.#cameraViewService.getExposureCompensationRange(),
+      this.#cameraViewService.getExposureCompensation(),
+    ]);
+
+    if (modeR.status === 'fulfilled') {
+      this.exposureMode.set(modeR.value);
+    }
+
+    if (rangeR.status === 'fulfilled') {
+      const min = Math.min(rangeR.value.min, rangeR.value.max);
+      const max = Math.max(rangeR.value.min, rangeR.value.max);
+      this.exposureMin = min;
+      this.exposureMax = max;
+      this.exposureStep = rangeR.value.step && rangeR.value.step > 0
+        ? rangeR.value.step
+        : 0.1;
+    }
+
+    if (valueR.status === 'fulfilled') {
+      const ev = Math.max(
+        this.exposureMin,
+        Math.min(this.exposureMax, valueR.value)
+      );
+      this.currentEV.set(ev);
+    }
+  }
+
+  protected async cycleExposureMode(): Promise<void> {
+    try {
+      const modes = await this.#cameraViewService.getExposureModes();
+      if (!modes || modes.length === 0) return;
+      const idx = Math.max(0, modes.indexOf(this.exposureMode()));
+      const next = modes[(idx + 1) % modes.length]!;
+      await this.#cameraViewService.setExposureMode(next);
+      this.exposureMode.set(next);
+      // Refresh EV and range after mode change (platform may reset EV)
+      const range = await this.#cameraViewService.getExposureCompensationRange();
+      this.exposureMin = Math.min(range.min, range.max);
+      this.exposureMax = Math.max(range.min, range.max);
+      this.exposureStep = range.step && range.step > 0 ? range.step : this.exposureStep;
+      const ev = await this.#cameraViewService.getExposureCompensation();
+      this.currentEV.set(ev);
+    } catch (e) {
+      console.warn('Failed to set exposure mode', e);
+    }
+  }
+
+  protected async increaseEV(): Promise<void> {
+    try {
+      if (this.exposureMode() === 'LOCK' || this.exposureMode() === 'CUSTOM') return;
+      const raw = Math.min(this.currentEV() + this.exposureStep, this.exposureMax);
+      const step = this.exposureStep || 0.1;
+      const snapped = Math.max(this.exposureMin,
+        Math.min(this.exposureMax, Math.round(raw / step) * step));
+      await this.#cameraViewService.setExposureCompensation(snapped);
+      this.currentEV.set(Number(snapped.toFixed(3)));
+    } catch (e) {
+      console.warn('Failed to increase EV', e);
+    }
+  }
+
+  protected async decreaseEV(): Promise<void> {
+    try {
+      if (this.exposureMode() === 'LOCK' || this.exposureMode() === 'CUSTOM') return;
+      const raw = Math.max(this.currentEV() - this.exposureStep, this.exposureMin);
+      const step = this.exposureStep || 0.1;
+      const snapped = Math.max(this.exposureMin,
+        Math.min(this.exposureMax, Math.round(raw / step) * step));
+      await this.#cameraViewService.setExposureCompensation(snapped);
+      this.currentEV.set(Number(snapped.toFixed(3)));
+    } catch (e) {
+      console.warn('Failed to decrease EV', e);
     }
   }
 
