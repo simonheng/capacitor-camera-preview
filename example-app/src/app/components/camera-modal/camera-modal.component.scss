@@ -459,6 +459,10 @@ ion-fab-button {
   }
 }
 
+.ev-controls {
+  display: flex;
+}
+
 // High contrast mode for better visibility
 @media (prefers-contrast: high) {
   .floating-info-panel ion-card {

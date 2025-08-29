@@ -290,4 +290,32 @@ export class CapacitorCameraViewService {
   async deleteFile(filePath: string): Promise<boolean> {
     return deleteFile(filePath);
   }
+
+  // ===== Exposure controls =====
+  async getExposureModes(): Promise<Array<'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'>> {
+    const res = await (this.#cameraView as any).getExposureModes();
+    return res.modes as Array<'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'>;
+  }
+
+  async getExposureMode(): Promise<'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'> {
+    const res = await (this.#cameraView as any).getExposureMode();
+    return res.mode as 'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM';
+  }
+
+  async setExposureMode(mode: 'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'): Promise<void> {
+    await (this.#cameraView as any).setExposureMode({ mode });
+  }
+
+  async getExposureCompensationRange(): Promise<{ min: number; max: number; step: number }> {
+    return await (this.#cameraView as any).getExposureCompensationRange();
+  }
+
+  async getExposureCompensation(): Promise<number> {
+    const res = await (this.#cameraView as any).getExposureCompensation();
+    return res.value as number;
+  }
+
+  async setExposureCompensation(value: number): Promise<void> {
+    await (this.#cameraView as any).setExposureCompensation({ value });
+  }
 }
