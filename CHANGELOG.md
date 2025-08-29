@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.6.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.0...7.6.1) (2025-08-29)
+
+
+### Bug Fixes
+
+* **ios:** fix startRecording method ([e3f318b](https://github.com/Cap-go/capacitor-camera-preview/commit/e3f318b9b11be2ca5f0be0e41fa7f789673f9e87))
+
 ## [7.6.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.5.0...7.6.0) (2025-08-26)
 
 
