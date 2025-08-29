@@ -533,9 +533,9 @@ startRecordVideo(options: CameraPreviewOptions) => Promise<void>
 
 Starts recording a video.
 
-| Param         | Type                                                                  | Description                        |
-| ------------- | --------------------------------------------------------------------- | ---------------------------------- |
-| **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | - The options for video recording. |
+| Param         | Type                                                                  | Description                                  |
+| ------------- | --------------------------------------------------------------------- | -------------------------------------------- |
+| **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | - The options for video recording. Only iOS. |
 
 **Since:** 0.0.1
 
