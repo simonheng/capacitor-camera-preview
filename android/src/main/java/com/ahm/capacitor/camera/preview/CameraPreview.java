@@ -138,7 +138,9 @@ public class CameraPreview
       ret.put("step", range.length > 2 ? range[2] : 0.1);
       call.resolve(ret);
     } catch (Exception e) {
-      call.reject("Failed to get exposure compensation range: " + e.getMessage());
+      call.reject(
+        "Failed to get exposure compensation range: " + e.getMessage()
+      );
     }
   }
 
