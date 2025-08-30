@@ -59,8 +59,8 @@ import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.video.FileOutputOptions;
 import androidx.camera.video.Quality;
 import androidx.camera.video.QualitySelector;
-import androidx.camera.video.Recording;
 import androidx.camera.video.Recorder;
+import androidx.camera.video.Recording;
 import androidx.camera.video.VideoCapture;
 import androidx.camera.video.VideoRecordEvent;
 import androidx.camera.view.PreviewView;
@@ -3731,44 +3731,62 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     if (videoCapture == null) {
       throw new Exception("VideoCapture is not initialized");
     }
-    
+
     if (currentRecording != null) {
       throw new Exception("Video recording is already in progress");
     }
 
     // Create output file
     String fileName = "video_" + System.currentTimeMillis() + ".mp4";
-    File outputDir = new File(context.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "CameraPreview");
+    File outputDir = new File(
+      context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),
+      "CameraPreview"
+    );
     if (!outputDir.exists()) {
       outputDir.mkdirs();
     }
     currentVideoFile = new File(outputDir, fileName);
 
-    FileOutputOptions outputOptions = new FileOutputOptions.Builder(currentVideoFile).build();
+    FileOutputOptions outputOptions = new FileOutputOptions.Builder(
+      currentVideoFile
+    ).build();
 
     // Create recording event listener
-    androidx.core.util.Consumer<VideoRecordEvent> videoRecordEventListener = videoRecordEvent -> {
-      if (videoRecordEvent instanceof VideoRecordEvent.Start) {
-        Log.d(TAG, "Video recording started");
-      } else if (videoRecordEvent instanceof VideoRecordEvent.Finalize) {
-        VideoRecordEvent.Finalize finalizeEvent = (VideoRecordEvent.Finalize) videoRecordEvent;
-        handleRecordingFinalized(finalizeEvent);
-      }
-    };
+    androidx.core.util.Consumer<VideoRecordEvent> videoRecordEventListener =
+      videoRecordEvent -> {
+        if (videoRecordEvent instanceof VideoRecordEvent.Start) {
+          Log.d(TAG, "Video recording started");
+        } else if (videoRecordEvent instanceof VideoRecordEvent.Finalize) {
+          VideoRecordEvent.Finalize finalizeEvent =
+            (VideoRecordEvent.Finalize) videoRecordEvent;
+          handleRecordingFinalized(finalizeEvent);
+        }
+      };
 
     // Start recording
     if (sessionConfig != null && !sessionConfig.isDisableAudio()) {
-      currentRecording = videoCapture.getOutput()
+      currentRecording = videoCapture
+        .getOutput()
         .prepareRecording(context, outputOptions)
         .withAudioEnabled()
-        .start(ContextCompat.getMainExecutor(context), videoRecordEventListener);
+        .start(
+          ContextCompat.getMainExecutor(context),
+          videoRecordEventListener
+        );
     } else {
-      currentRecording = videoCapture.getOutput()
+      currentRecording = videoCapture
+        .getOutput()
         .prepareRecording(context, outputOptions)
-        .start(ContextCompat.getMainExecutor(context), videoRecordEventListener);
+        .start(
+          ContextCompat.getMainExecutor(context),
+          videoRecordEventListener
+        );
     }
 
-    Log.d(TAG, "Video recording started to: " + currentVideoFile.getAbsolutePath());
+    Log.d(
+      TAG,
+      "Video recording started to: " + currentVideoFile.getAbsolutePath()
+    );
   }
 
   public void stopRecordVideo(VideoRecordingCallback callback) {
@@ -3780,11 +3798,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     // Store the callback to use when recording is finalized
     currentVideoCallback = callback;
     currentRecording.stop();
-    
+
     Log.d(TAG, "Video recording stop requested");
   }
 
-  private void handleRecordingFinalized(VideoRecordEvent.Finalize finalizeEvent) {
+  private void handleRecordingFinalized(
+    VideoRecordEvent.Finalize finalizeEvent
+  ) {
     if (!finalizeEvent.hasError()) {
       Log.d(TAG, "Video recording completed successfully");
       if (currentVideoCallback != null) {
@@ -3794,10 +3814,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     } else {
       Log.e(TAG, "Video recording failed: " + finalizeEvent.getError());
       if (currentVideoCallback != null) {
-        currentVideoCallback.onError("Video recording failed: " + finalizeEvent.getError());
+        currentVideoCallback.onError(
+          "Video recording failed: " + finalizeEvent.getError()
+        );
       }
     }
-    
+
     // Clean up
     currentRecording = null;
     currentVideoFile = null;

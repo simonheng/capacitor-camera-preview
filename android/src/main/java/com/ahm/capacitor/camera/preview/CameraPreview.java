@@ -1772,8 +1772,10 @@ public class CameraPreview
       call.reject("Camera is not running");
       return;
     }
-    
-    boolean disableAudio = Boolean.TRUE.equals(call.getBoolean("disableAudio", true));
+
+    boolean disableAudio = Boolean.TRUE.equals(
+      call.getBoolean("disableAudio", true)
+    );
     String permissionAlias = disableAudio
       ? CAMERA_ONLY_PERMISSION_ALIAS
       : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
@@ -1800,21 +1802,23 @@ public class CameraPreview
       call.reject("Camera is not running");
       return;
     }
-    
+
     try {
-      cameraXView.stopRecordVideo(new CameraXView.VideoRecordingCallback() {
-        @Override
-        public void onSuccess(String filePath) {
-          JSObject result = new JSObject();
-          result.put("videoFilePath", filePath);
-          call.resolve(result);
+      cameraXView.stopRecordVideo(
+        new CameraXView.VideoRecordingCallback() {
+          @Override
+          public void onSuccess(String filePath) {
+            JSObject result = new JSObject();
+            result.put("videoFilePath", filePath);
+            call.resolve(result);
+          }
+
+          @Override
+          public void onError(String message) {
+            call.reject("Failed to stop video recording: " + message);
+          }
         }
-        
-        @Override
-        public void onError(String message) {
-          call.reject("Failed to stop video recording: " + message);
-        }
-      });
+      );
     } catch (Exception e) {
       call.reject("Failed to stop video recording: " + e.getMessage());
     }
@@ -1822,11 +1826,13 @@ public class CameraPreview
 
   @PermissionCallback
   private void handleVideoRecordingPermissionResult(PluginCall call) {
-    boolean disableAudio = Boolean.TRUE.equals(call.getBoolean("disableAudio", true));
+    boolean disableAudio = Boolean.TRUE.equals(
+      call.getBoolean("disableAudio", true)
+    );
     String permissionAlias = disableAudio
       ? CAMERA_ONLY_PERMISSION_ALIAS
       : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
-      
+
     if (PermissionState.GRANTED.equals(getPermissionState(permissionAlias))) {
       try {
         cameraXView.startRecordVideo();
