@@ -87,21 +87,24 @@ export class GalleryService {
       return;
     }
 
-    // Validate base64 data
-    try {
-      const base64Data = src.split('base64,')[1];
-      if (!base64Data || base64Data.length === 0) {
-        console.error('Invalid base64 data');
+    // Validate only if base64 data URL; otherwise accept file/https URLs
+    if (src.startsWith('data:video/')) {
+      try {
+        const base64Data = src.split('base64,')[1];
+        if (!base64Data || base64Data.length === 0) {
+          console.error('Invalid base64 data');
+          return;
+        }
+      } catch (error) {
+        console.error('Error validating video data:', error);
         return;
       }
-
-      this.#mediaItems.update((curr) => [...curr, {
-        src,
-        type: 'video',
-        timestamp: Date.now()
-      }]);
-    } catch (error) {
-      console.error('Error validating video data:', error);
     }
+
+    this.#mediaItems.update((curr) => [...curr, {
+      src,
+      type: 'video',
+      timestamp: Date.now()
+    }]);
   }
 }
