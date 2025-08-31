@@ -1804,18 +1804,28 @@ public class CameraPreview
     }
 
     try {
+      bridge.saveCall(call);
+      final String cbId = call.getCallbackId();
       cameraXView.stopRecordVideo(
         new CameraXView.VideoRecordingCallback() {
           @Override
           public void onSuccess(String filePath) {
-            JSObject result = new JSObject();
-            result.put("videoFilePath", filePath);
-            call.resolve(result);
+            PluginCall saved = bridge.getSavedCall(cbId);
+            if (saved != null) {
+              JSObject result = new JSObject();
+              result.put("videoFilePath", filePath);
+              saved.resolve(result);
+              bridge.releaseCall(saved);
+            }
           }
 
           @Override
           public void onError(String message) {
-            call.reject("Failed to stop video recording: " + message);
+            PluginCall saved = bridge.getSavedCall(cbId);
+            if (saved != null) {
+              saved.reject("Failed to stop video recording: " + message);
+              bridge.releaseCall(saved);
+            }
           }
         }
       );
