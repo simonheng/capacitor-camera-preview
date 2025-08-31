@@ -1,0 +1,24 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="end">
+      <ion-button (click)="close()">
+        <ion-icon name="close-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div class="media-container">
+    @if (item().type === 'photo') {
+      <img [src]="item().src" [alt]="'Fullscreen photo'" />
+    }
+    @if (item().type === 'video') {
+      <video controls playsinline [src]="item().src" type="video/mp4"></video>
+    }
+  </div>
+  <div class="swipe-hint">
+    <ion-icon name="chevron-down-outline"></ion-icon>
+    Swipe down to close
+  </div>
+</ion-content>

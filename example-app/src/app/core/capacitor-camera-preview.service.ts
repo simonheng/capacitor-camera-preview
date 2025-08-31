@@ -292,6 +292,15 @@ export class CapacitorCameraViewService {
     return deleteFile(filePath);
   }
 
+  /**
+   * Read a video file and return its contents as base64
+   * @param filePath Path to the video file
+   * @returns Base64 encoded string of the video file
+   */
+  async readVideoFile(filePath: string): Promise<string> {
+    return this.getBase64FromFilePath(filePath);
+  }
+
   // ===== Exposure controls =====
   async getExposureModes(): Promise<ExposureMode[]> {
     const { modes } = await this.#cameraView.getExposureModes();

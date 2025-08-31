@@ -80,6 +80,7 @@ public class CameraPreview
   private Location lastLocation;
   private OrientationEventListener orientationListener;
   private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
+  private boolean lastDisableAudio = true;
 
   @PluginMethod
   public void getExposureModes(PluginCall call) {
@@ -689,6 +690,7 @@ public class CameraPreview
     final boolean disableAudio = Boolean.TRUE.equals(
       call.getBoolean("disableAudio", true)
     );
+    this.lastDisableAudio = disableAudio;
     final String aspectRatio = call.getString("aspectRatio", "4:3");
     final String gridMode = call.getString("gridMode", "none");
     final String positioning = call.getString("positioning", "top");
@@ -1763,6 +1765,101 @@ public class CameraPreview
       call.resolve(ret);
     } catch (Exception e) {
       call.reject("Failed to delete file: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void startRecordVideo(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+
+    boolean disableAudio = call.getBoolean("disableAudio") != null
+      ? Boolean.TRUE.equals(call.getBoolean("disableAudio"))
+      : this.lastDisableAudio;
+    String permissionAlias = disableAudio
+      ? CAMERA_ONLY_PERMISSION_ALIAS
+      : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
+
+    if (PermissionState.GRANTED.equals(getPermissionState(permissionAlias))) {
+      try {
+        cameraXView.startRecordVideo();
+        call.resolve();
+      } catch (Exception e) {
+        call.reject("Failed to start video recording: " + e.getMessage());
+      }
+    } else {
+      requestPermissionForAlias(
+        permissionAlias,
+        call,
+        "handleVideoRecordingPermissionResult"
+      );
+    }
+  }
+
+  @PluginMethod
+  public void stopRecordVideo(PluginCall call) {
+    if (cameraXView == null || !cameraXView.isRunning()) {
+      call.reject("Camera is not running");
+      return;
+    }
+
+    try {
+      bridge.saveCall(call);
+      final String cbId = call.getCallbackId();
+      cameraXView.stopRecordVideo(
+        new CameraXView.VideoRecordingCallback() {
+          @Override
+          public void onSuccess(String filePath) {
+            PluginCall saved = bridge.getSavedCall(cbId);
+            if (saved != null) {
+              JSObject result = new JSObject();
+              result.put("videoFilePath", filePath);
+              saved.resolve(result);
+              bridge.releaseCall(saved);
+            }
+          }
+
+          @Override
+          public void onError(String message) {
+            PluginCall saved = bridge.getSavedCall(cbId);
+            if (saved != null) {
+              saved.reject("Failed to stop video recording: " + message);
+              bridge.releaseCall(saved);
+            }
+          }
+        }
+      );
+    } catch (Exception e) {
+      call.reject("Failed to stop video recording: " + e.getMessage());
+    }
+  }
+
+  @PermissionCallback
+  private void handleVideoRecordingPermissionResult(PluginCall call) {
+    // Use the persisted session value to determine which permission we requested
+    String permissionAlias = this.lastDisableAudio
+      ? CAMERA_ONLY_PERMISSION_ALIAS
+      : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
+
+    // Check if either permission is granted (mirroring handleCameraPermissionResult)
+    if (
+      PermissionState.GRANTED.equals(
+        getPermissionState(CAMERA_ONLY_PERMISSION_ALIAS)
+      ) ||
+      PermissionState.GRANTED.equals(
+        getPermissionState(CAMERA_WITH_AUDIO_PERMISSION_ALIAS)
+      )
+    ) {
+      try {
+        cameraXView.startRecordVideo();
+        call.resolve();
+      } catch (Exception e) {
+        call.reject("Failed to start video recording: " + e.getMessage());
+      }
+    } else {
+      call.reject("Permission denied for video recording");
     }
   }
 
