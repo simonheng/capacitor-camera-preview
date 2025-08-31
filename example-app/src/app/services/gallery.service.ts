@@ -59,18 +59,15 @@ export class GalleryService {
         videoPath.startsWith('content://')
       ) {
         try {
-          // Convert file path to base64 for web usage
-          const base64 = await this.#cameraViewService.getBase64FromFilePath(videoPath);
-          if (base64) {
-            src = `data:video/mp4;base64,${base64}`;
-            // Only delete the file if we successfully converted it
-            await this.#cameraViewService.deleteFile(videoPath);
-          } else {
-            console.error('Failed to convert video to base64');
+          // Prefer streaming via Capacitor file URL to avoid base64 blow-ups
+          src = Capacitor.convertFileSrc(videoPath);
+          if (!src) {
+            console.error('Failed to convert video path to a file URL');
             return;
           }
+          // Intentionally keep the file; do not delete here.
         } catch (error) {
-          console.error('Error processing video file:', error);
+          console.error('Error processing video path:', error);
           return;
         }
       } else if (videoPath.startsWith('data:video/mp4;base64,')) {
