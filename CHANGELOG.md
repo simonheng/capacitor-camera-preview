@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.8.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.7.0...7.8.0) (2025-08-31)
+
+
+### Features
+
+* **example-app:** support video ([a142a98](https://github.com/Cap-go/capacitor-camera-preview/commit/a142a98342a3f1144fd6cc997f646d3b63abf356))
+* implement record video on Android ([800236d](https://github.com/Cap-go/capacitor-camera-preview/commit/800236d6441f936f7b6a595b0a40c095f6086094))
+
+
+### Bug Fixes
+
+* bind VideoCapture with rotation and quality fallback to reduce device failures ([791aa9b](https://github.com/Cap-go/capacitor-camera-preview/commit/791aa9b8c46904af3339009d01cb6a9524bcc79b))
+* bind VideoCapture with rotation and quality fallback to reduce device failures ([fcb39b2](https://github.com/Cap-go/capacitor-camera-preview/commit/fcb39b2979cc9bd93d8e79951a6f450d418a50b4))
+
 ## [7.7.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.1...7.7.0) (2025-08-29)
 
 
