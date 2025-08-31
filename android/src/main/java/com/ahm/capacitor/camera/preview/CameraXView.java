@@ -750,7 +750,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         );
         Recorder recorder = new Recorder.Builder()
           .setQualitySelector(qualitySelector)
-          .setTargetRotation(rotation)
           .build();
         videoCapture = VideoCapture.withOutput(recorder);
 

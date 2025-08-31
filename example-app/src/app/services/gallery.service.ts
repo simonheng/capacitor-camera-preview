@@ -1,14 +1,28 @@
-import { Injectable, Signal, signal, inject } from '@angular/core';
+import { Injectable, computed, signal, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorCameraViewService } from '../core/capacitor-camera-preview.service';
+
+export interface MediaItem {
+  src: string;
+  type: 'photo' | 'video';
+  timestamp: number;
+}
 
 @Injectable({
   providedIn: 'root',
 })
 export class GalleryService {
-  readonly #photos = signal<Array<string>>([]);
+  readonly #mediaItems = signal<Array<MediaItem>>([]);
   readonly #cameraViewService = inject(CapacitorCameraViewService);
-  public photos = this.#photos.asReadonly();
+  public mediaItems = this.#mediaItems.asReadonly();
+
+  public readonly photos = computed(() =>
+    this.#mediaItems().filter(item => item.type === 'photo')
+  );
+
+  public readonly videos = computed(() =>
+    this.#mediaItems().filter(item => item.type === 'video')
+  );
 
   public async addPhoto(photo: string) {
     let src = photo;
@@ -29,6 +43,68 @@ export class GalleryService {
       src = `data:image/jpeg;base64,${photo}`;
     }
 
-    this.#photos.update((curr) => [...curr, src]);
+    this.#mediaItems.update((curr) => [...curr, {
+      src,
+      type: 'photo',
+      timestamp: Date.now()
+    }]);
+  }
+
+  public async addVideo(videoPath: string, videoData?: string) {
+    let src = videoData;
+    if (!src) {
+      if (
+        videoPath.startsWith('/data/') ||
+        videoPath.startsWith('file://') ||
+        videoPath.startsWith('content://')
+      ) {
+        try {
+          // Convert file path to base64 for web usage
+          const base64 = await this.#cameraViewService.getBase64FromFilePath(videoPath);
+          if (base64) {
+            src = `data:video/mp4;base64,${base64}`;
+            // Only delete the file if we successfully converted it
+            await this.#cameraViewService.deleteFile(videoPath);
+          } else {
+            console.error('Failed to convert video to base64');
+            return;
+          }
+        } catch (error) {
+          console.error('Error processing video file:', error);
+          return;
+        }
+      } else if (videoPath.startsWith('data:video/mp4;base64,')) {
+        // Already a data URL
+        src = videoPath;
+      } else {
+        // assume base64 payload
+        src = `data:video/mp4;base64,${videoPath}`;
+      }
+    } else if (videoData && !videoData.startsWith('data:video/mp4;base64,')) {
+      // Add data URL prefix if not present
+      src = `data:video/mp4;base64,${videoData}`;
+    }
+
+    if (!src) {
+      console.error('No valid video source available');
+      return;
+    }
+
+    // Validate base64 data
+    try {
+      const base64Data = src.split('base64,')[1];
+      if (!base64Data || base64Data.length === 0) {
+        console.error('Invalid base64 data');
+        return;
+      }
+
+      this.#mediaItems.update((curr) => [...curr, {
+        src,
+        type: 'video',
+        timestamp: Date.now()
+      }]);
+    } catch (error) {
+      console.error('Error validating video data:', error);
+    }
   }
 }

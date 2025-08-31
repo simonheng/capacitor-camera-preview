@@ -80,6 +80,7 @@ public class CameraPreview
   private Location lastLocation;
   private OrientationEventListener orientationListener;
   private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
+  private boolean lastDisableAudio = true;
 
   @PluginMethod
   public void getExposureModes(PluginCall call) {
@@ -689,6 +690,7 @@ public class CameraPreview
     final boolean disableAudio = Boolean.TRUE.equals(
       call.getBoolean("disableAudio", true)
     );
+    this.lastDisableAudio = disableAudio;
     final String aspectRatio = call.getString("aspectRatio", "4:3");
     final String gridMode = call.getString("gridMode", "none");
     final String positioning = call.getString("positioning", "top");
@@ -1773,9 +1775,9 @@ public class CameraPreview
       return;
     }
 
-    boolean disableAudio = Boolean.TRUE.equals(
-      call.getBoolean("disableAudio", true)
-    );
+    boolean disableAudio = call.getBoolean("disableAudio") != null
+      ? Boolean.TRUE.equals(call.getBoolean("disableAudio"))
+      : this.lastDisableAudio;
     String permissionAlias = disableAudio
       ? CAMERA_ONLY_PERMISSION_ALIAS
       : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
@@ -1836,14 +1838,20 @@ public class CameraPreview
 
   @PermissionCallback
   private void handleVideoRecordingPermissionResult(PluginCall call) {
-    boolean disableAudio = Boolean.TRUE.equals(
-      call.getBoolean("disableAudio", true)
-    );
-    String permissionAlias = disableAudio
+    // Use the persisted session value to determine which permission we requested
+    String permissionAlias = this.lastDisableAudio
       ? CAMERA_ONLY_PERMISSION_ALIAS
       : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
 
-    if (PermissionState.GRANTED.equals(getPermissionState(permissionAlias))) {
+    // Check if either permission is granted (mirroring handleCameraPermissionResult)
+    if (
+      PermissionState.GRANTED.equals(
+        getPermissionState(CAMERA_ONLY_PERMISSION_ALIAS)
+      ) ||
+      PermissionState.GRANTED.equals(
+        getPermissionState(CAMERA_WITH_AUDIO_PERMISSION_ALIAS)
+      )
+    ) {
       try {
         cameraXView.startRecordVideo();
         call.resolve();

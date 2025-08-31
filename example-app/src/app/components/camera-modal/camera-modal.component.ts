@@ -9,6 +9,7 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
+import { GalleryService } from '../../services/gallery.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { StatusBar } from '@capacitor/status-bar';
@@ -66,6 +67,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   readonly #cameraViewService = inject(CapacitorCameraViewService);
   readonly #elementRef = inject(ElementRef);
   readonly #modalController = inject(ModalController);
+  readonly #galleryService = inject(GalleryService);
 
   // Basic camera inputs
   public readonly deviceId = input<string>();
@@ -497,6 +499,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         captureOptions,
       );
 
+      // Add to gallery first
+      await this.#galleryService.addPhoto(value);
+
+      // Then dismiss the modal
       await this.#modalController.dismiss({
         photo: value,
         exif: exif,
@@ -522,6 +528,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       const quality = this.pictureQuality();
       const photo = await this.#cameraViewService.captureSample(quality);
 
+      // Add to gallery first
+      await this.#galleryService.addPhoto(photo);
+
+      // Then dismiss the modal
       await this.#modalController.dismiss({
         photo,
         options: { quality },
@@ -784,11 +794,36 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async startRecording(): Promise<void> {
     try {
+      // Stop and restart camera with video mode enabled
+      await this.stop();
+
+      const startOptions: CameraPreviewOptions = {
+        parent: 'cameraView',
+        deviceId: this.deviceId(),
+        position: this.position(),
+        positioning: 'center',
+        enableZoom: this.enableZoom(),
+        disableAudio: this.disableAudio(),
+        lockAndroidOrientation: this.lockAndroidOrientation(),
+        toBack: true,
+        gridMode: this.gridMode(),
+        storeToFile: true,
+        enableVideoMode: true, // Enable video mode
+        disableFocusIndicator: false,
+      };
+
+      // Start camera in video mode
+      await this.#cameraViewService.start(startOptions);
+
+      // Start recording
       await this.#cameraViewService.startRecordVideo({
         position: this.position(),
         deviceId: this.currentDeviceId(),
         disableAudio: this.disableAudio(),
+        storeToFile: true,
+        enableVideoMode: true,
       });
+
       this.isRecording.set(true);
       if (this.showTestResults()) {
         const results = this.testResults() + `\n✓ Video recording started`;
@@ -805,14 +840,55 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async stopRecording(): Promise<void> {
+    if (!this.isRecording()) {
+      return; // Don't do anything if we're not recording
+    }
+
     try {
+      // Stop recording first
       const result = await this.#cameraViewService.stopRecordVideo();
+
+      // Update UI state after successful stop
       this.isRecording.set(false);
-      this.#modalController.dismiss({
-        video: result.videoFilePath,
-        type: 'video',
-      });
+
+      // Wait a moment for the file to be properly saved
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Read the video file as base64
+      try {
+        const videoData = await this.#cameraViewService.readVideoFile(result.videoFilePath);
+
+        // Add to gallery
+        await this.#galleryService.addVideo(result.videoFilePath, videoData);
+
+        // Stop the camera preview
+        await this.stop();
+
+        // Dismiss the modal
+        await this.#modalController.dismiss({
+          video: result.videoFilePath,
+          videoData: videoData,
+          type: 'video',
+        });
+      } catch (readError) {
+        console.error('Failed to read video file:', readError);
+
+        // Still try to add to gallery with just the file path
+        await this.#galleryService.addVideo(result.videoFilePath);
+
+        // Stop the camera preview
+        await this.stop();
+
+        // If reading fails, still return the file path
+        await this.#modalController.dismiss({
+          video: result.videoFilePath,
+          type: 'video',
+        });
+      }
     } catch (error) {
+      // Reset recording state if stop failed
+      this.isRecording.set(true);
+
       if (this.showTestResults()) {
         const results =
           this.testResults() + `\n✗ Failed to stop recording: ${error}`;
