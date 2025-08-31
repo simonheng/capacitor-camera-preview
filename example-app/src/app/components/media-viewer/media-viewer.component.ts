@@ -1,4 +1,4 @@
-import { Component, inject, input } from '@angular/core';
+import { Component, inject, input, ElementRef } from '@angular/core';
 import { IonContent, IonHeader, IonToolbar, IonButtons, IonButton, IonIcon, GestureController } from '@ionic/angular/standalone';
 import { ModalController } from '@ionic/angular/standalone';
 import { MediaItem } from '../../services/gallery.service';
@@ -22,6 +22,7 @@ export class MediaViewerComponent {
   public readonly item = input.required<MediaItem>();
   protected readonly modalCtrl = inject(ModalController);
   protected readonly gestureCtrl = inject(GestureController);
+  protected readonly el = inject(ElementRef);
   #swipeGesture?: Gesture;
 
   ngAfterViewInit() {
@@ -38,7 +39,7 @@ export class MediaViewerComponent {
   }
 
   private setupSwipeGesture() {
-    const content = document.querySelector('ion-content');
+    const content = this.el.nativeElement.querySelector('ion-content') as HTMLElement | null;
     if (!content) return;
 
     this.#swipeGesture = this.gestureCtrl.create({
@@ -74,7 +75,7 @@ export class MediaViewerComponent {
   }
 
   private setupBackdropClick() {
-    const container = document.querySelector('.media-container');
+    const container = this.el.nativeElement.querySelector('.media-container') as HTMLElement | null;
     if (!container) return;
 
     container.addEventListener('click', (event) => {
