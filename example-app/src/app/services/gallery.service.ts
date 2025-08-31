@@ -59,18 +59,15 @@ export class GalleryService {
         videoPath.startsWith('content://')
       ) {
         try {
-          // Convert file path to base64 for web usage
-          const base64 = await this.#cameraViewService.getBase64FromFilePath(videoPath);
-          if (base64) {
-            src = `data:video/mp4;base64,${base64}`;
-            // Only delete the file if we successfully converted it
-            await this.#cameraViewService.deleteFile(videoPath);
-          } else {
-            console.error('Failed to convert video to base64');
+          // Prefer streaming via Capacitor file URL to avoid base64 blow-ups
+          src = Capacitor.convertFileSrc(videoPath);
+          if (!src) {
+            console.error('Failed to convert video path to a file URL');
             return;
           }
+          // Intentionally keep the file; do not delete here.
         } catch (error) {
-          console.error('Error processing video file:', error);
+          console.error('Error processing video path:', error);
           return;
         }
       } else if (videoPath.startsWith('data:video/mp4;base64,')) {
@@ -90,21 +87,24 @@ export class GalleryService {
       return;
     }
 
-    // Validate base64 data
-    try {
-      const base64Data = src.split('base64,')[1];
-      if (!base64Data || base64Data.length === 0) {
-        console.error('Invalid base64 data');
+    // Validate only if base64 data URL; otherwise accept file/https URLs
+    if (src.startsWith('data:video/')) {
+      try {
+        const base64Data = src.split('base64,')[1];
+        if (!base64Data || base64Data.length === 0) {
+          console.error('Invalid base64 data');
+          return;
+        }
+      } catch (error) {
+        console.error('Error validating video data:', error);
         return;
       }
-
-      this.#mediaItems.update((curr) => [...curr, {
-        src,
-        type: 'video',
-        timestamp: Date.now()
-      }]);
-    } catch (error) {
-      console.error('Error validating video data:', error);
     }
+
+    this.#mediaItems.update((curr) => [...curr, {
+      src,
+      type: 'video',
+      timestamp: Date.now()
+    }]);
   }
 }
