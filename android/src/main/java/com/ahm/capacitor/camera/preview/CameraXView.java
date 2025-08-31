@@ -3727,67 +3727,18 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     }
   }
 
-  public void startRecordVideo() throws Exception {
-    if (videoCapture == null) {
-      throw new Exception("VideoCapture is not initialized");
-    }
-
-    if (currentRecording != null) {
-      throw new Exception("Video recording is already in progress");
-    }
-
     // Create output file
-    String fileName = "video_" + System.currentTimeMillis() + ".mp4";
-    File outputDir = new File(
-      context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),
-      "CameraPreview"
-    );
-    if (!outputDir.exists()) {
-      outputDir.mkdirs();
+    String fileName = "VID_" + System.currentTimeMillis() + ".mp4";
+    File base = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+    if (base == null) {
+      // Fallback if external storage is unavailable
+      base = context.getFilesDir();
+    }
+    File outputDir = new File(base, "CameraPreview");
+    if (!outputDir.exists() && !outputDir.mkdirs()) {
+      throw new Exception("Failed to create video output directory: " + outputDir);
     }
     currentVideoFile = new File(outputDir, fileName);
-
-    FileOutputOptions outputOptions = new FileOutputOptions.Builder(
-      currentVideoFile
-    ).build();
-
-    // Create recording event listener
-    androidx.core.util.Consumer<VideoRecordEvent> videoRecordEventListener =
-      videoRecordEvent -> {
-        if (videoRecordEvent instanceof VideoRecordEvent.Start) {
-          Log.d(TAG, "Video recording started");
-        } else if (videoRecordEvent instanceof VideoRecordEvent.Finalize) {
-          VideoRecordEvent.Finalize finalizeEvent =
-            (VideoRecordEvent.Finalize) videoRecordEvent;
-          handleRecordingFinalized(finalizeEvent);
-        }
-      };
-
-    // Start recording
-    if (sessionConfig != null && !sessionConfig.isDisableAudio()) {
-      currentRecording = videoCapture
-        .getOutput()
-        .prepareRecording(context, outputOptions)
-        .withAudioEnabled()
-        .start(
-          ContextCompat.getMainExecutor(context),
-          videoRecordEventListener
-        );
-    } else {
-      currentRecording = videoCapture
-        .getOutput()
-        .prepareRecording(context, outputOptions)
-        .start(
-          ContextCompat.getMainExecutor(context),
-          videoRecordEventListener
-        );
-    }
-
-    Log.d(
-      TAG,
-      "Video recording started to: " + currentVideoFile.getAbsolutePath()
-    );
-  }
 
   public void stopRecordVideo(VideoRecordingCallback callback) {
     if (currentRecording == null) {
