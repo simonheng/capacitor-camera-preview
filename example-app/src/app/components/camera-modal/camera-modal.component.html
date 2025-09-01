@@ -239,7 +239,7 @@
 
   @if (cameraStarted()) {
     <!-- Video Recording Controls -->
-    <!-- <ion-fab
+    <ion-fab
       class="video-controls"
       slot="fixed"
       horizontal="start"
@@ -254,7 +254,7 @@
           <ion-icon name="stop"></ion-icon>
         </ion-fab-button>
       }
-    </ion-fab> -->
+    </ion-fab>
 
     <ion-fab
       class="camera-trigger"
@@ -309,4 +309,37 @@
       <span>{{ isHalfSize() ? "Extend" : "Small" }}</span>
     </ion-fab-button>
   </ion-fab>
+
+  <!-- Exposure EV Controls Outside Preview Bounds -->
+<ion-fab
+  class="ev-controls"
+  slot="fixed"
+  horizontal="end"
+  vertical="bottom"
+>
+    <!-- Exposure Mode Toggle -->
+    <ion-fab-button (click)="cycleExposureMode()" size="small" aria-label="Cycle exposure mode">
+      <div style="line-height: 0.5; margin-top: -5px; text-align:center">
+        <ion-icon name="sunny-outline" size="small"></ion-icon><br />
+        <span style="font-size: 0.6rem">{{ exposureMode() }}</span>
+      </div>
+    </ion-fab-button>
+    <!-- Decrease / Increase EV -->
+    <ion-fab-button
+      (click)="decreaseEV()"
+      size="small"
+      [disabled]="currentEV() <= exposureMin"
+      aria-label="Decrease exposure"
+    >
+      <ion-icon name="remove"></ion-icon>
+    </ion-fab-button>
+    <ion-fab-button
+      (click)="increaseEV()"
+      size="small"
+      [disabled]="currentEV() >= exposureMax"
+      aria-label="Increase exposure"
+    >
+      <ion-icon name="add"></ion-icon>
+    </ion-fab-button>
+</ion-fab>
 </div>

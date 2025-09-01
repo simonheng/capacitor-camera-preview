@@ -95,6 +95,53 @@ await CameraPreview.deleteFile({ path: filePath })
 ```
 
 
+## Exposure controls (iOS & Android)
+
+This plugin exposes camera exposure controls on iOS and Android:
+
+- Exposure modes: `"AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM"`
+- Exposure compensation (EV bias): get range `{ min, max, step }`, read current value, and set new value
+
+Platform notes:
+
+- iOS: The camera starts in `CONTINUOUS` by default. Switching to `AUTO` or `CONTINUOUS` resets EV to 0. The `step` value is approximated to 0.1 since iOS does not expose the bias step.
+- Android: AE lock/unlock and mode are handled via CameraX + Camera2 interop. The `step` value comes from CameraX `ExposureState` and may vary per device.
+
+Example (TypeScript):
+
+```ts
+import { CameraPreview } from '@capgo/camera-preview';
+
+// Query supported modes
+const { modes } = await CameraPreview.getExposureModes();
+console.log('Supported exposure modes:', modes);
+
+// Get current mode
+const { mode } = await CameraPreview.getExposureMode();
+console.log('Current exposure mode:', mode);
+
+// Set mode (AUTO | LOCK | CONTINUOUS | CUSTOM)
+await CameraPreview.setExposureMode({ mode: 'CONTINUOUS' });
+
+// Get EV range (with step)
+const { min, max, step } = await CameraPreview.getExposureCompensationRange();
+console.log('EV range:', { min, max, step });
+
+// Read current EV
+const { value: currentEV } = await CameraPreview.getExposureCompensation();
+console.log('Current EV:', currentEV);
+
+// Increment EV by one step and clamp to range
+const nextEV = Math.max(min, Math.min(max, currentEV + step));
+await CameraPreview.setExposureCompensation({ value: nextEV });
+```
+
+Example app (Ionic):
+
+- Exposure mode toggle (sun icon) cycles through modes.
+- EV controls (+/−) are placed in a top‑right floating action bar, outside the preview area.
+
+
 # Installation
 
 ```
@@ -267,6 +314,12 @@ Documentation for the [uploader](https://github.com/Cap-go/capacitor-uploader)
 * [`deleteFile(...)`](#deletefile)
 * [`getSafeAreaInsets()`](#getsafeareainsets)
 * [`getOrientation()`](#getorientation)
+* [`getExposureModes()`](#getexposuremodes)
+* [`getExposureMode()`](#getexposuremode)
+* [`setExposureMode(...)`](#setexposuremode)
+* [`getExposureCompensationRange()`](#getexposurecompensationrange)
+* [`getExposureCompensation()`](#getexposurecompensation)
+* [`setExposureCompensation(...)`](#setexposurecompensation)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 * [Enums](#enums)
@@ -533,9 +586,9 @@ startRecordVideo(options: CameraPreviewOptions) => Promise<void>
 
 Starts recording a video.
 
-| Param         | Type                                                                  | Description                        |
-| ------------- | --------------------------------------------------------------------- | ---------------------------------- |
-| **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | - The options for video recording. |
+| Param         | Type                                                                  | Description                                  |
+| ------------- | --------------------------------------------------------------------- | -------------------------------------------- |
+| **`options`** | <code><a href="#camerapreviewoptions">CameraPreviewOptions</a></code> | - The options for video recording. Only iOS. |
 
 **Since:** 0.0.1
 
@@ -828,6 +881,89 @@ Gets the current device orientation in a cross-platform format.
 --------------------
 
 
+### getExposureModes()
+
+```typescript
+getExposureModes() => Promise<{ modes: ExposureMode[]; }>
+```
+
+Returns the exposure modes supported by the active camera.
+Modes can include: 'locked', 'auto', 'continuous', 'custom'.
+
+**Returns:** <code>Promise&lt;{ modes: ExposureMode[]; }&gt;</code>
+
+--------------------
+
+
+### getExposureMode()
+
+```typescript
+getExposureMode() => Promise<{ mode: ExposureMode; }>
+```
+
+Returns the current exposure mode.
+
+**Returns:** <code>Promise&lt;{ mode: <a href="#exposuremode">ExposureMode</a>; }&gt;</code>
+
+--------------------
+
+
+### setExposureMode(...)
+
+```typescript
+setExposureMode(options: { mode: ExposureMode; }) => Promise<void>
+```
+
+Sets the exposure mode.
+
+| Param         | Type                                                             |
+| ------------- | ---------------------------------------------------------------- |
+| **`options`** | <code>{ mode: <a href="#exposuremode">ExposureMode</a>; }</code> |
+
+--------------------
+
+
+### getExposureCompensationRange()
+
+```typescript
+getExposureCompensationRange() => Promise<{ min: number; max: number; step: number; }>
+```
+
+Returns the exposure compensation (EV bias) supported range.
+
+**Returns:** <code>Promise&lt;{ min: number; max: number; step: number; }&gt;</code>
+
+--------------------
+
+
+### getExposureCompensation()
+
+```typescript
+getExposureCompensation() => Promise<{ value: number; }>
+```
+
+Returns the current exposure compensation (EV bias).
+
+**Returns:** <code>Promise&lt;{ value: number; }&gt;</code>
+
+--------------------
+
+
+### setExposureCompensation(...)
+
+```typescript
+setExposureCompensation(options: { value: number; }) => Promise<void>
+```
+
+Sets the exposure compensation (EV bias). Value will be clamped to range.
+
+| Param         | Type                            |
+| ------------- | ------------------------------- |
+| **`options`** | <code>{ value: number; }</code> |
+
+--------------------
+
+
 ### Interfaces
 
 
@@ -1021,6 +1157,13 @@ The available flash modes for the camera.
 Canonical device orientation values across platforms.
 
 <code>"portrait" | "landscape" | "landscape-left" | "landscape-right" | "portrait-upside-down" | "unknown"</code>
+
+
+#### ExposureMode
+
+Reusable exposure mode type for cross-platform support.
+
+<code>"AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM"</code>
 
 
 ### Enums

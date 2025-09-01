@@ -9,6 +9,7 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
+import { GalleryService } from '../../services/gallery.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { StatusBar } from '@capacitor/status-bar';
@@ -66,6 +67,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   readonly #cameraViewService = inject(CapacitorCameraViewService);
   readonly #elementRef = inject(ElementRef);
   readonly #modalController = inject(ModalController);
+  readonly #galleryService = inject(GalleryService);
 
   // Basic camera inputs
   public readonly deviceId = input<string>();
@@ -118,6 +120,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   protected readonly currentOpacity = signal(100);
   protected readonly testResults = signal<string>('');
   protected readonly showTestResults = signal(false);
+  // Exposure state
+  protected readonly exposureMode = signal<'AUTO' | 'LOCK' | 'CONTINUOUS' | 'CUSTOM'>('CONTINUOUS');
+  protected exposureMin = 0;
+  protected exposureMax = 0;
+  protected exposureStep = 0.1;
+  protected currentEV = signal<number>(0);
 
   // Camera switching functionality
   protected readonly availableCameras = signal<CameraDevice[]>([]);
@@ -350,6 +358,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         this.#updateRunningStatus(),
         this.#updateCurrentDeviceId(),
         this.#initializeCurrentPreviewSize(),
+        this.#initializeExposureControls(),
       ]);
 
       this.currentZoomFactor.set(this.initialZoomFactor());
@@ -364,6 +373,84 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         error: error instanceof Error ? error.message : String(error),
         type: 'error',
       });
+    }
+  }
+
+  async #initializeExposureControls(): Promise<void> {
+    const [modeR, rangeR, valueR] = await Promise.allSettled([
+      this.#cameraViewService.getExposureMode(),
+      this.#cameraViewService.getExposureCompensationRange(),
+      this.#cameraViewService.getExposureCompensation(),
+    ]);
+
+    if (modeR.status === 'fulfilled') {
+      this.exposureMode.set(modeR.value);
+    }
+
+    if (rangeR.status === 'fulfilled') {
+      const min = Math.min(rangeR.value.min, rangeR.value.max);
+      const max = Math.max(rangeR.value.min, rangeR.value.max);
+      this.exposureMin = min;
+      this.exposureMax = max;
+      this.exposureStep = rangeR.value.step && rangeR.value.step > 0
+        ? rangeR.value.step
+        : 0.1;
+    }
+
+    if (valueR.status === 'fulfilled') {
+      const ev = Math.max(
+        this.exposureMin,
+        Math.min(this.exposureMax, valueR.value)
+      );
+      this.currentEV.set(ev);
+    }
+  }
+
+  protected async cycleExposureMode(): Promise<void> {
+    try {
+      const modes = await this.#cameraViewService.getExposureModes();
+      if (!modes || modes.length === 0) return;
+      const idx = Math.max(0, modes.indexOf(this.exposureMode()));
+      const next = modes[(idx + 1) % modes.length]!;
+      await this.#cameraViewService.setExposureMode(next);
+      this.exposureMode.set(next);
+      // Refresh EV and range after mode change (platform may reset EV)
+      const range = await this.#cameraViewService.getExposureCompensationRange();
+      this.exposureMin = Math.min(range.min, range.max);
+      this.exposureMax = Math.max(range.min, range.max);
+      this.exposureStep = range.step && range.step > 0 ? range.step : this.exposureStep;
+      const ev = await this.#cameraViewService.getExposureCompensation();
+      this.currentEV.set(ev);
+    } catch (e) {
+      console.warn('Failed to set exposure mode', e);
+    }
+  }
+
+  protected async increaseEV(): Promise<void> {
+    try {
+      if (this.exposureMode() === 'LOCK' || this.exposureMode() === 'CUSTOM') return;
+      const raw = Math.min(this.currentEV() + this.exposureStep, this.exposureMax);
+      const step = this.exposureStep || 0.1;
+      const snapped = Math.max(this.exposureMin,
+        Math.min(this.exposureMax, Math.round(raw / step) * step));
+      await this.#cameraViewService.setExposureCompensation(snapped);
+      this.currentEV.set(Number(snapped.toFixed(3)));
+    } catch (e) {
+      console.warn('Failed to increase EV', e);
+    }
+  }
+
+  protected async decreaseEV(): Promise<void> {
+    try {
+      if (this.exposureMode() === 'LOCK' || this.exposureMode() === 'CUSTOM') return;
+      const raw = Math.max(this.currentEV() - this.exposureStep, this.exposureMin);
+      const step = this.exposureStep || 0.1;
+      const snapped = Math.max(this.exposureMin,
+        Math.min(this.exposureMax, Math.round(raw / step) * step));
+      await this.#cameraViewService.setExposureCompensation(snapped);
+      this.currentEV.set(Number(snapped.toFixed(3)));
+    } catch (e) {
+      console.warn('Failed to decrease EV', e);
     }
   }
 
@@ -412,6 +499,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         captureOptions,
       );
 
+      // Add to gallery first
+      await this.#galleryService.addPhoto(value);
+
+      // Then dismiss the modal
       await this.#modalController.dismiss({
         photo: value,
         exif: exif,
@@ -437,6 +528,10 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       const quality = this.pictureQuality();
       const photo = await this.#cameraViewService.captureSample(quality);
 
+      // Add to gallery first
+      await this.#galleryService.addPhoto(photo);
+
+      // Then dismiss the modal
       await this.#modalController.dismiss({
         photo,
         options: { quality },
@@ -699,11 +794,36 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async startRecording(): Promise<void> {
     try {
+      // Stop and restart camera with video mode enabled
+      await this.stop();
+
+      const startOptions: CameraPreviewOptions = {
+        parent: 'cameraView',
+        deviceId: this.deviceId(),
+        position: this.position(),
+        positioning: 'center',
+        enableZoom: this.enableZoom(),
+        disableAudio: this.disableAudio(),
+        lockAndroidOrientation: this.lockAndroidOrientation(),
+        toBack: true,
+        gridMode: this.gridMode(),
+        storeToFile: true,
+        enableVideoMode: true, // Enable video mode
+        disableFocusIndicator: false,
+      };
+
+      // Start camera in video mode
+      await this.#cameraViewService.start(startOptions);
+
+      // Start recording
       await this.#cameraViewService.startRecordVideo({
         position: this.position(),
         deviceId: this.currentDeviceId(),
         disableAudio: this.disableAudio(),
+        storeToFile: true,
+        enableVideoMode: true,
       });
+
       this.isRecording.set(true);
       if (this.showTestResults()) {
         const results = this.testResults() + `\n✓ Video recording started`;
@@ -720,14 +840,55 @@ export class CameraModalComponent implements OnInit, OnDestroy {
   }
 
   protected async stopRecording(): Promise<void> {
+    if (!this.isRecording()) {
+      return; // Don't do anything if we're not recording
+    }
+
     try {
+      // Stop recording first
       const result = await this.#cameraViewService.stopRecordVideo();
+
+      // Update UI state after successful stop
       this.isRecording.set(false);
-      this.#modalController.dismiss({
-        video: result.videoFilePath,
-        type: 'video',
-      });
+
+      // Wait a moment for the file to be properly saved
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Read the video file as base64
+      try {
+        const videoData = await this.#cameraViewService.readVideoFile(result.videoFilePath);
+
+        // Add to gallery
+        await this.#galleryService.addVideo(result.videoFilePath, videoData);
+
+        // Stop the camera preview
+        await this.stop();
+
+        // Dismiss the modal
+        await this.#modalController.dismiss({
+          video: result.videoFilePath,
+          videoData: videoData,
+          type: 'video',
+        });
+      } catch (readError) {
+        console.error('Failed to read video file:', readError);
+
+        // Still try to add to gallery with just the file path
+        await this.#galleryService.addVideo(result.videoFilePath);
+
+        // Stop the camera preview
+        await this.stop();
+
+        // If reading fails, still return the file path
+        await this.#modalController.dismiss({
+          video: result.videoFilePath,
+          type: 'video',
+        });
+      }
     } catch (error) {
+      // Reset recording state if stop failed
+      this.isRecording.set(true);
+
       if (this.showTestResults()) {
         const results =
           this.testResults() + `\n✗ Failed to stop recording: ${error}`;

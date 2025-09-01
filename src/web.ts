@@ -10,6 +10,7 @@ import type {
   CameraSampleOptions,
   DeviceOrientation,
   GridMode,
+  ExposureMode,
   FlashMode,
   LensInfo,
   SafeAreaInsets,
@@ -1199,6 +1200,41 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         "Focus control is not supported on this device. Focus coordinates were provided but cannot be applied.",
       );
     }
+  }
+
+  // Exposure stubs (unsupported on web)
+  async getExposureModes(): Promise<{ modes: ExposureMode[] }> {
+    throw new Error("getExposureModes not supported under the web platform");
+  }
+
+  async getExposureMode(): Promise<{ mode: ExposureMode }> {
+    throw new Error("getExposureMode not supported under the web platform");
+  }
+
+  async setExposureMode(_options: { mode: ExposureMode }): Promise<void> {
+    throw new Error("setExposureMode not supported under the web platform");
+  }
+
+  async getExposureCompensationRange(): Promise<{
+    min: number;
+    max: number;
+    step: number;
+  }> {
+    throw new Error(
+      "getExposureCompensationRange not supported under the web platform",
+    );
+  }
+
+  async getExposureCompensation(): Promise<{ value: number }> {
+    throw new Error(
+      "getExposureCompensation not supported under the web platform",
+    );
+  }
+
+  async setExposureCompensation(_options: { value: number }): Promise<void> {
+    throw new Error(
+      "setExposureCompensation not supported under the web platform",
+    );
   }
 
   async deleteFile(_options: { path: string }): Promise<{ success: boolean }> {

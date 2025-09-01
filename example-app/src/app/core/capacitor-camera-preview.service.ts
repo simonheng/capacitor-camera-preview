@@ -9,6 +9,7 @@ import {
   LensInfo,
   CameraPreviewPlugin,
   GridMode,
+  ExposureMode,
   getBase64FromFilePath,
   deleteFile,
 } from '@capgo/camera-preview';
@@ -289,5 +290,42 @@ export class CapacitorCameraViewService {
 
   async deleteFile(filePath: string): Promise<boolean> {
     return deleteFile(filePath);
+  }
+
+  /**
+   * Read a video file and return its contents as base64
+   * @param filePath Path to the video file
+   * @returns Base64 encoded string of the video file
+   */
+  async readVideoFile(filePath: string): Promise<string> {
+    return this.getBase64FromFilePath(filePath);
+  }
+
+  // ===== Exposure controls =====
+  async getExposureModes(): Promise<ExposureMode[]> {
+    const { modes } = await this.#cameraView.getExposureModes();
+    return modes;
+  }
+
+  async getExposureMode(): Promise<ExposureMode> {
+    const { mode } = await this.#cameraView.getExposureMode();
+    return mode;
+  }
+
+  async setExposureMode(mode: ExposureMode): Promise<void> {
+    await this.#cameraView.setExposureMode({ mode });
+  }
+
+  async getExposureCompensationRange(): Promise<{ min: number; max: number; step: number }> {
+    return await this.#cameraView.getExposureCompensationRange();
+  }
+
+  async getExposureCompensation(): Promise<number> {
+    const { value } = await this.#cameraView.getExposureCompensation();
+    return value;
+  }
+
+  async setExposureCompensation(value: number): Promise<void> {
+    await this.#cameraView.setExposureCompensation({ value });
   }
 }

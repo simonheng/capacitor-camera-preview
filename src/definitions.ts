@@ -296,6 +296,9 @@ export interface CameraSampleOptions {
  */
 export type CameraPreviewFlashMode = "off" | "on" | "auto" | "torch";
 
+/** Reusable exposure mode type for cross-platform support. */
+export type ExposureMode = "AUTO" | "LOCK" | "CONTINUOUS" | "CUSTOM";
+
 /**
  * Defines the options for setting the camera preview's opacity.
  */
@@ -508,7 +511,7 @@ export interface CameraPreviewPlugin {
   /**
    * Starts recording a video.
    *
-   * @param {CameraPreviewOptions} options - The options for video recording.
+   * @param {CameraPreviewOptions} options - The options for video recording. Only iOS.
    * @returns {Promise<void>} A promise that resolves when video recording starts.
    * @since 0.0.1
    */
@@ -707,4 +710,45 @@ export interface CameraPreviewPlugin {
    * @platform android, ios
    */
   getOrientation(): Promise<{ orientation: DeviceOrientation }>;
+
+  /**
+   * Returns the exposure modes supported by the active camera.
+   * Modes can include: 'locked', 'auto', 'continuous', 'custom'.
+   * @platform android, ios
+   */
+  getExposureModes(): Promise<{ modes: ExposureMode[] }>;
+
+  /**
+   * Returns the current exposure mode.
+   * @platform android, ios
+   */
+  getExposureMode(): Promise<{ mode: ExposureMode }>;
+
+  /**
+   * Sets the exposure mode.
+   * @platform android, ios
+   */
+  setExposureMode(options: { mode: ExposureMode }): Promise<void>;
+
+  /**
+   * Returns the exposure compensation (EV bias) supported range.
+   * @platform ios
+   */
+  getExposureCompensationRange(): Promise<{
+    min: number;
+    max: number;
+    step: number;
+  }>;
+
+  /**
+   * Returns the current exposure compensation (EV bias).
+   * @platform ios
+   */
+  getExposureCompensation(): Promise<{ value: number }>;
+
+  /**
+   * Sets the exposure compensation (EV bias). Value will be clamped to range.
+   * @platform ios
+   */
+  setExposureCompensation(options: { value: number }): Promise<void>;
 }

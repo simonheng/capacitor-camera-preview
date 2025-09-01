@@ -2,33 +2,39 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
-## [7.6.1-alpha.3](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.1-alpha.2...7.6.1-alpha.3) (2025-08-28)
+## [7.8.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.7.0...7.8.0) (2025-08-31)
+
+
+### Features
+
+* **example-app:** support video ([a142a98](https://github.com/Cap-go/capacitor-camera-preview/commit/a142a98342a3f1144fd6cc997f646d3b63abf356))
+* implement record video on Android ([800236d](https://github.com/Cap-go/capacitor-camera-preview/commit/800236d6441f936f7b6a595b0a40c095f6086094))
 
 
 ### Bug Fixes
 
-* **ios:** save images with the right aspect ratio and orientation ([7dc59d8](https://github.com/Cap-go/capacitor-camera-preview/commit/7dc59d8e6fe34680765b3ec014631f5cf7381097))
+* bind VideoCapture with rotation and quality fallback to reduce device failures ([791aa9b](https://github.com/Cap-go/capacitor-camera-preview/commit/791aa9b8c46904af3339009d01cb6a9524bcc79b))
+* bind VideoCapture with rotation and quality fallback to reduce device failures ([fcb39b2](https://github.com/Cap-go/capacitor-camera-preview/commit/fcb39b2979cc9bd93d8e79951a6f450d418a50b4))
 
-## [7.6.1-alpha.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.1-alpha.1...7.6.1-alpha.2) (2025-08-27)
-
-
-### Bug Fixes
-
-* remove unused code ([20342b8](https://github.com/Cap-go/capacitor-camera-preview/commit/20342b8d95fdaec967575ec0c7ff5fec2b6e9b46))
-
-## [7.6.1-alpha.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.1-alpha.0...7.6.1-alpha.1) (2025-08-27)
+## [7.7.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.1...7.7.0) (2025-08-29)
 
 
-### Bug Fixes
+### Features
 
-* garbage code mistake ([5cb6c48](https://github.com/Cap-go/capacitor-camera-preview/commit/5cb6c4851dace306b07a4a2facf70ea580c973a1))
-
-## [7.6.1-alpha.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.0...7.6.1-alpha.0) (2025-08-27)
+* add exposure management ([46c52ee](https://github.com/Cap-go/capacitor-camera-preview/commit/46c52ee088d37f206c32127665014bb4c6f829ee))
+* **example-app:** add exposure support ([d5fb0df](https://github.com/Cap-go/capacitor-camera-preview/commit/d5fb0df8cce182295e10bf197e8732343c39156e))
 
 
 ### Bug Fixes
 
-* attempt to fix portrait camera preview on startup ([3f18844](https://github.com/Cap-go/capacitor-camera-preview/commit/3f1884435fe8f724ed5e3eab492f337466add9f7))
+* CI/CD for iOS ([b8f8f14](https://github.com/Cap-go/capacitor-camera-preview/commit/b8f8f14ac197885ea231796f1e0a69f833bff64b))
+
+## [7.6.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.0...7.6.1) (2025-08-29)
+
+
+### Bug Fixes
+
+* **ios:** fix startRecording method ([e3f318b](https://github.com/Cap-go/capacitor-camera-preview/commit/e3f318b9b11be2ca5f0be0e41fa7f789673f9e87))
 
 ## [7.6.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.5.0...7.6.0) (2025-08-26)
 
