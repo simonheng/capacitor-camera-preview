@@ -180,6 +180,7 @@ public class CameraPreview
     }
   }
 
+  @PluginMethod
   public void getOrientation(PluginCall call) {
     int orientation = getContext()
       .getResources()
