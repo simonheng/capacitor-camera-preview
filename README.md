@@ -7,13 +7,14 @@
   <h2><a href="https://capgo.app/consulting/?ref=plugin"> Missing a feature? We’ll build the plugin for you 💪</a></h2>
 </div>
 
+
+![NPM Version](https://img.shields.io/npm/v/%40capgo%2Fcamera-preview)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Cap-go/capacitor-camera-preview/.github%2Fworkflows%2Fbuild.yml)
+
 <p>
   Capacitor plugin that allows camera interaction from Javascript and HTML<br>(based on cordova-plugin-camera-preview).
 </p>
 <br>
-
-![NPM Version](https://img.shields.io/npm/v/%40capgo%2Fcamera-preview)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Cap-go/capacitor-camera-preview/.github%2Fworkflows%2Fbuild.yml)
 
 This plugin is compatible Capacitor 7 and above.
 
