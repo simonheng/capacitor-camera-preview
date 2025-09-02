@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.9.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.8.2...7.9.0) (2025-09-02)
+
+
+### Features
+
+* add badges to README ([797db3e](https://github.com/Cap-go/capacitor-camera-preview/commit/797db3e6508b1e1218a29c8b7813aeb812293b6b))
+
 ## [7.8.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.8.1...7.8.2) (2025-09-02)
 
 
