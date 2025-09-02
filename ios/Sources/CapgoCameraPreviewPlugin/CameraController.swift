@@ -714,7 +714,9 @@ extension CameraController {
             captureSession.commitConfiguration()
             // Restart the session if it was running before
             if wasRunning {
-                captureSession.startRunning()
+                DispatchQueue.global(qos: .userInitiated).async {
+                    captureSession.startRunning()
+                }
             }
         }
 
