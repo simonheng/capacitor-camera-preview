@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.10.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.10.0...7.10.1) (2025-09-02)
+
+
+### Bug Fixes
+
+* run capture session on a background thread to prevent thread issue ([084f85f](https://github.com/Cap-go/capacitor-camera-preview/commit/084f85f44a8323a08c8f02967611a79542914b59))
+
 ## [7.10.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.9.1...7.10.0) (2025-09-02)
 
 
