@@ -695,29 +695,32 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        // Disable user interaction during flip
-        self.previewView.isUserInteractionEnabled = false
+        // Ensure UI operations happen on main thread
+        DispatchQueue.main.async {
+            // Disable user interaction during flip
+            self.previewView.isUserInteractionEnabled = false
 
-        do {
-            try self.cameraController.switchCameras()
+            do {
+                try self.cameraController.switchCameras()
 
-            // Update preview layer frame without animation
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            self.cameraController.previewLayer?.frame = self.previewView.bounds
-            self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
-            CATransaction.commit()
+                // Update preview layer frame without animation
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                self.cameraController.previewLayer?.frame = self.previewView.bounds
+                self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+                CATransaction.commit()
 
-            self.previewView.isUserInteractionEnabled = true
+                self.previewView.isUserInteractionEnabled = true
 
-            // Ensure webview remains transparent after flip
-            self.makeWebViewTransparent()
+                // Ensure webview remains transparent after flip
+                self.makeWebViewTransparent()
 
-            call.resolve()
-        } catch {
-            self.previewView.isUserInteractionEnabled = true
-            print("Failed to flip camera: \(error.localizedDescription)")
-            call.reject("Failed to flip camera: \(error.localizedDescription)")
+                call.resolve()
+            } catch {
+                self.previewView.isUserInteractionEnabled = true
+                print("Failed to flip camera: \(error.localizedDescription)")
+                call.reject("Failed to flip camera: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -1342,28 +1345,31 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             return
         }
 
-        // Disable user interaction during device swap
-        self.previewView.isUserInteractionEnabled = false
+        // Ensure UI operations happen on main thread
+        DispatchQueue.main.async {
+            // Disable user interaction during device swap
+            self.previewView.isUserInteractionEnabled = false
 
-        do {
-            try self.cameraController.swapToDevice(deviceId: deviceId)
+            do {
+                try self.cameraController.swapToDevice(deviceId: deviceId)
 
-            // Update preview layer frame without animation
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            self.cameraController.previewLayer?.frame = self.previewView.bounds
-            self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
-            CATransaction.commit()
+                // Update preview layer frame without animation
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                self.cameraController.previewLayer?.frame = self.previewView.bounds
+                self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
+                CATransaction.commit()
 
-            self.previewView.isUserInteractionEnabled = true
+                self.previewView.isUserInteractionEnabled = true
 
-            // Ensure webview remains transparent after device switch
-            self.makeWebViewTransparent()
+                // Ensure webview remains transparent after device switch
+                self.makeWebViewTransparent()
 
-            call.resolve()
-        } catch {
-            self.previewView.isUserInteractionEnabled = true
-            call.reject("Failed to swap to device \(deviceId): \(error.localizedDescription)")
+                call.resolve()
+            } catch {
+                self.previewView.isUserInteractionEnabled = true
+                call.reject("Failed to swap to device \(deviceId): \(error.localizedDescription)")
+            }
         }
     }
 
