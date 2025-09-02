@@ -12,6 +12,9 @@
 </p>
 <br>
 
+![NPM Version](https://img.shields.io/npm/v/%40capgo%2Fcamera-preview)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Cap-go/capacitor-camera-preview/.github%2Fworkflows%2Fbuild.yml)
+
 This plugin is compatible Capacitor 7 and above.
 
 Use v6 for Capacitor 6 and below.
