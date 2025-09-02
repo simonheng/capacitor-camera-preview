@@ -386,11 +386,30 @@ extension CameraController {
         // Update internal state
         self.requestedAspectRatio = aspectRatio
 
+        // Preserve current zoom level before session reconfiguration
+        var currentZoom: CGFloat?
+        if let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera {
+            currentZoom = device.videoZoomFactor
+        }
+
         // Reconfigure session preset to match the new ratio for optimal capture resolution
         if let captureSession = self.captureSession {
             captureSession.beginConfiguration()
             self.configureSessionPreset(for: aspectRatio)
             captureSession.commitConfiguration()
+        }
+
+        // Restore zoom level after session reconfiguration
+        if let zoom = currentZoom, let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera {
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = zoom
+                device.unlockForConfiguration()
+                self.zoomFactor = zoom
+                print("[CameraPreview] Preserved zoom level \(zoom) after aspect ratio change")
+            } catch {
+                print("[CameraPreview] Failed to restore zoom level after aspect ratio change: \(error)")
+            }
         }
 
         // Update preview layer geometry on the main thread
