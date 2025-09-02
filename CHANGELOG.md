@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.8.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.8.1...7.8.2) (2025-09-02)
+
+
+### Bug Fixes
+
+* keep zoom level after aspect ratio change on iOS ([9a700ac](https://github.com/Cap-go/capacitor-camera-preview/commit/9a700ac294e0f4c5a6ae2f5ed9393437d9063ffa))
+
 ## [7.8.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.8.0...7.8.1) (2025-09-01)
 
 ## [7.6.1-alpha.3](https://github.com/Cap-go/capacitor-camera-preview/compare/7.6.1-alpha.2...7.6.1-alpha.3) (2025-08-28)
