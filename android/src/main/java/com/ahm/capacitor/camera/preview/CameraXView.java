@@ -2298,7 +2298,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     try {
       // For static method, we can return common flash modes
       // Most modern cameras support these modes
-      return Arrays.asList("off", "on", "auto");
+      return Arrays.asList("off", "on", "auto", "torch");
     } catch (Exception e) {
       Log.e(TAG, "getSupportedFlashModesStatic: Error getting flash modes", e);
       return Collections.singletonList("off");
