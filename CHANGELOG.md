@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.13.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.12.0...7.13.0) (2025-09-03)
+
+
+### Features
+
+* add reference to preview use case for video re-binding in CameraXView ([c273649](https://github.com/Cap-go/capacitor-camera-preview/commit/c2736495eed50abcd0c00c696cef0362a9593a89))
+
 ## [7.12.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.11.0...7.12.0) (2025-09-03)
 
 
