@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.13.3](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.2...7.13.3) (2025-09-03)
+
+
+### Bug Fixes
+
+* ensure currentFocusFuture is assigned correctly in startFocusAndMetering ([b28e514](https://github.com/Cap-go/capacitor-camera-preview/commit/b28e5140e85b45fa3415731865d1d697a619cc0c))
+
 ## [7.13.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.1...7.13.2) (2025-09-03)
 
 
