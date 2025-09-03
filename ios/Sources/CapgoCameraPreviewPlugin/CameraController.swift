@@ -694,18 +694,20 @@ extension CameraController {
     private func bestPreset(for aspectRatio: String?, on device: AVCaptureDevice) -> AVCaptureSession.Preset {
         // Preference order depends on aspect ratio
         if aspectRatio == "16:9" {
-            // Prefer 4K, then 1080p, then high
+            // Prefer 4K → 1080p → 720p → high → photo → vga
             if device.supportsSessionPreset(.hd4K3840x2160) { return .hd4K3840x2160 }
-            if device.supportsSessionPreset(.hd1920x1080)   { return .hd1920x1080 }
-            if device.supportsSessionPreset(.high)          { return .high }
-            return .photo
-        } else {
-            // 4:3 or unknown: prefer .photo, else high
-            if device.supportsSessionPreset(.photo) { return .photo }
-            if device.supportsSessionPreset(.high)  { return .high }
-            // Reasonable fallbacks (rarely needed)
             if device.supportsSessionPreset(.hd1920x1080) { return .hd1920x1080 }
-            return .hd4K3840x2160
+            if device.supportsSessionPreset(.hd1280x720) { return .hd1280x720 }
+            if device.supportsSessionPreset(.high)       { return .high }
+            if device.supportsSessionPreset(.photo)      { return .photo } // safe, though 4:3
+            return .vga640x480
+        } else {
+            // 4:3 or unknown: prefer photo → high → 1080p → 720p → vga
+            if device.supportsSessionPreset(.photo)      { return .photo }
+            if device.supportsSessionPreset(.high)       { return .high }
+            if device.supportsSessionPreset(.hd1920x1080){ return .hd1920x1080 }
+            if device.supportsSessionPreset(.hd1280x720) { return .hd1280x720 }
+            return .vga640x480
         }
     }
 
@@ -764,14 +766,16 @@ extension CameraController {
         let currentPreset = captureSession.sessionPreset
         let targetSupportsCurrent = targetDevice.supportsSessionPreset(currentPreset)
         if !targetSupportsCurrent {
-            // Pick a neutral safe preset the target supports (no UI bounce to tiny)
-            if targetDevice.supportsSessionPreset(.high) {
-                captureSession.sessionPreset = .high
-            } else if targetDevice.supportsSessionPreset(.photo) {
-                captureSession.sessionPreset = .photo
-            } else {
-                // Fall back to desiredPreset (it’s guaranteed supported by targetDevice)
-                captureSession.sessionPreset = desiredPreset
+            // Choose the first preset supported by BOTH the target device and the session
+            let fallbacks: [AVCaptureSession.Preset] =
+                (self.requestedAspectRatio == "16:9")
+                ? [.hd4K3840x2160, .hd1920x1080, .hd1280x720, .high, .photo, .vga640x480]
+                : [.photo, .high, .hd1920x1080, .hd1280x720, .vga640x480]
+            for p in fallbacks {
+                if targetDevice.supportsSessionPreset(p), captureSession.canSetSessionPreset(p) {
+                    captureSession.sessionPreset = p
+                    break
+                }
             }
         }
 
