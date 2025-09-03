@@ -1906,9 +1906,9 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
     try {
       final ListenableFuture<FocusMeteringResult> future = camera
-          .getCameraControl()
-          .startFocusAndMetering(action);
-      currentFocusFuture = future; 
+        .getCameraControl()
+        .startFocusAndMetering(action);
+      currentFocusFuture = future;
 
       future.addListener(
         () -> {
@@ -1921,7 +1921,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               (e
                   .getMessage()
                   .contains("Cancelled by another startFocusAndMetering") ||
-              e.getMessage().contains("OperationCanceledException") ||
+                e.getMessage().contains("OperationCanceledException") ||
                 e
                   .getClass()
                   .getSimpleName()
