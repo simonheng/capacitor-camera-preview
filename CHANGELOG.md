@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.13.2](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.1...7.13.2) (2025-09-03)
+
+
+### Bug Fixes
+
+* add torch mode to getSupportedFlashModesStatic ([f01470a](https://github.com/Cap-go/capacitor-camera-preview/commit/f01470a26432fc7bb62b9229c047b34545729b3f)), closes [#215](https://github.com/Cap-go/capacitor-camera-preview/issues/215)
+
 ## [7.13.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.0...7.13.1) (2025-09-03)
 
 
