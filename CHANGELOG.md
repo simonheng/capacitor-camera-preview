@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.13.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.0...7.13.1) (2025-09-03)
+
+
+### Bug Fixes
+
+* prevent NPE by using local future reference in focus listener  Capture startFocusAndMetering() future in a final local variable and use it inside the listener. Only clear currentFocusFuture if it still matches, avoiding null dereference when rapid taps occur. ([68e500b](https://github.com/Cap-go/capacitor-camera-preview/commit/68e500b92fc011aac7a37d26fcc0ed18e2982a53))
+
 ## [7.13.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.12.0...7.13.0) (2025-09-03)
 
 
