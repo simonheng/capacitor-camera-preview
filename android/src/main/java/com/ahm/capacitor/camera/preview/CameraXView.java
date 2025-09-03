@@ -122,6 +122,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private File currentVideoFile;
   private VideoRecordingCallback currentVideoCallback;
   private PreviewView previewView;
+  private Preview previewUseCase;
   private GridOverlayView gridOverlayView;
   private FrameLayout previewContainer;
   private View focusIndicatorView;
@@ -737,6 +738,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           .setResolutionSelector(resolutionSelector)
           .setTargetRotation(rotation)
           .build();
+        // Keep reference to preview use case for later re-binding (e.g., when enabling video)
+        previewUseCase = preview;
         imageCapture = new ImageCapture.Builder()
           .setResolutionSelector(resolutionSelector)
           .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
@@ -3840,14 +3843,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         .build();
       videoCapture = VideoCapture.withOutput(recorder);
 
-      // Get current use cases
-      Preview preview = null;
-      for (UseCase useCase : camera.getUseCases()) {
-        if (useCase instanceof Preview) {
-          preview = (Preview) useCase;
-          break;
-        }
-      }
+      // Reuse the Preview use case we created during initial binding
+      Preview preview = previewUseCase;
 
       // Rebind with video capture included
       cameraProvider.unbindAll();
