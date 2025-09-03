@@ -1905,14 +1905,15 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       .build();
 
     try {
-      currentFocusFuture = camera
-        .getCameraControl()
-        .startFocusAndMetering(action);
+      final ListenableFuture<FocusMeteringResult> future = camera
+          .getCameraControl()
+          .startFocusAndMetering(action);
+      currentFocusFuture = future; 
 
-      currentFocusFuture.addListener(
+      future.addListener(
         () -> {
           try {
-            FocusMeteringResult result = currentFocusFuture.get();
+            FocusMeteringResult result = future.get();
           } catch (Exception e) {
             // Handle cancellation gracefully - this is expected when rapid taps occur
             if (
@@ -1920,7 +1921,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               (e
                   .getMessage()
                   .contains("Cancelled by another startFocusAndMetering") ||
-                e.getMessage().contains("OperationCanceledException") ||
+              e.getMessage().contains("OperationCanceledException") ||
                 e
                   .getClass()
                   .getSimpleName()
@@ -1934,8 +1935,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               Log.e(TAG, "Error during focus: " + e.getMessage());
             }
           } finally {
-            // Clear the reference if this is still the current operation
-            if (currentFocusFuture != null && currentFocusFuture.isDone()) {
+            if (currentFocusFuture == future && currentFocusFuture.isDone()) {
               currentFocusFuture = null;
             }
           }
