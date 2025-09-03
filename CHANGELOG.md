@@ -42,7 +42,7 @@ All notable changes to this project will be documented in this file. See [commit
 
 ### Features
 
-* add preloadVideo option to CameraPreview for improved video capture initialization ([6a7db61](https://github.com/Cap-go/capacitor-camera-preview/commit/6a7db61b1f578c60fd0145342ab77c47556e974b))
+* rename preloadVideo to enableVideoMode for improved clarity in video capture initialization ([6a7db61](https://github.com/Cap-go/capacitor-camera-preview/commit/6a7db61b1f578c60fd0145342ab77c47556e974b))
 
 ## [7.10.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.10.0...7.10.1) (2025-09-02)
 

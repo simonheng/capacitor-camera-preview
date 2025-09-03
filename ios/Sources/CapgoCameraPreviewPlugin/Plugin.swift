@@ -706,7 +706,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                 // Update preview layer frame without animation
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)
-                
+
                 // Preserve aspect ratio if it was set
                 if let aspectRatio = self.cameraController.requestedAspectRatio,
                    let previewLayer = self.cameraController.previewLayer {
@@ -714,7 +714,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     let frame = self.cameraController.calculateAspectRatioFrame(for: aspectRatio, in: self.previewView.bounds)
                     previewLayer.frame = frame
                     previewLayer.videoGravity = .resizeAspectFill
-                    
+
                     // Keep grid overlay in sync with preview if it exists
                     self.cameraController.gridOverlayView?.frame = frame
                 } else {
@@ -722,7 +722,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     self.cameraController.previewLayer?.frame = self.previewView.bounds
                     self.cameraController.previewLayer?.videoGravity = .resizeAspectFill
                 }
-                
+
                 CATransaction.commit()
 
                 self.previewView.isUserInteractionEnabled = true

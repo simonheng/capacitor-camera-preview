@@ -189,12 +189,6 @@ export interface CameraPreviewOptions {
    */
   disableFocusIndicator?: boolean;
   /**
-   * If true, uses the video-optimized preset for the camera session.
-   * @platform ios
-   * @default false
-   */
-  enableVideoMode?: boolean;
-  /**
    * The `deviceId` of the camera to use. If provided, `position` is ignored.
    * @platform ios
    */
@@ -215,13 +209,12 @@ export interface CameraPreviewOptions {
    */
   positioning?: CameraPositioning;
   /**
-   * If true, preloads video capture capabilities when the camera starts.
-   * If false, video capture is only initialized when startRecordVideo is called.
+   * If true, enables video capture capabilities when the camera starts.
    * @default false
    * @platform android
    * @since 7.11.0
    */
-  preloadVideo?: boolean;
+  enableVideoMode?: boolean;
 }
 
 /**
