@@ -765,9 +765,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           videoCapture = VideoCapture.withOutput(recorder);
         }
 
-        preview.setSurfaceProvider(previewView.getSurfaceProvider());
         // Unbind any existing use cases and bind new ones
         cameraProvider.unbindAll();
+
+        // Re-set the surface provider after unbinding to ensure the preview
+        // is connected and video frames are captured correctly
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
         // Bind with or without video capture based on enableVideoMode
         if (sessionConfig.isVideoModeEnabled() && videoCapture != null) {
@@ -3854,6 +3857,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       // Rebind with video capture included
       cameraProvider.unbindAll();
       if (preview != null) {
+        // CRITICAL: Re-set the surface provider after unbinding
+        // Without this, the preview won't be connected to the surface and video won't be captured
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
         camera = cameraProvider.bindToLifecycle(
           this,
           currentCameraSelector,
