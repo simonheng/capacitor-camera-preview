@@ -192,6 +192,23 @@
         <ion-icon name="remove"></ion-icon>
       </ion-fab-button>
 
+      <ion-fab-button
+        class="grid-toggle"
+        (click)="toggleGridMode()"
+        size="small"
+        [class.grid-active]="currentGridMode() !== 'none'"
+      >
+        @if (currentGridMode() === "none") {
+          <ion-icon name="grid-outline"></ion-icon>
+        } @else if (currentGridMode() === "3x3") {
+          <ion-icon name="grid"></ion-icon>
+          <span>3×3</span>
+        } @else if (currentGridMode() === "4x4") {
+          <ion-icon name="grid"></ion-icon>
+          <span>4×4</span>
+        }
+      </ion-fab-button>
+
       <ion-fab-button size="small" (click)="toggleOverlay()">
         @if (showOverlay()) {
           <ion-icon name="eye-off-outline"></ion-icon>
@@ -214,28 +231,6 @@
     </ion-fab-button>
   </ion-fab>
 
-  <ion-fab
-    class="grid-toggle"
-    slot="fixed"
-    horizontal="start"
-    vertical="center"
-  >
-    <ion-fab-button
-      (click)="toggleGridMode()"
-      size="small"
-      [class.grid-active]="currentGridMode() !== 'none'"
-    >
-      @if (currentGridMode() === "none") {
-        <ion-icon name="grid-outline"></ion-icon>
-      } @else if (currentGridMode() === "3x3") {
-        <ion-icon name="grid"></ion-icon>
-        <span>3×3</span>
-      } @else if (currentGridMode() === "4x4") {
-        <ion-icon name="grid"></ion-icon>
-        <span>4×4</span>
-      }
-    </ion-fab-button>
-  </ion-fab>
 
   @if (cameraStarted()) {
     <!-- Video Recording Controls -->
