@@ -214,6 +214,14 @@ export interface CameraPreviewOptions {
    * @since 2.3.0
    */
   positioning?: CameraPositioning;
+  /**
+   * If true, preloads video capture capabilities when the camera starts.
+   * If false, video capture is only initialized when startRecordVideo is called.
+   * @default false
+   * @platform android
+   * @since 7.11.0
+   */
+  preloadVideo?: boolean;
 }
 
 /**

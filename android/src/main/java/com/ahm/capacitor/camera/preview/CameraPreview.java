@@ -700,6 +700,9 @@ public class CameraPreview
       "disableFocusIndicator",
       false
     );
+    final boolean preloadVideo = Boolean.TRUE.equals(
+      call.getBoolean("preloadVideo", false)
+    );
 
     // Check for conflict between aspectRatio and size
     if (
@@ -1113,7 +1116,8 @@ public class CameraPreview
           1.0f,
           aspectRatio,
           gridMode,
-          disableFocusIndicator
+          disableFocusIndicator,
+          preloadVideo
         );
         config.setTargetZoom(finalTargetZoom);
         config.setCentered(isCentered);

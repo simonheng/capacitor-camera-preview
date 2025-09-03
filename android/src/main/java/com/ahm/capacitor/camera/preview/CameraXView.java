@@ -51,6 +51,7 @@ import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
 import androidx.camera.core.ResolutionInfo;
+import androidx.camera.core.UseCase;
 import androidx.camera.core.ZoomState;
 import androidx.camera.core.resolutionselector.AspectRatioStrategy;
 import androidx.camera.core.resolutionselector.ResolutionSelector;
@@ -140,6 +141,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private Size currentPreviewResolution = null;
   private ListenableFuture<FocusMeteringResult> currentFocusFuture = null; // Track current focus operation
   private String currentExposureMode = "CONTINUOUS"; // Default behavior
+  private boolean isVideoCaptureInitializing = false;
 
   public CameraXView(Context context, WebView webView) {
     this.context = context;
@@ -743,26 +745,39 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           .build();
         sampleImageCapture = imageCapture;
 
-        // Setup VideoCapture with rotation and quality fallback
-        QualitySelector qualitySelector = QualitySelector.fromOrderedList(
-          Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
-          FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)
-        );
-        Recorder recorder = new Recorder.Builder()
-          .setQualitySelector(qualitySelector)
-          .build();
-        videoCapture = VideoCapture.withOutput(recorder);
+        // Only setup VideoCapture if preloadVideo is true
+        if (sessionConfig.isPreloadVideo()) {
+          QualitySelector qualitySelector = QualitySelector.fromOrderedList(
+            Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
+            FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)
+          );
+          Recorder recorder = new Recorder.Builder()
+            .setQualitySelector(qualitySelector)
+            .build();
+          videoCapture = VideoCapture.withOutput(recorder);
+        }
 
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
         // Unbind any existing use cases and bind new ones
         cameraProvider.unbindAll();
-        camera = cameraProvider.bindToLifecycle(
-          this,
-          currentCameraSelector,
-          preview,
-          imageCapture,
-          videoCapture
-        );
+        
+        // Bind with or without video capture based on preloadVideo
+        if (sessionConfig.isPreloadVideo() && videoCapture != null) {
+          camera = cameraProvider.bindToLifecycle(
+            this,
+            currentCameraSelector,
+            preview,
+            imageCapture,
+            videoCapture
+          );
+        } else {
+          camera = cameraProvider.bindToLifecycle(
+            this,
+            currentCameraSelector,
+            preview,
+            imageCapture
+          );
+        }
 
         // Log details about the active camera
         Log.d(TAG, "Use cases bound. Inspecting active camera and use cases.");
@@ -2422,7 +2437,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       sessionConfig.getZoomFactor(), // zoomFactor
       sessionConfig.getAspectRatio(), // aspectRatio
       sessionConfig.getGridMode(), // gridMode
-      sessionConfig.getDisableFocusIndicator() // disableFocusIndicator
+      sessionConfig.getDisableFocusIndicator(), // disableFocusIndicator
+      sessionConfig.isPreloadVideo() // preloadVideo
     );
 
     // Clear current device ID to force position-based selection
@@ -2581,7 +2597,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       sessionConfig.getZoomFactor(),
       aspectRatio,
       currentGridMode,
-      sessionConfig.getDisableFocusIndicator()
+      sessionConfig.getDisableFocusIndicator(),
+      sessionConfig.isPreloadVideo()
     );
     sessionConfig.setCentered(true);
 
@@ -2684,7 +2701,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       sessionConfig.getZoomFactor(),
       aspectRatio,
       currentGridMode,
-      sessionConfig.getDisableFocusIndicator()
+      sessionConfig.getDisableFocusIndicator(),
+      sessionConfig.isPreloadVideo()
     );
     sessionConfig.setCentered(true);
 
@@ -2759,7 +2777,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         sessionConfig.getZoomFactor(),
         sessionConfig.getAspectRatio(),
         gridMode,
-        sessionConfig.getDisableFocusIndicator()
+        sessionConfig.getDisableFocusIndicator(),
+        sessionConfig.isPreloadVideo()
       );
 
       // Update the grid overlay immediately
@@ -3142,7 +3161,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             sessionConfig.getZoomFactor(),
             calculatedAspectRatio,
             sessionConfig.getGridMode(),
-            sessionConfig.getDisableFocusIndicator()
+            sessionConfig.getDisableFocusIndicator(),
+            sessionConfig.isPreloadVideo()
           );
 
           // If aspect ratio changed due to size update, rebind camera
@@ -3792,6 +3812,62 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       TAG,
       "Video recording started to: " + currentVideoFile.getAbsolutePath()
     );
+  }
+
+  private void initializeVideoCapture() throws Exception {
+    if (isVideoCaptureInitializing) {
+      throw new Exception("VideoCapture initialization is already in progress");
+    }
+    if (cameraProvider == null || camera == null) {
+      throw new Exception("Camera is not initialized");
+    }
+    
+    isVideoCaptureInitializing = true;
+    
+    try {
+      // Get current rotation for video capture
+      int rotation = previewView != null && previewView.getDisplay() != null
+        ? previewView.getDisplay().getRotation()
+        : android.view.Surface.ROTATION_0;
+      
+      // Setup VideoCapture with rotation and quality fallback
+      QualitySelector qualitySelector = QualitySelector.fromOrderedList(
+        Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
+        FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)
+      );
+      Recorder recorder = new Recorder.Builder()
+        .setQualitySelector(qualitySelector)
+        .build();
+      videoCapture = VideoCapture.withOutput(recorder);
+      
+      // Get current use cases
+      Preview preview = null;
+      for (UseCase useCase : camera.getUseCases()) {
+        if (useCase instanceof Preview) {
+          preview = (Preview) useCase;
+          break;
+        }
+      }
+      
+      // Rebind with video capture included
+      cameraProvider.unbindAll();
+      if (preview != null) {
+        camera = cameraProvider.bindToLifecycle(
+          this,
+          currentCameraSelector,
+          preview,
+          imageCapture,
+          videoCapture
+        );
+      } else {
+        // Shouldn't happen, but handle gracefully
+        throw new Exception("Preview use case not found");
+      }
+      
+      Log.d(TAG, "VideoCapture initialized successfully");
+    } finally {
+      isVideoCaptureInitializing = false;
+    }
   }
 
   public void stopRecordVideo(VideoRecordingCallback callback) {
