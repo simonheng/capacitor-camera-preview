@@ -161,6 +161,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     return lifecycleRegistry;
   }
 
+  public CameraSessionConfiguration getSessionConfig() {
+    return sessionConfig;
+  }
+
   public void setListener(CameraXViewListener listener) {
     this.listener = listener;
   }
@@ -260,6 +264,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     currentFocusFuture = null;
 
     mainExecutor.execute(() -> {
+      lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
       if (cameraProvider != null) {
         cameraProvider.unbindAll();
       }

@@ -62,6 +62,41 @@ public class CameraPreview
   extends Plugin
   implements CameraXView.CameraXViewListener {
 
+  @Override
+  protected void handleOnPause() {
+    super.handleOnPause();
+    if (cameraXView != null && cameraXView.isRunning()) {
+      // Store the current configuration before stopping
+      lastSessionConfig = cameraXView.getSessionConfig();
+      cameraXView.stopSession();
+    }
+  }
+
+  @Override
+  protected void handleOnResume() {
+    super.handleOnResume();
+    if (lastSessionConfig != null) {
+      // Recreate camera with last known configuration
+      if (cameraXView == null) {
+        cameraXView = new CameraXView(getContext(), getBridge().getWebView());
+        cameraXView.setListener(this);
+      }
+      cameraXView.startSession(lastSessionConfig);
+    }
+  }
+
+  @Override
+  protected void handleOnDestroy() {
+    super.handleOnDestroy();
+    if (cameraXView != null) {
+      cameraXView.stopSession();
+      cameraXView = null;
+    }
+    lastSessionConfig = null;
+  }
+
+  private CameraSessionConfiguration lastSessionConfig;
+
   private static final String TAG = "CameraPreview CameraXView";
 
   static final String CAMERA_WITH_AUDIO_PERMISSION_ALIAS = "cameraWithAudio";
