@@ -72,7 +72,7 @@ class CameraController: NSObject {
     // Track whether an aspect ratio was explicitly requested
     var requestedAspectRatio: String?
 
-    private func calculateAspectRatioFrame(for aspectRatio: String, in bounds: CGRect) -> CGRect {
+    func calculateAspectRatioFrame(for aspectRatio: String, in bounds: CGRect) -> CGRect {
         guard let ratio = parseAspectRatio(aspectRatio) else {
             return bounds
         }

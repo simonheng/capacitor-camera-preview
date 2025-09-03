@@ -760,7 +760,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
         // Unbind any existing use cases and bind new ones
         cameraProvider.unbindAll();
-        
+
         // Bind with or without video capture based on preloadVideo
         if (sessionConfig.isPreloadVideo() && videoCapture != null) {
           camera = cameraProvider.bindToLifecycle(
@@ -3821,15 +3821,15 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     if (cameraProvider == null || camera == null) {
       throw new Exception("Camera is not initialized");
     }
-    
+
     isVideoCaptureInitializing = true;
-    
+
     try {
       // Get current rotation for video capture
       int rotation = previewView != null && previewView.getDisplay() != null
         ? previewView.getDisplay().getRotation()
         : android.view.Surface.ROTATION_0;
-      
+
       // Setup VideoCapture with rotation and quality fallback
       QualitySelector qualitySelector = QualitySelector.fromOrderedList(
         Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
@@ -3839,7 +3839,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         .setQualitySelector(qualitySelector)
         .build();
       videoCapture = VideoCapture.withOutput(recorder);
-      
+
       // Get current use cases
       Preview preview = null;
       for (UseCase useCase : camera.getUseCases()) {
@@ -3848,7 +3848,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           break;
         }
       }
-      
+
       // Rebind with video capture included
       cameraProvider.unbindAll();
       if (preview != null) {
@@ -3863,7 +3863,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         // Shouldn't happen, but handle gracefully
         throw new Exception("Preview use case not found");
       }
-      
+
       Log.d(TAG, "VideoCapture initialized successfully");
     } finally {
       isVideoCaptureInitializing = false;
