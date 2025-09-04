@@ -789,23 +789,21 @@ extension CameraController {
     }
 
     func captureImage(width: Int?, height: Int?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Data?, [AnyHashable: Any]?, Error?) -> Void) {
-        print("[CameraPreview] captureImage called - width: \(width ?? -1), height: \(height ?? -1), requestedAspectRatio: \(self.requestedAspectRatio ?? "nil")")
-
         guard let photoOutput = self.photoOutput else {
             completion(nil, nil, nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
             return
         }
 
         let settings = AVCapturePhotoSettings()
-        // Configure photo capture settings
+        // Configure photo capture settings optimized for speed
         if #available(iOS 13.0, *) {
-            // Enable high resolution capture if max dimensions are specified or no aspect ratio constraint
-            // When aspect ratio is specified WITHOUT max dimensions, use session preset dimensions
-            let shouldUseHighRes = (width != nil || height != nil) || (self.requestedAspectRatio == nil)
+            // Only use high res if explicitly requesting large dimensions
+            let shouldUseHighRes = width.map { $0 > 1920 } ?? false || height.map { $0 > 1920 } ?? false
             settings.isHighResolutionPhotoEnabled = shouldUseHighRes
         }
         if #available(iOS 15.0, *) {
-            settings.photoQualityPrioritization = .balanced
+            // Prioritize speed over quality
+            settings.photoQualityPrioritization = .speed
         }
 
         // Apply the current flash mode to the photo settings
@@ -1965,20 +1963,30 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
             return
         }
 
-        // Get the photo data using the modern API
-        guard let imageData = photo.fileDataRepresentation() else {
-            self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
-            return
-        }
+        // Process photo in background to avoid blocking main thread
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Get the photo data using the modern API
+            guard let imageData = photo.fileDataRepresentation() else {
+                DispatchQueue.main.async {
+                    self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
+                }
+                return
+            }
 
-        guard let image = UIImage(data: imageData) else {
-            self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
-            return
-        }
+            // Create image from data
+            guard let image = UIImage(data: imageData) else {
+                DispatchQueue.main.async {
+                    self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
+                }
+                return
+            }
 
-        // Pass through original file data and metadata so callers can preserve EXIF
-        // Don't call fixedOrientation() here - let the completion block handle it after cropping
-        self.photoCaptureCompletionBlock?(image, imageData, photo.metadata, nil)
+            // Pass through original file data and metadata so callers can preserve EXIF
+            // Don't call fixedOrientation() here - let the completion block handle it after cropping
+            DispatchQueue.main.async {
+                self.photoCaptureCompletionBlock?(image, imageData, photo.metadata, nil)
+            }
+        }
     }
 }
 

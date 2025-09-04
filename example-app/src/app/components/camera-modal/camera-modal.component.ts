@@ -83,7 +83,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   // Picture settings inputs
   public readonly pictureFormat = input<PictureFormat>('jpeg');
-  public readonly pictureQuality = input<number>(85);
+  public readonly pictureQuality = input<number>(75); // Use a more balanced quality setting for better performance
   public readonly useCustomSize = input<boolean>(false);
   public readonly pictureWidth = input<number>(1920);
   public readonly pictureHeight = input<number>(1080);
