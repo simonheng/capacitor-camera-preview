@@ -1935,7 +1935,14 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         }
     }
 
+    private var lastOrientation: String?
+
     @objc private func handleOrientationChange() {
+        var currentOrientation = self.currentOrientationString()
+        if currentOrientation == "portrait-upside-down" || currentOrientation == lastOrientation {
+            return
+        }
+        lastOrientation = currentOrientation
         DispatchQueue.main.async {
             let result = self.rawSetAspectRatio()
             self.notifyListeners("screenResize", data: result)
