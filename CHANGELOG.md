@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.13.6](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.5...7.13.6) (2025-09-04)
+
+
+### Bug Fixes
+
+* avoid triggering orientationChange for portrait-upside-down ([172a284](https://github.com/Cap-go/capacitor-camera-preview/commit/172a28462900af6c58d70f4e1930b1ded256895b))
+
 ## [7.13.5](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.4...7.13.5) (2025-09-03)
 
 
