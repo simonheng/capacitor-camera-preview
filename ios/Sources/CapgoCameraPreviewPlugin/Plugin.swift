@@ -142,6 +142,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         guard let webView = self.webView else { return }
 
         DispatchQueue.main.async {
+            let startTransparency = CFAbsoluteTimeGetCurrent()
+
             // Define a recursive function to traverse the view hierarchy
             func makeSubviewsTransparent(_ view: UIView) {
                 // Set the background color to clear
@@ -156,7 +158,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             // Set the main webView to be transparent
             webView.isOpaque = false
             webView.backgroundColor = .clear
-
             // Recursively make all subviews transparent
             makeSubviewsTransparent(webView)
 
@@ -503,7 +504,6 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     @objc func start(_ call: CAPPluginCall) {
-        let startTime = CFAbsoluteTimeGetCurrent()
         print("[CameraPreview] 🚀 START CALLED at \(Date())")
 
         // Log all received settings
@@ -629,21 +629,24 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         // Create and configure the preview view first
         self.updateCameraFrame()
 
-        // Make webview transparent - comprehensive approach
-        self.makeWebViewTransparent()
-
-        // Add the preview view to the webview itself to use same coordinate system
+        // Add preview view to hierarchy first
         self.webView?.addSubview(self.previewView)
         if self.toBack! {
             self.webView?.sendSubviewToBack(self.previewView)
         }
 
-        // Display the camera preview on the configured view
+        // Make webview transparent
+        self.makeWebViewTransparent()
+
+        // Don't block on orientation update - it's already set during layer creation
+        // Just update asynchronously if needed for future rotations
+        DispatchQueue.main.async { [weak self] in
+            self?.cameraController.updateVideoOrientation()
+        }
+
+        // Configure preview layer - it's already hidden from CameraController
         try? self.cameraController.displayPreview(on: self.previewView)
-
-        // Ensure the preview orientation matches the current interface orientation at startup
-        self.cameraController.updateVideoOrientation()
-
+        // Setup gestures
         self.cameraController.setupGestures(target: self.previewView, enableZoom: self.enableZoom!)
 
         // Add grid overlay if enabled
@@ -651,11 +654,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             self.cameraController.addGridOverlay(to: self.previewView, gridMode: self.gridMode)
         }
 
+        // Setup observers for device rotation and app state changes
         if self.rotateWhenOrientationChanged == true {
             NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.rotated), name: UIDevice.orientationDidChangeNotification, object: nil)
         }
-
-        // Add observers for app state changes to maintain transparency
         NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(CameraPreview.appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
 
