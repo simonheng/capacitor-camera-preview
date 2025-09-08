@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.13.10](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.9...7.13.10) (2025-09-08)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @capacitor/haptics to v7.0.2 ([#227](https://github.com/Cap-go/capacitor-camera-preview/issues/227)) ([beffbec](https://github.com/Cap-go/capacitor-camera-preview/commit/beffbec77d07d09425d4d3f5299fd3a2f9dd8064))
+
 ## [7.13.9](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.8...7.13.9) (2025-09-08)
 
 
