@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.13.11](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.10...7.13.11) (2025-09-08)
+
+
+### Bug Fixes
+
+* **android:** restore original window background for camera preview transparency ([734063a](https://github.com/Cap-go/capacitor-camera-preview/commit/734063a8950c33e2e744a016f5ea8cf750148bf6))
+
 ## [7.13.10](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.9...7.13.10) (2025-09-08)
 
 
