@@ -3,6 +3,39 @@ import UIKit
 import CoreLocation
 
 class CameraController: NSObject {
+    private func getVideoOrientation() -> AVCaptureVideoOrientation {
+        var orientation: AVCaptureVideoOrientation = .portrait
+        if Thread.isMainThread {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                switch windowScene.interfaceOrientation {
+                case .portrait: orientation = .portrait
+                case .landscapeLeft: orientation = .landscapeLeft
+                case .landscapeRight: orientation = .landscapeRight
+                case .portraitUpsideDown: orientation = .portraitUpsideDown
+                case .unknown: fallthrough
+                @unknown default: orientation = .portrait
+                }
+            }
+        } else {
+            let semaphore = DispatchSemaphore(value: 0)
+            DispatchQueue.main.async {
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                    switch windowScene.interfaceOrientation {
+                    case .portrait: orientation = .portrait
+                    case .landscapeLeft: orientation = .landscapeLeft
+                    case .landscapeRight: orientation = .landscapeRight
+                    case .portraitUpsideDown: orientation = .portraitUpsideDown
+                    case .unknown: fallthrough
+                    @unknown default: orientation = .portrait
+                    }
+                }
+                semaphore.signal()
+            }
+            _ = semaphore.wait(timeout: .now() + 0.1) // Timeout after 100ms to prevent deadlocks
+        }
+        return orientation
+    }
+
     var captureSession: AVCaptureSession?
     var disableFocusIndicator: Bool = false
 
@@ -101,25 +134,9 @@ class CameraController: NSObject {
         let components = aspectRatio.split(separator: ":").compactMap { Float(String($0)) }
         guard components.count == 2 else { return nil }
 
-        // Check if device is in portrait orientation by looking at the current interface orientation
-        var isPortrait = false
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            print("[CameraPreview] parseAspectRatio - windowScene.interfaceOrientation: \(windowScene.interfaceOrientation)")
-            switch windowScene.interfaceOrientation {
-            case .portrait, .portraitUpsideDown:
-                isPortrait = true
-            case .landscapeLeft, .landscapeRight:
-                isPortrait = false
-            case .unknown:
-                // Fallback to device orientation
-                isPortrait = UIDevice.current.orientation.isPortrait
-            @unknown default:
-                isPortrait = UIDevice.current.orientation.isPortrait
-            }
-        } else {
-            // Fallback to device orientation
-            isPortrait = UIDevice.current.orientation.isPortrait
-        }
+        // Get orientation in a thread-safe way
+        let orientation = self.getVideoOrientation()
+        let isPortrait = (orientation == .portrait || orientation == .portraitUpsideDown)
 
         let originalWidth = CGFloat(components[0])
         let originalHeight = CGFloat(components[1])
@@ -257,20 +274,43 @@ extension CameraController {
             let layer = AVCaptureVideoPreviewLayer()
             // Configure orientation immediately
             if let connection = layer.connection {
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                    switch windowScene.interfaceOrientation {
-                    case .portrait:
-                        connection.videoOrientation = .portrait
-                    case .landscapeLeft:
-                        connection.videoOrientation = .landscapeLeft
-                    case .landscapeRight:
-                        connection.videoOrientation = .landscapeRight
-                    case .portraitUpsideDown:
-                        connection.videoOrientation = .portraitUpsideDown
-                    case .unknown:
-                        fallthrough
-                    @unknown default:
-                        connection.videoOrientation = .portrait
+                // Ensure UI calls are made on the main thread
+                if Thread.isMainThread {
+                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                        switch windowScene.interfaceOrientation {
+                        case .portrait:
+                            connection.videoOrientation = .portrait
+                        case .landscapeLeft:
+                            connection.videoOrientation = .landscapeLeft
+                        case .landscapeRight:
+                            connection.videoOrientation = .landscapeRight
+                        case .portraitUpsideDown:
+                            connection.videoOrientation = .portraitUpsideDown
+                        case .unknown:
+                            fallthrough
+                        @unknown default:
+                            connection.videoOrientation = .portrait
+                        }
+                    }
+                } else {
+                    // If not on main thread, use a sync call to get the orientation
+                    DispatchQueue.main.sync {
+                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                            switch windowScene.interfaceOrientation {
+                            case .portrait:
+                                connection.videoOrientation = .portrait
+                            case .landscapeLeft:
+                                connection.videoOrientation = .landscapeLeft
+                            case .landscapeRight:
+                                connection.videoOrientation = .landscapeRight
+                            case .portraitUpsideDown:
+                                connection.videoOrientation = .portraitUpsideDown
+                            case .unknown:
+                                fallthrough
+                            @unknown default:
+                                connection.videoOrientation = .portrait
+                            }
+                        }
                     }
                 }
             }
@@ -321,18 +361,8 @@ extension CameraController {
 
                 // Add ALL outputs BEFORE starting session to avoid flashes from reconfiguration
 
-                // Determine initial orientation once
-                var videoOrientation: AVCaptureVideoOrientation = .portrait
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                    switch windowScene.interfaceOrientation {
-                    case .portrait: videoOrientation = .portrait
-                    case .landscapeLeft: videoOrientation = .landscapeLeft
-                    case .landscapeRight: videoOrientation = .landscapeRight
-                    case .portraitUpsideDown: videoOrientation = .portraitUpsideDown
-                    case .unknown: fallthrough
-                    @unknown default: videoOrientation = .portrait
-                    }
-                }
+                // Get orientation in a thread-safe way
+                let videoOrientation = self.getVideoOrientation()
 
                 // Add data output for preview
                 if let dataOutput = self.dataOutput, captureSession.canAddOutput(dataOutput) {
@@ -706,25 +736,8 @@ extension CameraController {
     }
 
     func updateVideoOrientation() {
-        // Get orientation on the current thread to avoid blocking
-        var videoOrientation: AVCaptureVideoOrientation = .portrait
-
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            switch windowScene.interfaceOrientation {
-            case .portrait:
-                videoOrientation = .portrait
-            case .landscapeLeft:
-                videoOrientation = .landscapeLeft
-            case .landscapeRight:
-                videoOrientation = .landscapeRight
-            case .portraitUpsideDown:
-                videoOrientation = .portraitUpsideDown
-            case .unknown:
-                fallthrough
-            @unknown default:
-                videoOrientation = .portrait
-            }
-        }
+        // Get orientation in a thread-safe way
+        let videoOrientation = self.getVideoOrientation()
 
         // Apply orientation asynchronously on main thread
         let updateBlock = { [weak self] in
