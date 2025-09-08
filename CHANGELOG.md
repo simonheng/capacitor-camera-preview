@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.14.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.11...7.14.0) (2025-09-08)
+
+
+### Features
+
+* **camera:** fix torch mode support for flash functionality ([a784795](https://github.com/Cap-go/capacitor-camera-preview/commit/a784795bdcfc6ce650d295bc57de07dded7c5335))
+
 ## [7.13.11](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.10...7.13.11) (2025-09-08)
 
 
