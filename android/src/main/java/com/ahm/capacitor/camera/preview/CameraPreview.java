@@ -7,6 +7,8 @@ import android.Manifest;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -116,6 +118,7 @@ public class CameraPreview
   private OrientationEventListener orientationListener;
   private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
   private boolean lastDisableAudio = true;
+  private Drawable originalWindowBackground;
 
   @PluginMethod
   public void getExposureModes(PluginCall call) {
@@ -378,6 +381,16 @@ public class CameraPreview
         if (cameraXView != null && cameraXView.isRunning()) {
           cameraXView.stopSession();
           cameraXView = null;
+        }
+        // Restore original window background if modified earlier
+        if (originalWindowBackground != null) {
+          try {
+            getBridge()
+              .getActivity()
+              .getWindow()
+              .setBackgroundDrawable(originalWindowBackground);
+          } catch (Exception ignored) {}
+          originalWindowBackground = null;
         }
         call.resolve();
       });
@@ -788,6 +801,22 @@ public class CameraPreview
     getBridge()
       .getActivity()
       .runOnUiThread(() -> {
+        // Ensure transparent background when preview is behind the WebView (Android 10 fix)
+        if (toBack) {
+          try {
+            if (originalWindowBackground == null) {
+              originalWindowBackground = getBridge()
+                .getActivity()
+                .getWindow()
+                .getDecorView()
+                .getBackground();
+            }
+            getBridge()
+              .getActivity()
+              .getWindow()
+              .setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+          } catch (Exception ignored) {}
+        }
         DisplayMetrics metrics = getBridge()
           .getActivity()
           .getResources()
