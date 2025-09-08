@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.14.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.14.0...7.14.1) (2025-09-08)
+
+
+### Bug Fixes
+
+* apply review comments ([56a9458](https://github.com/Cap-go/capacitor-camera-preview/commit/56a945856c66fde95337c49e92943bc4c3346099))
+* fix(camera): prevent flip crash on iPad Pro 11 and reduce preview glitch ([17f7ad5](https://github.com/Cap-go/capacitor-camera-preview/commit/17f7ad55a5a414b8ea6f8d793b8e976d3150bd57))
+
 ## [7.14.0](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.11...7.14.0) (2025-09-08)
 
 
