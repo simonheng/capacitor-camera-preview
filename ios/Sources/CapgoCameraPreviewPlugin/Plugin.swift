@@ -8,26 +8,22 @@ import MobileCoreServices
 
 extension UIWindow {
     static var isLandscape: Bool {
-        if #available(iOS 13.0, *) {
-            return UIApplication.shared.windows
-                .first?
-                .windowScene?
-                .interfaceOrientation
-                .isLandscape ?? false
-        } else {
-            return UIApplication.shared.statusBarOrientation.isLandscape
-        }
+        // iOS 14+ only: derive from the active window scene's interface orientation
+        let scene = UIApplication.shared
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+
+        return scene?.interfaceOrientation.isLandscape ?? false
     }
     static var isPortrait: Bool {
-        if #available(iOS 13.0, *) {
-            return UIApplication.shared.windows
-                .first?
-                .windowScene?
-                .interfaceOrientation
-                .isPortrait ?? false
-        } else {
-            return UIApplication.shared.statusBarOrientation.isPortrait
-        }
+        // iOS 14+ only: derive from the active window scene's interface orientation
+        let scene = UIApplication.shared
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+
+        return scene?.interfaceOrientation.isPortrait ?? false
     }
 }
 
@@ -142,7 +138,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
         guard let webView = self.webView else { return }
 
         DispatchQueue.main.async {
-            let startTransparency = CFAbsoluteTimeGetCurrent()
+            _ = CFAbsoluteTimeGetCurrent()
 
             // Define a recursive function to traverse the view hierarchy
             func makeSubviewsTransparent(_ view: UIView) {
@@ -225,15 +221,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             let displayMultiplier = self.cameraController.getDisplayZoomMultiplier()
             var teleStep: Float
 
-            if #available(iOS 13.0, *) {
-                let switchFactors = device.virtualDeviceSwitchOverVideoZoomFactors
-                if !switchFactors.isEmpty {
-                    // Choose the highest switch-over factor (typically the wide->tele threshold)
-                    let maxSwitch = switchFactors.map { $0.floatValue }.max() ?? Float(device.maxAvailableVideoZoomFactor)
-                    teleStep = maxSwitch * displayMultiplier
-                } else {
-                    teleStep = Float(device.maxAvailableVideoZoomFactor) * displayMultiplier
-                }
+            let switchFactors = device.virtualDeviceSwitchOverVideoZoomFactors
+            if !switchFactors.isEmpty {
+                // Choose the highest switch-over factor (typically the wide->tele threshold)
+                let maxSwitch = switchFactors.map { $0.floatValue }.max() ?? Float(device.maxAvailableVideoZoomFactor)
+                teleStep = maxSwitch * displayMultiplier
             } else {
                 teleStep = Float(device.maxAvailableVideoZoomFactor) * displayMultiplier
             }
@@ -269,14 +261,10 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
     @objc func rotated() {
         guard let previewView = self.previewView,
-              let posX = self.posX,
-              let posY = self.posY,
-              let width = self.width,
               let heightValue = self.height else {
             return
         }
         let paddingBottom = self.paddingBottom ?? 0
-        let height = heightValue - paddingBottom
 
         // Handle auto-centering during rotation
         // Always use the factorized method for consistent positioning
@@ -786,7 +774,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     @objc func capture(_ call: CAPPluginCall) {
-        print("[CameraPreview] capture called with options: \(call.options)")
+        print("[CameraPreview] capture called with options: \(call.options, default: "No options")")
         let withExifLocation = call.getBool("withExifLocation", false)
         print("[CameraPreview] capture called, withExifLocation: \(withExifLocation)")
 
@@ -857,7 +845,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
     private func performCapture(call: CAPPluginCall) {
         print("[CameraPreview] performCapture called")
-        print("[CameraPreview] Call parameters: \(call.options)")
+        print("[CameraPreview] Call parameters: \(call.options, default: "No option")")
         let quality = call.getFloat("quality", 85)
         let saveToGallery = call.getBool("saveToGallery", false)
         let withExifLocation = call.getBool("withExifLocation", false)
@@ -1016,8 +1004,13 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
                     notchInset = safeAreaInsets.top
                 }
             } else {
-                // Fallback: use status bar height as approximation
-                notchInset = UIApplication.shared.statusBarFrame.height
+                // Fallback for iOS 14+: try to derive from any available window's safe area
+                let anyWindow = UIApplication.shared
+                    .connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+                    .flatMap { $0.windows }
+                    .first
+                notchInset = anyWindow?.safeAreaInsets.top ?? 0
             }
 
             let result: [String: Any] = [
@@ -1681,7 +1674,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     private func updateCameraFrame() {
-        guard let width = self.width, let height = self.height, let posX = self.posX, let posY = self.posY else {
+        guard let posX = self.posX, let posY = self.posY else {
             return
         }
 
@@ -1940,7 +1933,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     private var lastOrientation: String?
 
     @objc private func handleOrientationChange() {
-        var currentOrientation = self.currentOrientationString()
+        let currentOrientation = self.currentOrientationString()
         if currentOrientation == "portrait-upside-down" || currentOrientation == lastOrientation {
             return
         }

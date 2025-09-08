@@ -180,7 +180,7 @@ extension CameraController {
         // Log all found devices for debugging
 
         for camera in cameras {
-            let constituentCount = camera.isVirtualDevice ? camera.constituentDevices.count : 1
+            _ = camera.isVirtualDevice ? camera.constituentDevices.count : 1
 
         }
 
@@ -283,7 +283,7 @@ extension CameraController {
     }
 
     func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, disableFocusIndicator: Bool = false, completionHandler: @escaping (Error?) -> Void) {
-        print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? "nil"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? "nil"), zoom: \(initialZoomLevel)")
+        print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? "nil"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? "nil"), zoom: \(initialZoomLevel ?? 1)")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
@@ -903,11 +903,9 @@ extension CameraController {
 
         let settings = AVCapturePhotoSettings()
         // Configure photo capture settings optimized for speed
-        if #available(iOS 13.0, *) {
-            // Only use high res if explicitly requesting large dimensions
-            let shouldUseHighRes = width.map { $0 > 1920 } ?? false || height.map { $0 > 1920 } ?? false
-            settings.isHighResolutionPhotoEnabled = shouldUseHighRes
-        }
+        // Only use high res if explicitly requesting large dimensions
+        let shouldUseHighRes = width.map { $0 > 1920 } ?? false || height.map { $0 > 1920 } ?? false
+        settings.isHighResolutionPhotoEnabled = shouldUseHighRes
         if #available(iOS 15.0, *) {
             // Prioritize speed over quality
             settings.photoQualityPrioritization = .speed
@@ -2236,11 +2234,11 @@ extension UIImage {
         // Flip image one more time if needed to, this is to prevent flipped image
         switch imageOrientation {
         case .upMirrored, .downMirrored:
-            transform.translatedBy(x: size.width, y: 0)
-            transform.scaledBy(x: -1, y: 1)
+            _ = transform.translatedBy(x: size.width, y: 0)
+            _ = transform.scaledBy(x: -1, y: 1)
         case .leftMirrored, .rightMirrored:
-            transform.translatedBy(x: size.height, y: 0)
-            transform.scaledBy(x: -1, y: 1)
+            _ = transform.translatedBy(x: size.height, y: 0)
+            _ = transform.scaledBy(x: -1, y: 1)
         case .up, .down, .left, .right:
             break
         @unknown default:
