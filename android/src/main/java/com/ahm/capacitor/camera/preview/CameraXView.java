@@ -51,6 +51,7 @@ import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
 import androidx.camera.core.ResolutionInfo;
+import androidx.camera.core.TorchState;
 import androidx.camera.core.UseCase;
 import androidx.camera.core.ZoomState;
 import androidx.camera.core.resolutionselector.AspectRatioStrategy;
@@ -2321,7 +2322,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     try {
       boolean hasFlash = camera.getCameraInfo().hasFlashUnit();
       if (hasFlash) {
-        return Arrays.asList("off", "on", "auto");
+        // Include torch for devices with a flash unit
+        return Arrays.asList("off", "on", "auto", "torch");
       } else {
         return Collections.singletonList("off");
       }
@@ -2332,6 +2334,16 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   }
 
   public String getFlashMode() {
+    // If torch is enabled, report torch regardless of ImageCapture flash mode
+    try {
+      if (camera != null) {
+        Integer torch = camera.getCameraInfo().getTorchState().getValue();
+        if (torch != null && torch == TorchState.ON) {
+          return "torch";
+        }
+      }
+    } catch (Exception ignore) {}
+
     switch (currentFlashMode) {
       case ImageCapture.FLASH_MODE_ON:
         return "on";
@@ -2343,6 +2355,35 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   }
 
   public void setFlashMode(String mode) {
+    // Handle torch separately via CameraControl
+    if ("torch".equals(mode)) {
+      try {
+        if (camera != null) {
+          camera.getCameraControl().enableTorch(true);
+        }
+      } catch (Exception e) {
+        Log.e(TAG, "setFlashMode: Failed to enable torch", e);
+      }
+      // Keep ImageCapture flash mode OFF to avoid conflicts with torch
+      currentFlashMode = ImageCapture.FLASH_MODE_OFF;
+      if (imageCapture != null) {
+        imageCapture.setFlashMode(ImageCapture.FLASH_MODE_OFF);
+      }
+      if (sampleImageCapture != null) {
+        sampleImageCapture.setFlashMode(ImageCapture.FLASH_MODE_OFF);
+      }
+      return;
+    }
+
+    // For non-torch modes, ensure torch is disabled
+    try {
+      if (camera != null) {
+        camera.getCameraControl().enableTorch(false);
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "setFlashMode: Failed to disable torch", e);
+    }
+
     int flashMode;
     switch (mode) {
       case "on":
