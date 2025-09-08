@@ -260,11 +260,9 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     @objc func rotated() {
-        guard let previewView = self.previewView,
-              let heightValue = self.height else {
+        guard let previewView = self.previewView else {
             return
         }
-        let paddingBottom = self.paddingBottom ?? 0
 
         // Handle auto-centering during rotation
         // Always use the factorized method for consistent positioning
@@ -774,7 +772,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
     }
 
     @objc func capture(_ call: CAPPluginCall) {
-        print("[CameraPreview] capture called with options: \(call.options, default: "No options")")
+        print("[CameraPreview] capture called with options: \(call.options ?? [:])")
         let withExifLocation = call.getBool("withExifLocation", false)
         print("[CameraPreview] capture called, withExifLocation: \(withExifLocation)")
 
@@ -845,7 +843,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
     private func performCapture(call: CAPPluginCall) {
         print("[CameraPreview] performCapture called")
-        print("[CameraPreview] Call parameters: \(call.options, default: "No option")")
+        print("[CameraPreview] Call parameters: \(call.options ?? [:])")
         let quality = call.getFloat("quality", 85)
         let saveToGallery = call.getBool("saveToGallery", false)
         let withExifLocation = call.getBool("withExifLocation", false)
