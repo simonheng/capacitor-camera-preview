@@ -252,9 +252,30 @@ extension CameraController {
         ]
         self.dataOutput?.alwaysDiscardsLateVideoFrames = true
 
-        // Pre-create preview layer to avoid delay later
+        // Pre-create preview layer without session to avoid delay later
         if self.previewLayer == nil {
-            self.previewLayer = AVCaptureVideoPreviewLayer()
+            let layer = AVCaptureVideoPreviewLayer()
+            // Configure orientation immediately
+            if let connection = layer.connection {
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                    switch windowScene.interfaceOrientation {
+                    case .portrait:
+                        connection.videoOrientation = .portrait
+                    case .landscapeLeft:
+                        connection.videoOrientation = .landscapeLeft
+                    case .landscapeRight:
+                        connection.videoOrientation = .landscapeRight
+                    case .portraitUpsideDown:
+                        connection.videoOrientation = .portraitUpsideDown
+                    case .unknown:
+                        fallthrough
+                    @unknown default:
+                        connection.videoOrientation = .portrait
+                    }
+                }
+            }
+            // Don't set session here - we'll do it during configuration
+            self.previewLayer = layer
         }
 
         // Mark as prepared
@@ -282,10 +303,10 @@ extension CameraController {
                     throw CameraControllerError.captureSessionIsMissing
                 }
 
-                // Prepare outputs
+                // Prepare outputs early
                 self.prepareOutputs()
 
-                // Configure the session
+                // Single configuration block for all initial setup
                 captureSession.beginConfiguration()
 
                 // Set aspect ratio preset and remember requested ratio
@@ -298,10 +319,54 @@ extension CameraController {
                 // Configure device inputs
                 try self.configureDeviceInputs(cameraPosition: cameraPosition, deviceId: deviceId, disableAudio: disableAudio)
 
-                // Add data output BEFORE starting session for faster first frame
+                // Add ALL outputs BEFORE starting session to avoid flashes from reconfiguration
+
+                // Determine initial orientation once
+                var videoOrientation: AVCaptureVideoOrientation = .portrait
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                    switch windowScene.interfaceOrientation {
+                    case .portrait: videoOrientation = .portrait
+                    case .landscapeLeft: videoOrientation = .landscapeLeft
+                    case .landscapeRight: videoOrientation = .landscapeRight
+                    case .portraitUpsideDown: videoOrientation = .portraitUpsideDown
+                    case .unknown: fallthrough
+                    @unknown default: videoOrientation = .portrait
+                    }
+                }
+
+                // Add data output for preview
                 if let dataOutput = self.dataOutput, captureSession.canAddOutput(dataOutput) {
                     captureSession.addOutput(dataOutput)
-                    dataOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
+                    // Use dedicated queue for better performance
+                    let videoQueue = DispatchQueue(label: "com.camera.videoQueue", qos: .userInteractive)
+                    dataOutput.setSampleBufferDelegate(self, queue: videoQueue)
+                    // Set orientation immediately
+                    dataOutput.connections.forEach { $0.videoOrientation = videoOrientation }
+                }
+
+                // Add photo output immediately to avoid later reconfiguration
+                if let photoOutput = self.photoOutput, captureSession.canAddOutput(photoOutput) {
+                    photoOutput.isHighResolutionCaptureEnabled = true
+                    captureSession.addOutput(photoOutput)
+                    // Set orientation immediately
+                    photoOutput.connections.forEach { $0.videoOrientation = videoOrientation }
+                }
+
+                // Add video output if in camera mode
+                if cameraMode, let fileVideoOutput = self.fileVideoOutput, captureSession.canAddOutput(fileVideoOutput) {
+                    captureSession.addOutput(fileVideoOutput)
+                    // Set orientation immediately
+                    fileVideoOutput.connections.forEach { $0.videoOrientation = videoOrientation }
+                }
+
+
+                // Set up preview layer session in the same configuration block
+                if let layer = self.previewLayer {
+                    layer.session = captureSession
+                    // Set orientation for preview layer
+                    layer.connection?.videoOrientation = videoOrientation
+                    // Start with a very subtle fade to smooth any remaining visual artifacts
+                    layer.opacity = 0.95
                 }
 
                 captureSession.commitConfiguration()
@@ -309,28 +374,17 @@ extension CameraController {
                 // Set initial zoom
                 self.setInitialZoom(level: initialZoomLevel)
 
-                // Start the session
+                // Start the session - all outputs are already configured
                 captureSession.startRunning()
 
-                // Defer adding photo/video outputs to avoid blocking
-                // These aren't needed immediately for preview
-                DispatchQueue.global(qos: .utility).async { [weak self] in
-                    guard let self = self else { return }
-
-                    captureSession.beginConfiguration()
-
-                    // Add photo output
-                    if let photoOutput = self.photoOutput, captureSession.canAddOutput(photoOutput) {
-                        photoOutput.isHighResolutionCaptureEnabled = true
-                        captureSession.addOutput(photoOutput)
+                // Bring to full opacity after a tiny moment to smooth any visual artifacts
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    if let layer = self?.previewLayer {
+                        CATransaction.begin()
+                        CATransaction.setAnimationDuration(0.1)
+                        layer.opacity = 1.0
+                        CATransaction.commit()
                     }
-
-                    // Add video output if needed
-                    if cameraMode, let fileVideoOutput = self.fileVideoOutput, captureSession.canAddOutput(fileVideoOutput) {
-                        captureSession.addOutput(fileVideoOutput)
-                    }
-
-                    captureSession.commitConfiguration()
                 }
 
                 // Success callback
@@ -352,10 +406,12 @@ extension CameraController {
         if let aspectRatio = aspectRatio {
             switch aspectRatio {
             case "16:9":
-                if captureSession.canSetSessionPreset(.hd4K3840x2160) {
-                    targetPreset = .hd4K3840x2160
-                } else if captureSession.canSetSessionPreset(.hd1920x1080) {
+                // Start with 1080p for faster initialization, 4K only when explicitly needed
+                // This maintains capture quality while optimizing preview performance
+                if captureSession.canSetSessionPreset(.hd1920x1080) {
                     targetPreset = .hd1920x1080
+                } else if captureSession.canSetSessionPreset(.hd4K3840x2160) {
+                    targetPreset = .hd4K3840x2160
                 }
             case "4:3":
                 if captureSession.canSetSessionPreset(.photo) {
@@ -538,25 +594,33 @@ extension CameraController {
     }
 
     func displayPreview(on view: UIView) throws {
+        let startTime = CFAbsoluteTimeGetCurrent()
+
         guard let captureSession = self.captureSession, captureSession.isRunning else {
             throw CameraControllerError.captureSessionIsMissing
         }
 
-        // Create or reuse preview layer
-        let previewLayer: AVCaptureVideoPreviewLayer
-        if let existingLayer = self.previewLayer {
-            // Always reuse if we have one - just update the session if needed
-            previewLayer = existingLayer
-            if existingLayer.session != captureSession {
-                existingLayer.session = captureSession
-            }
-        } else {
-            // Create layer with minimal properties to speed up creation
-            previewLayer = AVCaptureVideoPreviewLayer()
-            previewLayer.session = captureSession
+        print("[CameraPreview] ⏱ Guard check took \(CFAbsoluteTimeGetCurrent() - startTime) seconds")
+        let layerStartTime = CFAbsoluteTimeGetCurrent()
+
+        // Get preview layer - should already be created in prepareOutputs
+        guard let previewLayer = self.previewLayer else {
+            throw CameraControllerError.captureSessionIsMissing
         }
 
-        // Fast configuration without CATransaction overhead
+        // Session should already be set during configuration
+
+        print("[CameraPreview] ⏱ Layer session update took \(CFAbsoluteTimeGetCurrent() - layerStartTime) seconds")
+
+        let configStartTime = CFAbsoluteTimeGetCurrent()
+        // Optimize layer configuration with explicit transaction
+        CATransaction.begin()
+        CATransaction.setDisableActions(true) // Disable implicit animations for faster setup
+        CATransaction.setAnimationDuration(0) // No animation duration
+
+        // Start with zero alpha for smooth fade-in
+        previewLayer.opacity = 0
+
         // Configure video gravity and frame based on aspect ratio
         if let aspectRatio = requestedAspectRatio {
             // Calculate the frame based on requested aspect ratio
@@ -568,12 +632,28 @@ extension CameraController {
             previewLayer.frame = view.bounds
             previewLayer.videoGravity = .resizeAspect
         }
+        print("[CameraPreview] ⏱ Layer configuration took \(CFAbsoluteTimeGetCurrent() - configStartTime) seconds")
+
+        let insertStartTime = CFAbsoluteTimeGetCurrent()
+        // Set additional performance optimizations
+        previewLayer.shouldRasterize = false // Avoid unnecessary rasterization
+        previewLayer.drawsAsynchronously = true // Enable async rendering
+        previewLayer.allowsGroupOpacity = true // Enable group opacity animations
 
         // Insert layer immediately (only if new)
         if previewLayer.superlayer != view.layer {
             view.layer.insertSublayer(previewLayer, at: 0)
+
+            // Fade in the preview layer smoothly
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.2)
+            previewLayer.opacity = 1.0
+            CATransaction.commit()
         }
-        self.previewLayer = previewLayer
+
+        CATransaction.commit()
+        print("[CameraPreview] ⏱ Layer insertion took \(CFAbsoluteTimeGetCurrent() - insertStartTime) seconds")
+        print("[CameraPreview] ⏱ Total display preview took \(CFAbsoluteTimeGetCurrent() - startTime) seconds")
     }
 
     func addGridOverlay(to view: UIView, gridMode: String) {
@@ -626,19 +706,9 @@ extension CameraController {
     }
 
     func updateVideoOrientation() {
-        if Thread.isMainThread {
-            updateVideoOrientationOnMainThread()
-        } else {
-            DispatchQueue.main.sync {
-                self.updateVideoOrientationOnMainThread()
-            }
-        }
-    }
+        // Get orientation on the current thread to avoid blocking
+        var videoOrientation: AVCaptureVideoOrientation = .portrait
 
-    private func updateVideoOrientationOnMainThread() {
-        var videoOrientation: AVCaptureVideoOrientation
-
-        // Use window scene interface orientation
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
             switch windowScene.interfaceOrientation {
             case .portrait:
@@ -654,13 +724,21 @@ extension CameraController {
             @unknown default:
                 videoOrientation = .portrait
             }
-        } else {
-            videoOrientation = .portrait
         }
 
-        previewLayer?.connection?.videoOrientation = videoOrientation
-        dataOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
-        photoOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
+        // Apply orientation asynchronously on main thread
+        let updateBlock = { [weak self] in
+            guard let self = self else { return }
+            self.previewLayer?.connection?.videoOrientation = videoOrientation
+            self.dataOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
+            self.photoOutput?.connections.forEach { $0.videoOrientation = videoOrientation }
+        }
+
+        if Thread.isMainThread {
+            updateBlock()
+        } else {
+            DispatchQueue.main.async(execute: updateBlock)
+        }
     }
 
     private func setDefaultZoomAfterFlip() {
@@ -818,23 +896,21 @@ extension CameraController {
     }
 
     func captureImage(width: Int?, height: Int?, quality: Float, gpsLocation: CLLocation?, completion: @escaping (UIImage?, Data?, [AnyHashable: Any]?, Error?) -> Void) {
-        print("[CameraPreview] captureImage called - width: \(width ?? -1), height: \(height ?? -1), requestedAspectRatio: \(self.requestedAspectRatio ?? "nil")")
-
         guard let photoOutput = self.photoOutput else {
             completion(nil, nil, nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Photo output is not available"]))
             return
         }
 
         let settings = AVCapturePhotoSettings()
-        // Configure photo capture settings
+        // Configure photo capture settings optimized for speed
         if #available(iOS 13.0, *) {
-            // Enable high resolution capture if max dimensions are specified or no aspect ratio constraint
-            // When aspect ratio is specified WITHOUT max dimensions, use session preset dimensions
-            let shouldUseHighRes = (width != nil || height != nil) || (self.requestedAspectRatio == nil)
+            // Only use high res if explicitly requesting large dimensions
+            let shouldUseHighRes = width.map { $0 > 1920 } ?? false || height.map { $0 > 1920 } ?? false
             settings.isHighResolutionPhotoEnabled = shouldUseHighRes
         }
         if #available(iOS 15.0, *) {
-            settings.photoQualityPrioritization = .balanced
+            // Prioritize speed over quality
+            settings.photoQualityPrioritization = .speed
         }
 
         // Apply the current flash mode to the photo settings
@@ -1994,20 +2070,30 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
             return
         }
 
-        // Get the photo data using the modern API
-        guard let imageData = photo.fileDataRepresentation() else {
-            self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
-            return
-        }
+        // Process photo in background to avoid blocking main thread
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Get the photo data using the modern API
+            guard let imageData = photo.fileDataRepresentation() else {
+                DispatchQueue.main.async {
+                    self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
+                }
+                return
+            }
 
-        guard let image = UIImage(data: imageData) else {
-            self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
-            return
-        }
+            // Create image from data
+            guard let image = UIImage(data: imageData) else {
+                DispatchQueue.main.async {
+                    self.photoCaptureCompletionBlock?(nil, nil, nil, CameraControllerError.unknown)
+                }
+                return
+            }
 
-        // Pass through original file data and metadata so callers can preserve EXIF
-        // Don't call fixedOrientation() here - let the completion block handle it after cropping
-        self.photoCaptureCompletionBlock?(image, imageData, photo.metadata, nil)
+            // Pass through original file data and metadata so callers can preserve EXIF
+            // Don't call fixedOrientation() here - let the completion block handle it after cropping
+            DispatchQueue.main.async {
+                self.photoCaptureCompletionBlock?(image, imageData, photo.metadata, nil)
+            }
+        }
     }
 }
 

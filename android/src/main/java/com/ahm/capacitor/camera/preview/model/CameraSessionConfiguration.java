@@ -22,7 +22,7 @@ public class CameraSessionConfiguration {
   private final String aspectRatio;
   private final String gridMode;
   private final boolean disableFocusIndicator;
-  private final boolean preloadVideo;
+  private final boolean enableVideoMode;
   private float targetZoom = 1.0f;
   private boolean isCentered = false;
 
@@ -44,7 +44,7 @@ public class CameraSessionConfiguration {
     String aspectRatio,
     String gridMode,
     boolean disableFocusIndicator,
-    boolean preloadVideo
+    boolean enableVideoMode
   ) {
     this.deviceId = deviceId;
     this.position = position;
@@ -63,7 +63,7 @@ public class CameraSessionConfiguration {
     this.aspectRatio = aspectRatio;
     this.gridMode = gridMode != null ? gridMode : "none";
     this.disableFocusIndicator = disableFocusIndicator;
-    this.preloadVideo = preloadVideo;
+    this.enableVideoMode = enableVideoMode;
   }
 
   public void setTargetZoom(float zoom) {
@@ -175,11 +175,11 @@ public class CameraSessionConfiguration {
     return disableFocusIndicator;
   }
 
-  public boolean isPreloadVideo() {
-    return preloadVideo;
+  public boolean isVideoModeEnabled() {
+    return enableVideoMode;
   }
 
-  public boolean getPreloadVideo() {
-    return preloadVideo;
+  public boolean getEnableVideoMode() {
+    return enableVideoMode;
   }
 }

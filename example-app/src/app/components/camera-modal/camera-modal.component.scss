@@ -253,6 +253,7 @@ ion-fab-button {
 }
 
 .video-controls {
+  z-index: 999;
   ion-fab-button {
     margin: 8px 0;
     --box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -429,33 +430,31 @@ ion-fab-button {
   }
 }
 
-.grid-toggle {
-  ion-fab-button {
-    --background: rgba(0, 0, 0, 0.7);
+.grid-toggle ion-fab-button {
+  --background: rgba(0, 0, 0, 0.7);
+  --color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+
+  ion-icon {
+    font-size: 1.2rem;
+  }
+
+  span {
+    font-size: 0.6rem;
+    margin-top: -4px;
+    font-weight: bold;
+    position: absolute;
+    bottom: 2px;
+  }
+
+  // Active state when grid is enabled
+  &.grid-active {
+    --background: rgba(var(--ion-color-primary-rgb), 0.8);
     --color: white;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-
-    ion-icon {
-      font-size: 1.2rem;
-    }
-
-    span {
-      font-size: 0.6rem;
-      margin-top: -4px;
-      font-weight: bold;
-      position: absolute;
-      bottom: 2px;
-    }
-
-    // Active state when grid is enabled
-    &.grid-active {
-      --background: rgba(var(--ion-color-primary-rgb), 0.8);
-      --color: white;
-    }
   }
 }
 

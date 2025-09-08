@@ -51,6 +51,7 @@ import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
 import androidx.camera.core.ResolutionInfo;
+import androidx.camera.core.TorchState;
 import androidx.camera.core.UseCase;
 import androidx.camera.core.ZoomState;
 import androidx.camera.core.resolutionselector.AspectRatioStrategy;
@@ -161,6 +162,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     return lifecycleRegistry;
   }
 
+  public CameraSessionConfiguration getSessionConfig() {
+    return sessionConfig;
+  }
+
   public void setListener(CameraXViewListener listener) {
     this.listener = listener;
   }
@@ -260,6 +265,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     currentFocusFuture = null;
 
     mainExecutor.execute(() -> {
+      lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
       if (cameraProvider != null) {
         cameraProvider.unbindAll();
       }
@@ -748,8 +754,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           .build();
         sampleImageCapture = imageCapture;
 
-        // Only setup VideoCapture if preloadVideo is true
-        if (sessionConfig.isPreloadVideo()) {
+        // Only setup VideoCapture if enableVideoMode is true
+        if (sessionConfig.isVideoModeEnabled()) {
           QualitySelector qualitySelector = QualitySelector.fromOrderedList(
             Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
             FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)
@@ -760,12 +766,15 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           videoCapture = VideoCapture.withOutput(recorder);
         }
 
-        preview.setSurfaceProvider(previewView.getSurfaceProvider());
         // Unbind any existing use cases and bind new ones
         cameraProvider.unbindAll();
 
-        // Bind with or without video capture based on preloadVideo
-        if (sessionConfig.isPreloadVideo() && videoCapture != null) {
+        // Re-set the surface provider after unbinding to ensure the preview
+        // is connected and video frames are captured correctly
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+        // Bind with or without video capture based on enableVideoMode
+        if (sessionConfig.isVideoModeEnabled() && videoCapture != null) {
           camera = cameraProvider.bindToLifecycle(
             this,
             currentCameraSelector,
@@ -2313,7 +2322,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     try {
       boolean hasFlash = camera.getCameraInfo().hasFlashUnit();
       if (hasFlash) {
-        return Arrays.asList("off", "on", "auto");
+        // Include torch for devices with a flash unit
+        return Arrays.asList("off", "on", "auto", "torch");
       } else {
         return Collections.singletonList("off");
       }
@@ -2324,6 +2334,16 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   }
 
   public String getFlashMode() {
+    // If torch is enabled, report torch regardless of ImageCapture flash mode
+    try {
+      if (camera != null) {
+        Integer torch = camera.getCameraInfo().getTorchState().getValue();
+        if (torch != null && torch == TorchState.ON) {
+          return "torch";
+        }
+      }
+    } catch (Exception ignore) {}
+
     switch (currentFlashMode) {
       case ImageCapture.FLASH_MODE_ON:
         return "on";
@@ -2335,6 +2355,35 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   }
 
   public void setFlashMode(String mode) {
+    // Handle torch separately via CameraControl
+    if ("torch".equals(mode)) {
+      try {
+        if (camera != null) {
+          camera.getCameraControl().enableTorch(true);
+        }
+      } catch (Exception e) {
+        Log.e(TAG, "setFlashMode: Failed to enable torch", e);
+      }
+      // Keep ImageCapture flash mode OFF to avoid conflicts with torch
+      currentFlashMode = ImageCapture.FLASH_MODE_OFF;
+      if (imageCapture != null) {
+        imageCapture.setFlashMode(ImageCapture.FLASH_MODE_OFF);
+      }
+      if (sampleImageCapture != null) {
+        sampleImageCapture.setFlashMode(ImageCapture.FLASH_MODE_OFF);
+      }
+      return;
+    }
+
+    // For non-torch modes, ensure torch is disabled
+    try {
+      if (camera != null) {
+        camera.getCameraControl().enableTorch(false);
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "setFlashMode: Failed to disable torch", e);
+    }
+
     int flashMode;
     switch (mode) {
       case "on":
@@ -2441,7 +2490,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       sessionConfig.getAspectRatio(), // aspectRatio
       sessionConfig.getGridMode(), // gridMode
       sessionConfig.getDisableFocusIndicator(), // disableFocusIndicator
-      sessionConfig.isPreloadVideo() // preloadVideo
+      sessionConfig.isVideoModeEnabled() // enableVideoMode
     );
 
     // Clear current device ID to force position-based selection
@@ -2601,7 +2650,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       aspectRatio,
       currentGridMode,
       sessionConfig.getDisableFocusIndicator(),
-      sessionConfig.isPreloadVideo()
+      sessionConfig.isVideoModeEnabled()
     );
     sessionConfig.setCentered(true);
 
@@ -2705,7 +2754,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       aspectRatio,
       currentGridMode,
       sessionConfig.getDisableFocusIndicator(),
-      sessionConfig.isPreloadVideo()
+      sessionConfig.isVideoModeEnabled()
     );
     sessionConfig.setCentered(true);
 
@@ -2781,7 +2830,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         sessionConfig.getAspectRatio(),
         gridMode,
         sessionConfig.getDisableFocusIndicator(),
-        sessionConfig.isPreloadVideo()
+        sessionConfig.isVideoModeEnabled()
       );
 
       // Update the grid overlay immediately
@@ -3165,7 +3214,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             calculatedAspectRatio,
             sessionConfig.getGridMode(),
             sessionConfig.getDisableFocusIndicator(),
-            sessionConfig.isPreloadVideo()
+            sessionConfig.isVideoModeEnabled()
           );
 
           // If aspect ratio changed due to size update, rebind camera
@@ -3849,6 +3898,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       // Rebind with video capture included
       cameraProvider.unbindAll();
       if (preview != null) {
+        // CRITICAL: Re-set the surface provider after unbinding
+        // Without this, the preview won't be connected to the surface and video won't be captured
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
         camera = cameraProvider.bindToLifecycle(
           this,
           currentCameraSelector,

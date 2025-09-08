@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.13.11](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.10...7.13.11) (2025-09-08)
+
+
+### Bug Fixes
+
+* **android:** restore original window background for camera preview transparency ([734063a](https://github.com/Cap-go/capacitor-camera-preview/commit/734063a8950c33e2e744a016f5ea8cf750148bf6))
+
+## [7.13.10](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.9...7.13.10) (2025-09-08)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @capacitor/haptics to v7.0.2 ([#227](https://github.com/Cap-go/capacitor-camera-preview/issues/227)) ([beffbec](https://github.com/Cap-go/capacitor-camera-preview/commit/beffbec77d07d09425d4d3f5299fd3a2f9dd8064))
+
+## [7.13.9](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.8...7.13.9) (2025-09-08)
+
+
+### Bug Fixes
+
+* **deps:** update capacitor monorepo to v7.4.3 ([#226](https://github.com/Cap-go/capacitor-camera-preview/issues/226)) ([a6a4d07](https://github.com/Cap-go/capacitor-camera-preview/commit/a6a4d07bc177edd6a53760f4318cab81c3bcf9cf))
+
+## [7.13.8](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.7...7.13.8) (2025-09-05)
+
+## [7.13.7](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.6...7.13.7) (2025-09-04)
+
+## [7.13.6](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.5...7.13.6) (2025-09-04)
+
+
+### Bug Fixes
+
+* avoid triggering orientationChange for portrait-upside-down ([172a284](https://github.com/Cap-go/capacitor-camera-preview/commit/172a28462900af6c58d70f4e1930b1ded256895b))
+
+## [7.13.5](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.4...7.13.5) (2025-09-03)
+
+
+### Bug Fixes
+
+* **android:** support video AND audio recording at the same time ([1a380ca](https://github.com/Cap-go/capacitor-camera-preview/commit/1a380ca6919dc6572a333bf891101bc9f7ff52ad))
+
+## [7.13.4](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.3...7.13.4) (2025-09-03)
+
+
+### Bug Fixes
+
+* **android:** resume camera preview after pausing the app ([64a755c](https://github.com/Cap-go/capacitor-camera-preview/commit/64a755cd33d25cf2860f7127376f6ef9ee0e2963))
+* rename preloadVideo to enableVideoMode ([0566f6f](https://github.com/Cap-go/capacitor-camera-preview/commit/0566f6f6e0ab82128235599a64afd51adc5b2294))
+
 ## [7.13.3](https://github.com/Cap-go/capacitor-camera-preview/compare/7.13.2...7.13.3) (2025-09-03)
 
 
@@ -42,7 +89,7 @@ All notable changes to this project will be documented in this file. See [commit
 
 ### Features
 
-* add preloadVideo option to CameraPreview for improved video capture initialization ([6a7db61](https://github.com/Cap-go/capacitor-camera-preview/commit/6a7db61b1f578c60fd0145342ab77c47556e974b))
+* rename preloadVideo to enableVideoMode for improved clarity in video capture initialization ([6a7db61](https://github.com/Cap-go/capacitor-camera-preview/commit/6a7db61b1f578c60fd0145342ab77c47556e974b))
 
 ## [7.10.1](https://github.com/Cap-go/capacitor-camera-preview/compare/7.10.0...7.10.1) (2025-09-02)
 

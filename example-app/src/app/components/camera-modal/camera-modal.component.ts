@@ -83,7 +83,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   // Picture settings inputs
   public readonly pictureFormat = input<PictureFormat>('jpeg');
-  public readonly pictureQuality = input<number>(85);
+  public readonly pictureQuality = input<number>(75); // Use a more balanced quality setting for better performance
   public readonly useCustomSize = input<boolean>(false);
   public readonly pictureWidth = input<number>(1920);
   public readonly pictureHeight = input<number>(1080);
@@ -294,6 +294,7 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       gridMode: this.gridMode(),
       storeToFile: true,
       disableFocusIndicator: false,
+      enableVideoMode: true,
     };
 
     // Only add x and y if they are not null
@@ -794,8 +795,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
   protected async startRecording(): Promise<void> {
     try {
-      // Stop and restart camera with video mode enabled
-      await this.stop();
 
       const startOptions: CameraPreviewOptions = {
         parent: 'cameraView',
@@ -808,21 +807,12 @@ export class CameraModalComponent implements OnInit, OnDestroy {
         toBack: true,
         gridMode: this.gridMode(),
         storeToFile: true,
-        enableVideoMode: true, // Enable video mode
+        enableVideoMode: true,
         disableFocusIndicator: false,
       };
 
-      // Start camera in video mode
-      await this.#cameraViewService.start(startOptions);
-
       // Start recording
-      await this.#cameraViewService.startRecordVideo({
-        position: this.position(),
-        deviceId: this.currentDeviceId(),
-        disableAudio: this.disableAudio(),
-        storeToFile: true,
-        enableVideoMode: true,
-      });
+      await this.#cameraViewService.startRecordVideo(startOptions);
 
       this.isRecording.set(true);
       if (this.showTestResults()) {
@@ -854,20 +844,13 @@ export class CameraModalComponent implements OnInit, OnDestroy {
       // Wait a moment for the file to be properly saved
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Read the video file as base64
       try {
-        const videoData = await this.#cameraViewService.readVideoFile(result.videoFilePath);
-
         // Add to gallery
-        await this.#galleryService.addVideo(result.videoFilePath, videoData);
-
-        // Stop the camera preview
-        await this.stop();
+        await this.#galleryService.addVideo(result.videoFilePath);
 
         // Dismiss the modal
         await this.#modalController.dismiss({
           video: result.videoFilePath,
-          videoData: videoData,
           type: 'video',
         });
       } catch (readError) {
@@ -875,10 +858,6 @@ export class CameraModalComponent implements OnInit, OnDestroy {
 
         // Still try to add to gallery with just the file path
         await this.#galleryService.addVideo(result.videoFilePath);
-
-        // Stop the camera preview
-        await this.stop();
-
         // If reading fails, still return the file path
         await this.#modalController.dismiss({
           video: result.videoFilePath,

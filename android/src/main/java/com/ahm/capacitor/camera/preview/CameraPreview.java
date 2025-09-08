@@ -7,6 +7,8 @@ import android.Manifest;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -62,6 +64,41 @@ public class CameraPreview
   extends Plugin
   implements CameraXView.CameraXViewListener {
 
+  @Override
+  protected void handleOnPause() {
+    super.handleOnPause();
+    if (cameraXView != null && cameraXView.isRunning()) {
+      // Store the current configuration before stopping
+      lastSessionConfig = cameraXView.getSessionConfig();
+      cameraXView.stopSession();
+    }
+  }
+
+  @Override
+  protected void handleOnResume() {
+    super.handleOnResume();
+    if (lastSessionConfig != null) {
+      // Recreate camera with last known configuration
+      if (cameraXView == null) {
+        cameraXView = new CameraXView(getContext(), getBridge().getWebView());
+        cameraXView.setListener(this);
+      }
+      cameraXView.startSession(lastSessionConfig);
+    }
+  }
+
+  @Override
+  protected void handleOnDestroy() {
+    super.handleOnDestroy();
+    if (cameraXView != null) {
+      cameraXView.stopSession();
+      cameraXView = null;
+    }
+    lastSessionConfig = null;
+  }
+
+  private CameraSessionConfiguration lastSessionConfig;
+
   private static final String TAG = "CameraPreview CameraXView";
 
   static final String CAMERA_WITH_AUDIO_PERMISSION_ALIAS = "cameraWithAudio";
@@ -81,6 +118,7 @@ public class CameraPreview
   private OrientationEventListener orientationListener;
   private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
   private boolean lastDisableAudio = true;
+  private Drawable originalWindowBackground;
 
   @PluginMethod
   public void getExposureModes(PluginCall call) {
@@ -343,6 +381,16 @@ public class CameraPreview
         if (cameraXView != null && cameraXView.isRunning()) {
           cameraXView.stopSession();
           cameraXView = null;
+        }
+        // Restore original window background if modified earlier
+        if (originalWindowBackground != null) {
+          try {
+            getBridge()
+              .getActivity()
+              .getWindow()
+              .setBackgroundDrawable(originalWindowBackground);
+          } catch (Exception ignored) {}
+          originalWindowBackground = null;
         }
         call.resolve();
       });
@@ -700,8 +748,8 @@ public class CameraPreview
       "disableFocusIndicator",
       false
     );
-    final boolean preloadVideo = Boolean.TRUE.equals(
-      call.getBoolean("preloadVideo", false)
+    final boolean enableVideoMode = Boolean.TRUE.equals(
+      call.getBoolean("enableVideoMode", false)
     );
 
     // Check for conflict between aspectRatio and size
@@ -753,6 +801,22 @@ public class CameraPreview
     getBridge()
       .getActivity()
       .runOnUiThread(() -> {
+        // Ensure transparent background when preview is behind the WebView (Android 10 fix)
+        if (toBack) {
+          try {
+            if (originalWindowBackground == null) {
+              originalWindowBackground = getBridge()
+                .getActivity()
+                .getWindow()
+                .getDecorView()
+                .getBackground();
+            }
+            getBridge()
+              .getActivity()
+              .getWindow()
+              .setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+          } catch (Exception ignored) {}
+        }
         DisplayMetrics metrics = getBridge()
           .getActivity()
           .getResources()
@@ -1117,7 +1181,7 @@ public class CameraPreview
           aspectRatio,
           gridMode,
           disableFocusIndicator,
-          preloadVideo
+          enableVideoMode
         );
         config.setTargetZoom(finalTargetZoom);
         config.setCentered(isCentered);
