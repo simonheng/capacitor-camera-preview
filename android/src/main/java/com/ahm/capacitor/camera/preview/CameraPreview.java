@@ -1195,7 +1195,10 @@ public class CameraPreview
                 .getConfiguration()
                 .orientation;
               String currentStr = getDeviceOrientationString();
-              if (current != lastOrientation || !Objects.equals(currentStr, lastOrientationStr)) {
+              if (
+                current != lastOrientation ||
+                !Objects.equals(currentStr, lastOrientationStr)
+              ) {
                 lastOrientation = current;
                 lastOrientationStr = currentStr;
                 // Post to next frame so WebView has updated bounds before we recompute layout
@@ -1435,15 +1438,25 @@ public class CameraPreview
       }
 
       // Fallback to configuration if rotation unavailable
-      int orientation = getContext().getResources().getConfiguration().orientation;
+      int orientation = getContext()
+        .getResources()
+        .getConfiguration()
+        .orientation;
       if (orientation == Configuration.ORIENTATION_PORTRAIT) return "portrait";
-      if (orientation == Configuration.ORIENTATION_LANDSCAPE) return "landscape-right"; // default, avoid generic
+      if (
+        orientation == Configuration.ORIENTATION_LANDSCAPE
+      ) return "landscape-right"; // default, avoid generic
       return "unknown";
     } catch (Throwable t) {
       Log.w(TAG, "Failed to get precise orientation, falling back: " + t);
-      int orientation = getContext().getResources().getConfiguration().orientation;
+      int orientation = getContext()
+        .getResources()
+        .getConfiguration()
+        .orientation;
       if (orientation == Configuration.ORIENTATION_PORTRAIT) return "portrait";
-      if (orientation == Configuration.ORIENTATION_LANDSCAPE) return "landscape-right"; // default, avoid generic
+      if (
+        orientation == Configuration.ORIENTATION_LANDSCAPE
+      ) return "landscape-right"; // default, avoid generic
       return "unknown";
     }
   }
