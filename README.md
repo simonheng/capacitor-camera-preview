@@ -1164,7 +1164,7 @@ The available flash modes for the camera.
 
 Canonical device orientation values across platforms.
 
-<code>"portrait" | "landscape" | "landscape-left" | "landscape-right" | "portrait-upside-down" | "unknown"</code>
+<code>"portrait" | "landscape-left" | "landscape-right" | "portrait-upside-down" | "unknown"</code>
 
 
 #### ExposureMode
