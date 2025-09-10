@@ -41,7 +41,7 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         if (type.includes("portrait-secondary")) return "portrait-upside-down";
         if (type.includes("landscape-primary")) return "landscape-left";
         if (type.includes("landscape-secondary")) return "landscape-right";
-        if (type.includes("landscape")) return "landscape";
+        if (type.includes("landscape")) return "landscape-right"; // avoid generic landscape
         if (type.includes("portrait")) return "portrait";
       }
       const angle = (window as any).orientation;
@@ -56,7 +56,8 @@ export class CameraPreviewWeb extends WebPlugin implements CameraPreviewPlugin {
         return "portrait";
       }
       if (window.matchMedia("(orientation: landscape)")?.matches) {
-        return "landscape";
+        // Default to landscape-right when we can't distinguish primary/secondary
+        return "landscape-right";
       }
     } catch (e) {
       console.error(e);

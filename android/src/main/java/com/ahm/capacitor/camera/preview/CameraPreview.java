@@ -117,6 +117,7 @@ public class CameraPreview
   private Location lastLocation;
   private OrientationEventListener orientationListener;
   private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
+  private String lastOrientationStr = "unknown";
   private boolean lastDisableAudio = true;
   private Drawable originalWindowBackground;
 
@@ -220,19 +221,7 @@ public class CameraPreview
 
   @PluginMethod
   public void getOrientation(PluginCall call) {
-    int orientation = getContext()
-      .getResources()
-      .getConfiguration()
-      .orientation;
-    String o;
-    if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-      // We don't distinguish upside-down reliably on Android, report generic portrait
-      o = "portrait";
-    } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-      o = "landscape";
-    } else {
-      o = "unknown";
-    }
+    String o = getDeviceOrientationString();
     JSObject ret = new JSObject();
     ret.put("orientation", o);
     call.resolve(ret);
@@ -1196,6 +1185,7 @@ public class CameraPreview
             .getResources()
             .getConfiguration()
             .orientation;
+          lastOrientationStr = getDeviceOrientationString();
           orientationListener = new OrientationEventListener(getContext()) {
             @Override
             public void onOrientationChanged(int orientation) {
@@ -1204,8 +1194,10 @@ public class CameraPreview
                 .getResources()
                 .getConfiguration()
                 .orientation;
-              if (current != lastOrientation) {
+              String currentStr = getDeviceOrientationString();
+              if (current != lastOrientation || !Objects.equals(currentStr, lastOrientationStr)) {
                 lastOrientation = current;
+                lastOrientationStr = currentStr;
                 // Post to next frame so WebView has updated bounds before we recompute layout
                 getBridge()
                   .getActivity()
@@ -1362,15 +1354,8 @@ public class CameraPreview
           data.put("height", bounds[3]);
           notifyListeners("screenResize", data);
 
-          // Also emit orientationChange with a unified string value
-          String o;
-          if (current == Configuration.ORIENTATION_PORTRAIT) {
-            o = "portrait";
-          } else if (current == Configuration.ORIENTATION_LANDSCAPE) {
-            o = "landscape";
-          } else {
-            o = "unknown";
-          }
+          // Also emit orientationChange with a unified string value matching iOS
+          String o = getDeviceOrientationString();
           JSObject oData = new JSObject();
           oData.put("orientation", o);
           notifyListeners("orientationChange", oData);
@@ -1413,6 +1398,54 @@ public class CameraPreview
           );
         });
       });
+  }
+
+  /**
+   * Compute a canonical orientation string matching iOS values:
+   * "portrait", "portrait-upside-down", "landscape-left", "landscape-right", or "unknown".
+   * Uses display rotation when available, with a fallback to configuration orientation.
+   */
+  private String getDeviceOrientationString() {
+    try {
+      int rotation = -1;
+      // Try to obtain display rotation in a backward/forward-compatible way
+      if (android.os.Build.VERSION.SDK_INT >= 30) {
+        android.view.Display display = getBridge().getActivity().getDisplay();
+        if (display != null) {
+          rotation = display.getRotation();
+        }
+      } else {
+        android.view.Display display = getBridge()
+          .getActivity()
+          .getWindowManager()
+          .getDefaultDisplay();
+        if (display != null) {
+          rotation = display.getRotation();
+        }
+      }
+
+      if (rotation == android.view.Surface.ROTATION_0) {
+        return "portrait";
+      } else if (rotation == android.view.Surface.ROTATION_90) {
+        return "landscape-right";
+      } else if (rotation == android.view.Surface.ROTATION_180) {
+        return "portrait-upside-down";
+      } else if (rotation == android.view.Surface.ROTATION_270) {
+        return "landscape-left";
+      }
+
+      // Fallback to configuration if rotation unavailable
+      int orientation = getContext().getResources().getConfiguration().orientation;
+      if (orientation == Configuration.ORIENTATION_PORTRAIT) return "portrait";
+      if (orientation == Configuration.ORIENTATION_LANDSCAPE) return "landscape-right"; // default, avoid generic
+      return "unknown";
+    } catch (Throwable t) {
+      Log.w(TAG, "Failed to get precise orientation, falling back: " + t);
+      int orientation = getContext().getResources().getConfiguration().orientation;
+      if (orientation == Configuration.ORIENTATION_PORTRAIT) return "portrait";
+      if (orientation == Configuration.ORIENTATION_LANDSCAPE) return "landscape-right"; // default, avoid generic
+      return "unknown";
+    }
   }
 
   @Override

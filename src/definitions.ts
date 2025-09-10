@@ -333,7 +333,6 @@ export interface SafeAreaInsets {
  */
 export type DeviceOrientation =
   | "portrait"
-  | "landscape"
   | "landscape-left"
   | "landscape-right"
   | "portrait-upside-down"
