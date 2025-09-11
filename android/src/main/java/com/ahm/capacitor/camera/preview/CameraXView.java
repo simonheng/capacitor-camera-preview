@@ -107,6 +107,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     void onSampleTakenError(String message);
     void onCameraStarted(int width, int height, int x, int y);
     void onCameraStartError(String message);
+    void onCameraStopped();
   }
 
   public interface VideoRecordingCallback {
@@ -144,6 +145,27 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private ListenableFuture<FocusMeteringResult> currentFocusFuture = null; // Track current focus operation
   private String currentExposureMode = "CONTINUOUS"; // Default behavior
   private boolean isVideoCaptureInitializing = false;
+  // Capture/stop coordination
+  private final Object captureLock = new Object();
+  private volatile boolean isCapturingPhoto = false;
+  private volatile boolean stopRequested = false;
+  private volatile boolean previewDetachedOnDeferredStop = false;
+
+  public boolean isCapturing() {
+    return isCapturingPhoto;
+  }
+
+  public boolean isStopDeferred() {
+    synchronized (captureLock) {
+      return isCapturingPhoto && stopRequested;
+    }
+  }
+
+  public boolean isBusy() {
+    synchronized (captureLock) {
+      return isCapturingPhoto || stopRequested;
+    }
+  }
 
   public CameraXView(Context context, WebView webView) {
     this.context = context;
@@ -257,6 +279,32 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   }
 
   public void stopSession() {
+    // If a capture is in progress, defer heavy teardown until it completes.
+    synchronized (captureLock) {
+      if (isCapturingPhoto) {
+        stopRequested = true;
+        // Hide/detach the preview immediately so UI can close, but keep camera running
+        if (!previewDetachedOnDeferredStop) {
+          mainExecutor.execute(() -> {
+            try {
+              if (previewContainer != null) {
+                ViewGroup parent = (ViewGroup) previewContainer.getParent();
+                if (parent != null) {
+                  parent.removeView(previewContainer);
+                }
+              }
+              previewDetachedOnDeferredStop = true;
+            } catch (Exception ignored) {}
+          });
+        }
+        return;
+      }
+    }
+
+    performImmediateStop();
+  }
+
+  private void performImmediateStop() {
     isRunning = false;
     // Cancel any ongoing focus operation when stopping session
     if (currentFocusFuture != null && !currentFocusFuture.isDone()) {
@@ -265,15 +313,27 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     currentFocusFuture = null;
 
     mainExecutor.execute(() -> {
-      lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
-      if (cameraProvider != null) {
-        cameraProvider.unbindAll();
+      try {
+        lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
+        if (cameraProvider != null) {
+          cameraProvider.unbindAll();
+        }
+        lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
+        if (cameraExecutor != null) {
+          cameraExecutor.shutdown();
+        }
+        removePreviewView();
+      } catch (Exception e) {
+        Log.w(TAG, "performImmediateStop: error during stop", e);
+      } finally {
+        stopRequested = false;
+        previewDetachedOnDeferredStop = false;
+        if (listener != null) {
+          try {
+            listener.onCameraStopped();
+          } catch (Exception ignored) {}
+        }
       }
-      lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
-      if (cameraExecutor != null) {
-        cameraExecutor.shutdownNow();
-      }
-      removePreviewView();
     });
   }
 
@@ -1065,6 +1125,10 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       return;
     }
 
+    synchronized (captureLock) {
+      isCapturingPhoto = true;
+    }
+
     File tempFile = new File(context.getCacheDir(), "temp_image.jpg");
     ImageCapture.OutputFileOptions outputFileOptions =
       new ImageCapture.OutputFileOptions.Builder(tempFile).build();
@@ -1080,6 +1144,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             listener.onPictureTakenError(
               "Photo capture failed: " + exception.getMessage()
             );
+          }
+          // End of capture lifecycle
+          synchronized (captureLock) {
+            isCapturingPhoto = false;
+            if (stopRequested) {
+              performImmediateStop();
+            }
           }
         }
 
@@ -1193,6 +1264,14 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
               listener.onPictureTakenError(
                 "Error processing image: " + e.getMessage()
               );
+            }
+          } finally {
+            // End of capture lifecycle
+            synchronized (captureLock) {
+              isCapturingPhoto = false;
+              if (stopRequested) {
+                performImmediateStop();
+              }
             }
           }
         }

@@ -80,6 +80,10 @@ class CameraController: NSObject {
     // Track output preparation status
     private var outputsPrepared: Bool = false
 
+    // Capture/stop coordination
+    var isCapturingPhoto: Bool = false
+    var stopRequestedAfterCapture: Bool = false
+
     var isUsingMultiLensVirtualCamera: Bool {
         guard let device = (currentCameraPosition == .rear) ? rearCamera : frontCamera else { return false }
         // A rear multi-lens virtual camera will have a min zoom of 1.0 but support wider angles
@@ -944,14 +948,27 @@ extension CameraController {
             }
         }
 
-        self.photoCaptureCompletionBlock = { (image, photoData, metadata, error) in
+        self.isCapturingPhoto = true
+
+        self.photoCaptureCompletionBlock = { [weak self] (image, photoData, metadata, error) in
+            guard let self = self else { return }
             if let error = error {
                 completion(nil, nil, nil, error)
+                // End capture lifecycle
+                self.isCapturingPhoto = false
+                if self.stopRequestedAfterCapture {
+                    DispatchQueue.main.async { self.cleanup(); self.stopRequestedAfterCapture = false }
+                }
                 return
             }
 
             guard let image = image else {
                 completion(nil, nil, nil, NSError(domain: "Camera", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to capture image"]))
+                // End capture lifecycle
+                self.isCapturingPhoto = false
+                if self.stopRequestedAfterCapture {
+                    DispatchQueue.main.async { self.cleanup(); self.stopRequestedAfterCapture = false }
+                }
                 return
             }
 
@@ -980,6 +997,11 @@ extension CameraController {
             }
 
             completion(finalImage, photoData, metadata, nil)
+            // End capture lifecycle
+            self.isCapturingPhoto = false
+            if self.stopRequestedAfterCapture {
+                DispatchQueue.main.async { self.cleanup(); self.stopRequestedAfterCapture = false }
+            }
         }
 
         photoOutput.capturePhoto(with: settings, delegate: self)

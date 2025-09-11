@@ -19,3 +19,6 @@ project(':capawesome-capacitor-android-edge-to-edge-support').projectDir = new F
 
 include ':capgo-camera-preview'
 project(':capgo-camera-preview').projectDir = new File('../../android')
+
+include ':capgo-home-indicator'
+project(':capgo-home-indicator').projectDir = new File('../node_modules/@capgo/home-indicator/android')

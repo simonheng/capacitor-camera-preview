@@ -229,6 +229,15 @@ public class CameraPreview
 
   @PluginMethod
   public void start(PluginCall call) {
+    // Prevent starting while an existing view is still active or stopping
+    if (cameraXView != null) {
+      try {
+        if (cameraXView.isRunning() || cameraXView.isBusy()) {
+          call.reject("Camera is busy or stopping. Please retry shortly.");
+          return;
+        }
+      } catch (Exception ignored) {}
+    }
     boolean disableAudio = Boolean.TRUE.equals(
       call.getBoolean("disableAudio", true)
     );
@@ -367,9 +376,18 @@ public class CameraPreview
           rotationOverlay = null;
         }
 
-        if (cameraXView != null && cameraXView.isRunning()) {
-          cameraXView.stopSession();
-          cameraXView = null;
+        if (cameraXView != null) {
+          boolean willDefer = false;
+          try {
+            willDefer = cameraXView.isCapturing();
+          } catch (Exception ignored) {}
+          if (cameraXView.isRunning()) {
+            cameraXView.stopSession();
+          }
+          // Only drop the reference if no deferred stop is pending
+          if (!willDefer) {
+            cameraXView = null;
+          }
         }
         // Restore original window background if modified earlier
         if (originalWindowBackground != null) {
@@ -1484,6 +1502,12 @@ public class CameraPreview
     }
     pluginCall.reject(message);
     bridge.releaseCall(pluginCall);
+  }
+
+  @Override
+  public void onCameraStopped() {
+    // Ensure reference is cleared once underlying CameraXView has fully stopped
+    cameraXView = null;
   }
 
   private JSObject getViewSize(

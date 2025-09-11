@@ -521,6 +521,11 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             call.reject("camera already started")
             return
         }
+        // Guard against starting while a deferred stop is pending due to in-flight capture
+        if self.cameraController.isCapturingPhoto || self.cameraController.stopRequestedAfterCapture {
+            call.reject("camera is stopping or busy, please retry shortly")
+            return
+        }
         self.isInitializing = true
 
         self.cameraPosition = call.getString("position") ?? "rear"
@@ -739,7 +744,8 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
 
         // UI operations must be on main thread
         DispatchQueue.main.async {
-            // Always attempt to stop and clean up, regardless of captureSession state
+            // If a photo capture is in-flight, defer cleanup until it finishes,
+            // but hide the preview immediately so UI can close.
             self.cameraController.removeGridOverlay()
             if let previewView = self.previewView {
                 previewView.removeFromSuperview()
@@ -749,13 +755,19 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             self.webView?.isOpaque = true
             self.isInitialized = false
             self.isInitializing = false
-            self.cameraController.cleanup()
 
-            // Remove notification observers
+            // Remove notification observers regardless
             NotificationCenter.default.removeObserver(self)
-
             NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
             UIDevice.current.endGeneratingDeviceOrientationNotifications()
+
+            if self.cameraController.isCapturingPhoto {
+                // Defer heavy cleanup until capture callback completes
+                self.cameraController.stopRequestedAfterCapture = true
+            } else {
+                // No capture pending; cleanup now
+                self.cameraController.cleanup()
+            }
 
             call.resolve()
         }
