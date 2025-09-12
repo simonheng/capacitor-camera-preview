@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.14.8](https://github.com/Cap-go/capacitor-camera-preview/compare/7.14.7...7.14.8) (2025-09-12)
+
+
+### Bug Fixes
+
+* **renovate:** add dependencyDashboard setting to configuration ([4f67b18](https://github.com/Cap-go/capacitor-camera-preview/commit/4f67b18849ae0c28218e85a1c1dc62adedafcec3))
+
 ## [7.14.7](https://github.com/Cap-go/capacitor-camera-preview/compare/7.14.6...7.14.7) (2025-09-12)
 
 ## [7.14.6](https://github.com/Cap-go/capacitor-camera-preview/compare/7.14.5...7.14.6) (2025-09-11)
