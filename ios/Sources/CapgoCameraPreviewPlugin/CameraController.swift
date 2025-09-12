@@ -328,7 +328,7 @@ extension CameraController {
 
     func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, disableFocusIndicator: Bool = false, videoQuality: VideoQuality? = nil, completionHandler: @escaping (Error?) -> Void) {
         let qualityString = videoQuality?.rawValue ?? "default"
-        print("[CameraPreview] Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? \"nil\"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? \"nil\"), zoom: \(initialZoomLevel ?? 1), videoQuality: \(qualityString)")
+        print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? "nil"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? "nil"), zoom: \(initialZoomLevel ?? 1), videoQuality: \(qualityString)")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
@@ -358,7 +358,7 @@ extension CameraController {
                 self.requestedAspectRatio = aspectRatio
                 // Use videoQuality if provided, else fallback to aspectRatio
                 let selectedPreset = self.presetForVideoQuality(videoQuality, aspectRatio: aspectRatio)
-                print("[CameraPreview] 📹 Final selected video quality: \(videoQuality?.rawValue ?? \"default\") -> preset: \(selectedPreset.rawValue)")
+                print("[CameraPreview] 📹 Final selected video quality: \(videoQuality?.rawValue ?? "default") -> preset: \(selectedPreset.rawValue)")
                 if captureSession.canSetSessionPreset(selectedPreset) {
                     captureSession.sessionPreset = selectedPreset
                 } else {
@@ -1909,6 +1909,48 @@ extension CameraController {
         }
     }
 
+    private func getCompressionSettings() -> [String: Any] {
+        // Base settings that respect the session preset resolution
+        let baseSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoMaxKeyFrameIntervalKey: 30,
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel
+            ]
+        ]
+
+        // Don't override width/height - let session preset handle that
+        var compressionProps = baseSettings[AVVideoCompressionPropertiesKey] as! [String: Any]
+
+        // Set bitrate based on session preset (which reflects VideoQuality)
+        let sessionPreset = captureSession?.sessionPreset ?? .high
+        let bitrate: Int
+
+        switch sessionPreset {
+        case .hd4K3840x2160:    // max, uhd
+            bitrate = 8_000_000  // 8 Mbps for 4K
+        case .hd1920x1080:      // fhd
+            bitrate = 4_000_000  // 4 Mbps for 1080p
+        case .hd1280x720:       // hd
+            bitrate = 2_000_000  // 2 Mbps for 720p
+        case .vga640x480:       // sd
+            bitrate = 1_000_000  // 1 Mbps for VGA
+        case .low:              // low
+            bitrate = 500_000    // 0.5 Mbps for low
+        default:
+            bitrate = 2_000_000  // Default fallback
+        }
+
+        print("[CameraPreview] getCompressionSettings - Session preset: \(sessionPreset), Bitrate: \(bitrate)")
+
+        compressionProps[AVVideoAverageBitRateKey] = bitrate
+
+        var finalSettings = baseSettings
+        finalSettings[AVVideoCompressionPropertiesKey] = compressionProps
+
+        return finalSettings
+    }
+
     func captureVideo() throws {
         guard let captureSession = self.captureSession, captureSession.isRunning else {
             throw CameraControllerError.captureSessionIsMissing
@@ -1920,6 +1962,12 @@ extension CameraController {
         guard let fileVideoOutput = self.fileVideoOutput else {
             throw CameraControllerError.fileVideoOutputNotFound
         }
+
+         // Configure compression based on VideoQuality enum
+            if let videoConnection = fileVideoOutput.connection(with: .video) {
+                let compressionSettings = getCompressionSettings()
+                fileVideoOutput.setOutputSettings(compressionSettings, for: videoConnection)
+            }
 
         // Ensure the movie file output is attached to the active session.
         // If the camera was started without cameraMode=true, the output may not have been added yet.

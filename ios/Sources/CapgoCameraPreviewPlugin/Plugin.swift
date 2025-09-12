@@ -603,8 +603,7 @@ public class CameraPreview: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelega
             if self.cameraController.captureSession?.isRunning ?? false {
                 call.reject("camera already started")
             } else {
-                    let videoQualityEnum = VideoQuality(rawValue: videoQualityString ?? "max") // "max" is default, or use nil for default
-                    self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio, initialZoomLevel: initialZoomLevel, disableFocusIndicator: self.disableFocusIndicator, videoQuality: videoQualityEnum) {error in
+                    self.cameraController.prepare(cameraPosition: self.cameraPosition, deviceId: deviceId, disableAudio: self.disableAudio, cameraMode: cameraMode, aspectRatio: self.aspectRatio, initialZoomLevel: initialZoomLevel, disableFocusIndicator: self.disableFocusIndicator, videoQuality: videoQuality) {error in
                     if let error = error {
                         print(error)
                         call.reject(error.localizedDescription)
