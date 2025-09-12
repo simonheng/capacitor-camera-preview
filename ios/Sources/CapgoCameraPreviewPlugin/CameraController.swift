@@ -328,7 +328,7 @@ extension CameraController {
 
     func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, disableFocusIndicator: Bool = false, videoQuality: VideoQuality? = nil, completionHandler: @escaping (Error?) -> Void) {
         let qualityString = videoQuality?.rawValue ?? "default"
-        print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? \"nil\"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? \"nil\"), zoom: \(initialZoomLevel ?? 1), videoQuality: \(qualityString)")
+        print("[CameraPreview] Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? \"nil\"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? \"nil\"), zoom: \(initialZoomLevel ?? 1), videoQuality: \(qualityString)")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
