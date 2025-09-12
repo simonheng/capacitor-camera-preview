@@ -8,6 +8,15 @@ export type GridMode = "none" | "3x3" | "4x4";
 
 export type CameraPositioning = "center" | "top" | "bottom";
 
+// Allow selecting recording quality to control output file size
+export type VideoQuality =
+  | "max" // highest available
+  | "uhd" // 3840x2160 if available
+  | "fhd" // 1920x1080
+  | "hd" // 1280x720
+  | "sd" // 640x480
+  | "low"; // platform low preset
+
 export enum DeviceType {
   ULTRA_WIDE = "ultraWide",
   WIDE_ANGLE = "wideAngle",
@@ -215,6 +224,13 @@ export interface CameraPreviewOptions {
    * @since 7.11.0
    */
   enableVideoMode?: boolean;
+  /**
+   * Desired recording quality for video capture. If not provided, the plugin picks a sensible default.
+   * Pass when calling start() to pre-bind the video pipeline, or when calling startRecordVideo() to override per recording.
+   * @default "fhd" on Android (with graceful fallback), platform default on iOS
+   * @platform android, ios
+   */
+  videoQuality?: VideoQuality;
 }
 
 /**

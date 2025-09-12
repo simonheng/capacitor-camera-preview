@@ -758,6 +758,7 @@ public class CameraPreview
     final boolean enableVideoMode = Boolean.TRUE.equals(
       call.getBoolean("enableVideoMode", false)
     );
+    final String videoQuality = call.getString("videoQuality");
 
     // Check for conflict between aspectRatio and size
     if (
@@ -1188,7 +1189,8 @@ public class CameraPreview
           aspectRatio,
           gridMode,
           disableFocusIndicator,
-          enableVideoMode
+          enableVideoMode,
+          videoQuality
         );
         config.setTargetZoom(finalTargetZoom);
         config.setCentered(isCentered);
@@ -1921,6 +1923,14 @@ public class CameraPreview
       ? CAMERA_ONLY_PERMISSION_ALIAS
       : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
 
+    // Optional override of quality per call
+    String requestedQuality = call.getString("videoQuality");
+    if (requestedQuality != null && !requestedQuality.isEmpty()) {
+      try {
+        cameraXView.updateVideoQuality(requestedQuality);
+      } catch (Exception ignored) {}
+    }
+
     if (PermissionState.GRANTED.equals(getPermissionState(permissionAlias))) {
       try {
         cameraXView.startRecordVideo();
@@ -1992,6 +2002,13 @@ public class CameraPreview
       )
     ) {
       try {
+        // Apply per-call quality if provided on the saved call
+        String requestedQuality = call.getString("videoQuality");
+        if (requestedQuality != null && !requestedQuality.isEmpty()) {
+          try {
+            cameraXView.updateVideoQuality(requestedQuality);
+          } catch (Exception ignored) {}
+        }
         cameraXView.startRecordVideo();
         call.resolve();
       } catch (Exception e) {

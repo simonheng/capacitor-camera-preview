@@ -326,8 +326,9 @@ extension CameraController {
         self.outputsPrepared = true
     }
 
-    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, disableFocusIndicator: Bool = false, completionHandler: @escaping (Error?) -> Void) {
-        print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? "nil"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? "nil"), zoom: \(initialZoomLevel ?? 1)")
+    func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, disableFocusIndicator: Bool = false, videoQuality: VideoQuality? = nil, completionHandler: @escaping (Error?) -> Void) {
+        let qualityString = videoQuality?.rawValue ?? "default"
+        print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? \"nil\"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? \"nil\"), zoom: \(initialZoomLevel ?? 1), videoQuality: \(qualityString)")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
@@ -355,7 +356,15 @@ extension CameraController {
 
                 // Set aspect ratio preset and remember requested ratio
                 self.requestedAspectRatio = aspectRatio
-                self.configureSessionPreset(for: aspectRatio)
+                // Use videoQuality if provided, else fallback to aspectRatio
+                let selectedPreset = self.presetForVideoQuality(videoQuality, aspectRatio: aspectRatio)
+                print("[CameraPreview] 📹 Final selected video quality: \(videoQuality?.rawValue ?? \"default\") -> preset: \(selectedPreset.rawValue)")
+                if captureSession.canSetSessionPreset(selectedPreset) {
+                    captureSession.sessionPreset = selectedPreset
+                } else {
+                    print("[CameraPreview] ⚠️ Requested preset \(selectedPreset.rawValue) not supported, using default.")
+                    self.configureSessionPreset(for: aspectRatio)
+                }
 
                 // Set disableFocusIndicator
                 self.disableFocusIndicator = disableFocusIndicator
@@ -430,6 +439,38 @@ extension CameraController {
                     completionHandler(error)
                 }
             }
+        }
+    }
+
+    // Helper to map VideoQuality to AVCaptureSession.Preset
+    private func presetForVideoQuality(_ quality: VideoQuality?, aspectRatio: String?) -> AVCaptureSession.Preset {
+        guard let quality = quality else {
+            // Fallback to aspect ratio logic
+            if let aspectRatio = aspectRatio {
+                switch aspectRatio {
+                case "16:9":
+                    return .hd1920x1080
+                case "4:3":
+                    return .photo
+                default:
+                    return .high
+                }
+            }
+            return .high
+        }
+        switch quality {
+        case .max:
+            return .hd4K3840x2160
+        case .uhd:
+            return .hd4K3840x2160
+        case .fhd:
+            return .hd1920x1080
+        case .hd:
+            return .hd1280x720
+        case .sd:
+            return .vga640x480
+        case .low:
+            return .low
         }
     }
 
@@ -2198,6 +2239,10 @@ enum CameraControllerError: Swift.Error {
 public enum CameraPosition {
     case front
     case rear
+}
+
+public enum VideoQuality: String {
+    case max, uhd, fhd, hd, sd, low
 }
 
 extension CameraControllerError: LocalizedError {

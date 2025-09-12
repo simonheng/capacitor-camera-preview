@@ -85,7 +85,6 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -150,6 +149,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
   private volatile boolean isCapturingPhoto = false;
   private volatile boolean stopRequested = false;
   private volatile boolean previewDetachedOnDeferredStop = false;
+  private QualitySelector currentVideoQualitySelector = null; // Track the active selector for logging
 
   public boolean isCapturing() {
     return isCapturingPhoto;
@@ -758,6 +758,127 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     webView.setBackgroundColor(android.graphics.Color.WHITE);
   }
 
+  // Helper: map our string quality to CameraX QualitySelector with graceful fallbacks
+  private QualitySelector buildQualitySelector(String q) {
+    String quality = (q == null) ? "" : q.trim().toLowerCase(Locale.US);
+    try {
+      switch (quality) {
+        case "max":
+          return QualitySelector.from(Quality.HIGHEST);
+        case "uhd":
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
+            FallbackStrategy.lowerQualityOrHigherThan(Quality.UHD)
+          );
+        case "fhd":
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(Quality.FHD, Quality.HD, Quality.SD, Quality.UHD),
+            FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+          );
+        case "hd":
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(Quality.HD, Quality.SD, Quality.FHD, Quality.UHD),
+            FallbackStrategy.lowerQualityOrHigherThan(Quality.HD)
+          );
+        case "sd":
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(Quality.SD, Quality.HD, Quality.FHD, Quality.UHD),
+            FallbackStrategy.higherQualityOrLowerThan(Quality.SD)
+          );
+        case "low":
+          return QualitySelector.from(Quality.LOWEST);
+        default:
+          // Sensible Android default if not specified: FHD with graceful fallback
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
+            FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)
+          );
+      }
+    } catch (Throwable t) {
+      // Safety net: never crash due to quality mapping
+      return QualitySelector.fromOrderedList(
+        Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
+        FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)
+      );
+    }
+  }
+
+  // Allow overriding preferred video quality at runtime (e.g. per startRecordVideo call)
+  public void updateVideoQuality(String newQuality) {
+    if (sessionConfig == null) return;
+
+    // Recreate sessionConfig preserving everything but quality
+    sessionConfig = new com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration(
+      sessionConfig.getDeviceId(),
+      sessionConfig.getPosition(),
+      sessionConfig.getX(),
+      sessionConfig.getY(),
+      sessionConfig.getWidth(),
+      sessionConfig.getHeight(),
+      sessionConfig.getPaddingBottom(),
+      sessionConfig.getToBack(),
+      sessionConfig.getStoreToFile(),
+      sessionConfig.getEnableOpacity(),
+      sessionConfig.getEnableZoom(),
+      sessionConfig.getDisableExifHeaderStripping(),
+      sessionConfig.getDisableAudio(),
+      sessionConfig.getZoomFactor(),
+      sessionConfig.getAspectRatio(),
+      sessionConfig.getGridMode(),
+      sessionConfig.getDisableFocusIndicator(),
+      sessionConfig.isVideoModeEnabled(),
+      newQuality
+    );
+
+    // If we're already bound with videoCapture, rebind with the updated quality
+    if (isRunning && videoCapture != null && cameraProvider != null && previewView != null && currentRecording == null) {
+      try {
+        QualitySelector qualitySelector = buildQualitySelector(newQuality);
+        Recorder recorder = new Recorder.Builder()
+          .setQualitySelector(qualitySelector)
+          .build();
+        VideoCapture<Recorder> newVideoCapture = VideoCapture.withOutput(recorder);
+
+        // Rebind use cases with the new video capture
+        Preview preview = previewUseCase != null ? previewUseCase : new Preview.Builder().build();
+        cameraProvider.unbindAll();
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+        if (imageCapture == null) {
+          imageCapture = new ImageCapture.Builder().build();
+        }
+        camera = cameraProvider.bindToLifecycle(this, currentCameraSelector, preview, imageCapture, newVideoCapture);
+        videoCapture = newVideoCapture;
+        currentVideoQualitySelector = qualitySelector;
+        Quality resolved = null;
+        try { resolved = currentVideoQualitySelector.getPreferredQuality(camera.getCameraInfo()); } catch (Throwable ignore) {}
+        Log.d(TAG, "updateVideoQuality: requested='" + newQuality + "' resolved='" + qualityToString(resolved) + "'");
+      } catch (Exception e) {
+        Log.w(TAG, "updateVideoQuality: Failed to rebind with new quality: " + e.getMessage());
+      }
+    }
+  }
+
+  // Pretty print Quality enum for logs
+  private static String qualityToString(Quality q) {
+    if (q == null) return "none";
+    switch (q) {
+      case UHD:
+        return "uhd (2160p)";
+      case FHD:
+        return "fhd (1080p)";
+      case HD:
+        return "hd (720p)";
+      case SD:
+        return "sd (480p)";
+      case HIGHEST:
+        return "max (highest available)";
+      case LOWEST:
+        return "low (lowest available)";
+      default:
+        return q.toString().toLowerCase(java.util.Locale.US);
+    }
+  }
+
   @OptIn(markerClass = ExperimentalCamera2Interop.class)
   private void bindCameraUseCases() {
     if (cameraProvider == null) return;
@@ -816,14 +937,12 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
         // Only setup VideoCapture if enableVideoMode is true
         if (sessionConfig.isVideoModeEnabled()) {
-          QualitySelector qualitySelector = QualitySelector.fromOrderedList(
-            Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
-            FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)
-          );
+          QualitySelector qualitySelector = buildQualitySelector(sessionConfig.getVideoQuality());
           Recorder recorder = new Recorder.Builder()
             .setQualitySelector(qualitySelector)
             .build();
           videoCapture = VideoCapture.withOutput(recorder);
+          currentVideoQualitySelector = qualitySelector;
         }
 
         // Unbind any existing use cases and bind new ones
@@ -2559,17 +2678,18 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       sessionConfig.getWidth(), // width
       sessionConfig.getHeight(), // height
       sessionConfig.getPaddingBottom(), // paddingBottom
-      sessionConfig.isToBack(), // toBack
-      sessionConfig.isStoreToFile(), // storeToFile
-      sessionConfig.isEnableOpacity(), // enableOpacity
-      sessionConfig.isEnableZoom(), // enableZoom
-      sessionConfig.isDisableExifHeaderStripping(), // disableExifHeaderStripping
-      sessionConfig.isDisableAudio(), // disableAudio
+      sessionConfig.getToBack(), // toBack
+      sessionConfig.getStoreToFile(), // storeToFile
+      sessionConfig.getEnableOpacity(), // enableOpacity
+      sessionConfig.getEnableZoom(), // enableZoom
+      sessionConfig.getDisableExifHeaderStripping(), // disableExifHeaderStripping
+      sessionConfig.getDisableAudio(), // disableAudio
       sessionConfig.getZoomFactor(), // zoomFactor
       sessionConfig.getAspectRatio(), // aspectRatio
       sessionConfig.getGridMode(), // gridMode
       sessionConfig.getDisableFocusIndicator(), // disableFocusIndicator
-      sessionConfig.isVideoModeEnabled() // enableVideoMode
+      sessionConfig.isVideoModeEnabled(), // enableVideoMode
+      sessionConfig.getVideoQuality() // videoQuality
     );
 
     // Clear current device ID to force position-based selection
@@ -2729,7 +2849,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       aspectRatio,
       currentGridMode,
       sessionConfig.getDisableFocusIndicator(),
-      sessionConfig.isVideoModeEnabled()
+      sessionConfig.isVideoModeEnabled(),
+      sessionConfig.getVideoQuality()
     );
     sessionConfig.setCentered(true);
 
@@ -2833,7 +2954,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
       aspectRatio,
       currentGridMode,
       sessionConfig.getDisableFocusIndicator(),
-      sessionConfig.isVideoModeEnabled()
+      sessionConfig.isVideoModeEnabled(),
+      sessionConfig.getVideoQuality()
     );
     sessionConfig.setCentered(true);
 
@@ -2909,7 +3031,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         sessionConfig.getAspectRatio(),
         gridMode,
         sessionConfig.getDisableFocusIndicator(),
-        sessionConfig.isVideoModeEnabled()
+        sessionConfig.isVideoModeEnabled(),
+        sessionConfig.getVideoQuality()
       );
 
       // Update the grid overlay immediately
@@ -3293,7 +3416,8 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
             calculatedAspectRatio,
             sessionConfig.getGridMode(),
             sessionConfig.getDisableFocusIndicator(),
-            sessionConfig.isVideoModeEnabled()
+            sessionConfig.isVideoModeEnabled(),
+            sessionConfig.getVideoQuality()
           );
 
           // If aspect ratio changed due to size update, rebind camera
@@ -3546,7 +3670,7 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           finalWidth = (int) (maxHeight * ratio);
           Log.d(TAG, "Height-constrained sizing");
         } else {
-          Log.d(TAG, "Width-constrained sizing");
+          Log.d(TAG, "Width-limited sizing");
         }
 
         // Ensure final position stays within bounds
@@ -3939,6 +4063,15 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         );
     }
 
+    // Log the quality being used at the moment recording starts
+    if (currentVideoQualitySelector != null && camera != null) {
+      Quality resolved = null;
+      try { resolved = currentVideoQualitySelector.getPreferredQuality(camera.getCameraInfo()); } catch (Throwable ignore) {}
+      Log.i(TAG, "Starting video recording with quality: requested='" + (sessionConfig != null ? sessionConfig.getVideoQuality() : null) + "' resolved='" + qualityToString(resolved) + "'");
+    } else {
+      Log.i(TAG, "Starting video recording with quality: not available (video pipeline not initialized)");
+    }
+
     Log.d(
       TAG,
       "Video recording started to: " + currentVideoFile.getAbsolutePath()
@@ -3961,15 +4094,13 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
         ? previewView.getDisplay().getRotation()
         : android.view.Surface.ROTATION_0;
 
-      // Setup VideoCapture with rotation and quality fallback
-      QualitySelector qualitySelector = QualitySelector.fromOrderedList(
-        Arrays.asList(Quality.FHD, Quality.HD, Quality.SD),
-        FallbackStrategy.higherQualityOrLowerThan(Quality.FHD)
-      );
+      // Setup VideoCapture with rotation and quality mapping
+      QualitySelector qualitySelector = buildQualitySelector(sessionConfig != null ? sessionConfig.getVideoQuality() : null);
       Recorder recorder = new Recorder.Builder()
         .setQualitySelector(qualitySelector)
         .build();
       videoCapture = VideoCapture.withOutput(recorder);
+      currentVideoQualitySelector = qualitySelector;
 
       // Reuse the Preview use case we created during initial binding
       Preview preview = previewUseCase;
@@ -3988,6 +4119,11 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
           imageCapture,
           videoCapture
         );
+
+        // Log resolved quality after binding
+        Quality resolved = null;
+        try { resolved = currentVideoQualitySelector.getPreferredQuality(camera.getCameraInfo()); } catch (Throwable ignore) {}
+        Log.i(TAG, "VideoCapture initialized with quality: requested='" + (sessionConfig != null ? sessionConfig.getVideoQuality() : null) + "' resolved='" + qualityToString(resolved) + "'");
       } else {
         // Shouldn't happen, but handle gracefully
         throw new Exception("Preview use case not found");
@@ -3999,18 +4135,6 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     }
   }
 
-  public void stopRecordVideo(VideoRecordingCallback callback) {
-    if (currentRecording == null) {
-      callback.onError("No video recording in progress");
-      return;
-    }
-
-    // Store the callback to use when recording is finalized
-    currentVideoCallback = callback;
-    currentRecording.stop();
-
-    Log.d(TAG, "Video recording stop requested");
-  }
 
   private void handleRecordingFinalized(
     VideoRecordEvent.Finalize finalizeEvent
