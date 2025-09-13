@@ -4135,6 +4135,18 @@ public class CameraXView implements LifecycleOwner, LifecycleObserver {
     }
   }
 
+  public void stopRecordVideo(VideoRecordingCallback callback) {
+    if (currentRecording == null) {
+      callback.onError("No video recording in progress");
+      return;
+    }
+
+    // Store the callback to use when recording is finalized
+    currentVideoCallback = callback;
+    currentRecording.stop();
+
+    Log.d(TAG, "Video recording stop requested");
+  }
 
   private void handleRecordingFinalized(
     VideoRecordEvent.Finalize finalizeEvent

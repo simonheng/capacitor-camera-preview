@@ -3,6 +3,8 @@ import UIKit
 import CoreLocation
 
 class CameraController: NSObject {
+
+
     private func getVideoOrientation() -> AVCaptureVideoOrientation {
         var orientation: AVCaptureVideoOrientation = .portrait
         if Thread.isMainThread {
@@ -38,6 +40,7 @@ class CameraController: NSObject {
 
     var captureSession: AVCaptureSession?
     var disableFocusIndicator: Bool = false
+    var videoQuality: VideoQuality = .sd
 
     var currentCameraPosition: CameraPosition?
 
@@ -329,6 +332,10 @@ extension CameraController {
     func prepare(cameraPosition: String, deviceId: String? = nil, disableAudio: Bool, cameraMode: Bool, aspectRatio: String? = nil, initialZoomLevel: Float?, disableFocusIndicator: Bool = false, videoQuality: VideoQuality? = nil, completionHandler: @escaping (Error?) -> Void) {
         let qualityString = videoQuality?.rawValue ?? "default"
         print("[CameraPreview] 🎬 Starting prepare - position: \(cameraPosition), deviceId: \(deviceId ?? "nil"), disableAudio: \(disableAudio), cameraMode: \(cameraMode), aspectRatio: \(aspectRatio ?? "nil"), zoom: \(initialZoomLevel ?? 1), videoQuality: \(qualityString)")
+
+        if let vq = videoQuality{
+            self.videoQuality = vq
+        }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
@@ -865,7 +872,7 @@ extension CameraController {
         }
 
         // Compute the desired preset for the TARGET device up front
-        let desiredPreset = bestPreset(for: self.requestedAspectRatio, on: targetDevice)
+        let desiredPreset = presetForVideoQuality(self.videoQuality, aspectRatio: self.requestedAspectRatio)
 
         // Keep the preview layer visually stable during the swap
         let savedPreviewFrame = self.previewLayer?.frame
@@ -1915,7 +1922,7 @@ extension CameraController {
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoCompressionPropertiesKey: [
                 AVVideoMaxKeyFrameIntervalKey: 30,
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
             ]
         ]
 
@@ -1928,11 +1935,11 @@ extension CameraController {
 
         switch sessionPreset {
         case .hd4K3840x2160:    // max, uhd
-            bitrate = 8_000_000  // 8 Mbps for 4K
+            bitrate = 20_000_000  // 8 Mbps for 4K
         case .hd1920x1080:      // fhd
-            bitrate = 4_000_000  // 4 Mbps for 1080p
+            bitrate = 10_000_000  // 10 Mbps for 1080p
         case .hd1280x720:       // hd
-            bitrate = 2_000_000  // 2 Mbps for 720p
+            bitrate = 4_000_000  // 4 Mbps for 720p
         case .vga640x480:       // sd
             bitrate = 1_000_000  // 1 Mbps for VGA
         case .low:              // low
@@ -1944,10 +1951,13 @@ extension CameraController {
         print("[CameraPreview] getCompressionSettings - Session preset: \(sessionPreset), Bitrate: \(bitrate)")
 
         compressionProps[AVVideoAverageBitRateKey] = bitrate
+        compressionProps[AVVideoH264EntropyModeKey] = AVVideoH264EntropyModeCABAC
 
         var finalSettings = baseSettings
         finalSettings[AVVideoCompressionPropertiesKey] = compressionProps
-
+        compressionProps[AVVideoAllowFrameReorderingKey] = true
+        compressionProps[AVVideoMaxKeyFrameIntervalKey] = 60
+        compressionProps[AVVideoExpectedSourceFrameRateKey] = 30
         return finalSettings
     }
 
@@ -1963,11 +1973,6 @@ extension CameraController {
             throw CameraControllerError.fileVideoOutputNotFound
         }
 
-         // Configure compression based on VideoQuality enum
-            if let videoConnection = fileVideoOutput.connection(with: .video) {
-                let compressionSettings = getCompressionSettings()
-                fileVideoOutput.setOutputSettings(compressionSettings, for: videoConnection)
-            }
 
         // Ensure the movie file output is attached to the active session.
         // If the camera was started without cameraMode=true, the output may not have been added yet.
@@ -1980,6 +1985,15 @@ extension CameraController {
                 throw CameraControllerError.invalidOperation
             }
             captureSession.commitConfiguration()
+        }
+
+        // NOW configure compression settings - connection will exist
+        if let videoConnection = fileVideoOutput.connection(with: .video) {
+            let compressionSettings = getCompressionSettings()
+            fileVideoOutput.setOutputSettings(compressionSettings, for: videoConnection)
+            print("[CameraPreview] Applied compression settings: \(compressionSettings)")
+        } else {
+            print("[CameraPreview] Warning: No video connection found after adding output")
         }
 
         // cpcp_video_A6C01203 - portrait
