@@ -1,1262 +1,599 @@
 package com.ahm.capacitor.camera.preview;
 
-import static android.Manifest.permission.CAMERA;
-import static android.Manifest.permission.RECORD_AUDIO;
+import static androidx.camera.video.Quality.FHD;
+import static androidx.camera.video.Quality.HD;
+import static androidx.camera.video.Quality.HIGHEST;
+import static androidx.camera.video.Quality.LOWEST;
+import static androidx.camera.video.Quality.SD;
+import static androidx.camera.video.Quality.UHD;
+import static androidx.core.content.ContextCompat.getSystemService;
 
-import android.Manifest;
-import android.content.pm.ActivityInfo;
+import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.Drawable;
+import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
 import android.location.Location;
+import android.media.MediaScannerConnection;
+import android.media.CamcorderProfile;
+import android.os.Build;
+import android.os.Environment;
+import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.Range;
+import android.util.Rational;
 import android.util.Size;
-import android.view.OrientationEventListener;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.WindowMetrics;
 import android.webkit.WebView;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
-import com.ahm.capacitor.camera.preview.model.CameraDevice;
+import android.widget.FrameLayout;
+import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
+import androidx.annotation.RequiresApi;
+import androidx.camera.camera2.interop.Camera2CameraControl;
+import androidx.camera.camera2.interop.Camera2CameraInfo;
+import androidx.camera.camera2.interop.CaptureRequestOptions;
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
+import androidx.camera.core.AspectRatio;
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraInfo;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ExposureState;
+import androidx.camera.core.FocusMeteringAction;
+import androidx.camera.core.FocusMeteringResult;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.ImageProxy;
+import androidx.camera.core.MeteringPoint;
+import androidx.camera.core.MeteringPointFactory;
+import androidx.camera.core.Preview;
+import androidx.camera.core.ResolutionInfo;
+import androidx.camera.core.TorchState;
+import androidx.camera.core.UseCase;
+import androidx.camera.core.ZoomState;
+import androidx.camera.core.resolutionselector.AspectRatioStrategy;
+import androidx.camera.core.resolutionselector.ResolutionSelector;
+import androidx.camera.core.resolutionselector.ResolutionStrategy;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.video.FallbackStrategy;
+import androidx.camera.video.FileOutputOptions;
+import androidx.camera.video.Quality;
+import androidx.camera.video.QualitySelector;
+import androidx.camera.video.Recorder;
+import androidx.camera.video.Recording;
+import androidx.camera.video.VideoCapture;
+import androidx.camera.video.VideoRecordEvent;
+import androidx.camera.view.PreviewView;
+import androidx.core.content.ContextCompat;
+import androidx.exifinterface.media.ExifInterface;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.lifecycle.LifecycleRegistry;
 import com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration;
 import com.ahm.capacitor.camera.preview.model.LensInfo;
 import com.ahm.capacitor.camera.preview.model.ZoomFactors;
-import com.getcapacitor.JSArray;
-import com.getcapacitor.JSObject;
-import com.getcapacitor.Logger;
-import com.getcapacitor.PermissionState;
-import com.getcapacitor.Plugin;
-import com.getcapacitor.PluginCall;
-import com.getcapacitor.PluginMethod;
-import com.getcapacitor.annotation.CapacitorPlugin;
-import com.getcapacitor.annotation.Permission;
-import com.getcapacitor.annotation.PermissionCallback;
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationServices;
+import com.google.common.util.concurrent.ListenableFuture;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.json.JSONObject;
 
-@CapacitorPlugin(
-  name = "CameraPreview",
-  permissions = {
-    @Permission(
-      strings = { CAMERA, RECORD_AUDIO },
-      alias = CameraPreview.CAMERA_WITH_AUDIO_PERMISSION_ALIAS
-    ),
-    @Permission(
-      strings = { CAMERA },
-      alias = CameraPreview.CAMERA_ONLY_PERMISSION_ALIAS
-    ),
-    @Permission(
-      strings = {
-        Manifest.permission.ACCESS_COARSE_LOCATION,
-        Manifest.permission.ACCESS_FINE_LOCATION,
-      },
-      alias = CameraPreview.CAMERA_WITH_LOCATION_PERMISSION_ALIAS
-    ),
-  }
-)
-public class CameraPreview
-  extends Plugin
-  implements CameraXView.CameraXViewListener {
-
-  @Override
-  protected void handleOnPause() {
-    super.handleOnPause();
-    if (cameraXView != null && cameraXView.isRunning()) {
-      // Store the current configuration before stopping
-      lastSessionConfig = cameraXView.getSessionConfig();
-      cameraXView.stopSession();
-    }
-  }
-
-  @Override
-  protected void handleOnResume() {
-    super.handleOnResume();
-    if (lastSessionConfig != null) {
-      // Recreate camera with last known configuration
-      if (cameraXView == null) {
-        cameraXView = new CameraXView(getContext(), getBridge().getWebView());
-        cameraXView.setListener(this);
-      }
-      cameraXView.startSession(lastSessionConfig);
-    }
-  }
-
-  @Override
-  protected void handleOnDestroy() {
-    super.handleOnDestroy();
-    if (cameraXView != null) {
-      cameraXView.stopSession();
-      cameraXView = null;
-    }
-    lastSessionConfig = null;
-  }
-
-  private CameraSessionConfiguration lastSessionConfig;
+public class CameraXView implements LifecycleOwner, LifecycleObserver {
 
   private static final String TAG = "CameraPreview CameraXView";
 
-  static final String CAMERA_WITH_AUDIO_PERMISSION_ALIAS = "cameraWithAudio";
-  static final String CAMERA_ONLY_PERMISSION_ALIAS = "cameraOnly";
-  static final String CAMERA_WITH_LOCATION_PERMISSION_ALIAS =
-    "cameraWithLocation";
-
-  private String captureCallbackId = "";
-  private String snapshotCallbackId = "";
-  private String cameraStartCallbackId = "";
-  private int previousOrientationRequest =
-    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-  private CameraXView cameraXView;
-  private View rotationOverlay;
-  private FusedLocationProviderClient fusedLocationClient;
-  private Location lastLocation;
-  private OrientationEventListener orientationListener;
-  private int lastOrientation = Configuration.ORIENTATION_UNDEFINED;
-  private String lastOrientationStr = "unknown";
-  private boolean lastDisableAudio = true;
-  private Drawable originalWindowBackground;
-
-  @PluginMethod
-  public void getExposureModes(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    JSArray arr = new JSArray();
-    for (String m : cameraXView.getExposureModes()) arr.put(m);
-    JSObject ret = new JSObject();
-    ret.put("modes", arr);
-    call.resolve(ret);
+  public interface CameraXViewListener {
+    void onPictureTaken(String base64, JSONObject exif);
+    void onPictureTakenError(String message);
+    void onSampleTaken(String result);
+    void onSampleTakenError(String message);
+    void onCameraStarted(int width, int height, int x, int y);
+    void onCameraStartError(String message);
+    void onCameraStopped();
   }
 
-  @PluginMethod
-  public void getExposureMode(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    JSObject ret = new JSObject();
-    ret.put("mode", cameraXView.getExposureMode());
-    call.resolve(ret);
+  public interface VideoRecordingCallback {
+    void onSuccess(String filePath);
+    void onError(String message);
   }
 
-  @PluginMethod
-  public void setExposureMode(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
+  private ProcessCameraProvider cameraProvider;
+  private Camera camera;
+  private ImageCapture imageCapture;
+  private ImageCapture sampleImageCapture;
+  private VideoCapture<Recorder> videoCapture;
+  private Recording currentRecording;
+  private File currentVideoFile;
+  private VideoRecordingCallback currentVideoCallback;
+  private PreviewView previewView;
+  private Preview previewUseCase;
+  private GridOverlayView gridOverlayView;
+  private FrameLayout previewContainer;
+  private View focusIndicatorView;
+  private long focusIndicatorAnimationId = 0; // Incrementing token to invalidate previous animations
+  private boolean disableFocusIndicator = false; // Default to false for backward compatibility
+  private CameraSelector currentCameraSelector;
+  private String currentDeviceId;
+  private int currentFlashMode = ImageCapture.FLASH_MODE_OFF;
+  private CameraSessionConfiguration sessionConfig;
+  private CameraXViewListener listener;
+  private final Context context;
+  private final WebView webView;
+  private final LifecycleRegistry lifecycleRegistry;
+  private final Executor mainExecutor;
+  private ExecutorService cameraExecutor;
+  private boolean isRunning = false;
+  private Size currentPreviewResolution = null;
+  private ListenableFuture<FocusMeteringResult> currentFocusFuture = null; // Track current focus operation
+  private String currentExposureMode = "CONTINUOUS"; // Default behavior
+  private boolean isVideoCaptureInitializing = false;
+  // Capture/stop coordination
+  private final Object captureLock = new Object();
+  private volatile boolean isCapturingPhoto = false;
+  private volatile boolean stopRequested = false;
+  private volatile boolean previewDetachedOnDeferredStop = false;
+  private QualitySelector currentVideoQualitySelector = null; // Track the active selector for logging
+
+  public boolean isCapturing() {
+    return isCapturingPhoto;
+  }
+
+  public boolean isStopDeferred() {
+    synchronized (captureLock) {
+      return isCapturingPhoto && stopRequested;
     }
-    String mode = call.getString("mode");
-    if (mode == null || mode.isEmpty()) {
-      call.reject("mode parameter is required");
-      return;
+  }
+
+  public boolean isBusy() {
+    synchronized (captureLock) {
+      return isCapturingPhoto || stopRequested;
     }
+  }
+
+  public CameraXView(Context context, WebView webView) {
+    this.context = context;
+    this.webView = webView;
+    this.lifecycleRegistry = new LifecycleRegistry(this);
+    this.mainExecutor = ContextCompat.getMainExecutor(context);
+
+    mainExecutor.execute(() ->
+      lifecycleRegistry.setCurrentState(Lifecycle.State.CREATED)
+    );
+  }
+
+  @NonNull
+  @Override
+  public Lifecycle getLifecycle() {
+    return lifecycleRegistry;
+  }
+
+  public CameraSessionConfiguration getSessionConfig() {
+    return sessionConfig;
+  }
+
+  public void setListener(CameraXViewListener listener) {
+    this.listener = listener;
+  }
+
+  public boolean isRunning() {
+    return isRunning;
+  }
+
+  public View getPreviewContainer() {
+    return previewContainer;
+  }
+
+
+  private void saveImageToGallery(byte[] data) {
     try {
-      cameraXView.setExposureMode(mode);
-      call.resolve();
-    } catch (Exception e) {
-      call.reject("Failed to set exposure mode: " + e.getMessage());
-    }
-  }
+      // Detect image format from byte array header
+      String extension = ".jpg";
+      String mimeType = "image/jpeg";
 
-  @PluginMethod
-  public void getExposureCompensationRange(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    try {
-      float[] range = cameraXView.getExposureCompensationRange();
-      JSObject ret = new JSObject();
-      ret.put("min", range[0]);
-      ret.put("max", range[1]);
-      ret.put("step", range.length > 2 ? range[2] : 0.1);
-      call.resolve(ret);
-    } catch (Exception e) {
-      call.reject(
-        "Failed to get exposure compensation range: " + e.getMessage()
-      );
-    }
-  }
-
-  @PluginMethod
-  public void getExposureCompensation(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    try {
-      float value = cameraXView.getExposureCompensation();
-      JSObject ret = new JSObject();
-      ret.put("value", value);
-      call.resolve(ret);
-    } catch (Exception e) {
-      call.reject("Failed to get exposure compensation: " + e.getMessage());
-    }
-  }
-
-  @PluginMethod
-  public void setExposureCompensation(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    Float value = call.getFloat("value");
-    if (value == null) {
-      call.reject("value parameter is required");
-      return;
-    }
-    try {
-      cameraXView.setExposureCompensation(value);
-      call.resolve();
-    } catch (Exception e) {
-      call.reject("Failed to set exposure compensation: " + e.getMessage());
-    }
-  }
-
-  @PluginMethod
-  public void getOrientation(PluginCall call) {
-    String o = getDeviceOrientationString();
-    JSObject ret = new JSObject();
-    ret.put("orientation", o);
-    call.resolve(ret);
-  }
-
-  @PluginMethod
-  public void start(PluginCall call) {
-    // Prevent starting while an existing view is still active or stopping
-    if (cameraXView != null) {
-      try {
-        if (cameraXView.isRunning() || cameraXView.isBusy()) {
-          call.reject("Camera is busy or stopping. Please retry shortly.");
-          return;
-        }
-      } catch (Exception ignored) {}
-    }
-    boolean disableAudio = Boolean.TRUE.equals(
-      call.getBoolean("disableAudio", true)
-    );
-    String permissionAlias = disableAudio
-      ? CAMERA_ONLY_PERMISSION_ALIAS
-      : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
-
-    if (PermissionState.GRANTED.equals(getPermissionState(permissionAlias))) {
-      startCamera(call);
-    } else {
-      requestPermissionForAlias(
-        permissionAlias,
-        call,
-        "handleCameraPermissionResult"
-      );
-    }
-  }
-
-  @PluginMethod
-  public void flip(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    cameraXView.flipCamera();
-    call.resolve();
-  }
-
-  @PluginMethod
-  public void capture(final PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-
-    final boolean withExifLocation = call.getBoolean("withExifLocation", false);
-
-    if (withExifLocation) {
-      if (
-        getPermissionState(CAMERA_WITH_LOCATION_PERMISSION_ALIAS) !=
-        PermissionState.GRANTED
-      ) {
-        requestPermissionForAlias(
-          CAMERA_WITH_LOCATION_PERMISSION_ALIAS,
-          call,
-          "captureWithLocationPermission"
-        );
-      } else {
-        getLocationAndCapture(call);
-      }
-    } else {
-      captureWithoutLocation(call);
-    }
-  }
-
-  @PermissionCallback
-  private void captureWithLocationPermission(PluginCall call) {
-    if (
-      getPermissionState(CAMERA_WITH_LOCATION_PERMISSION_ALIAS) ==
-      PermissionState.GRANTED
-    ) {
-      getLocationAndCapture(call);
-    } else {
-      Logger.warn(
-        "Location permission denied. Capturing photo without location data."
-      );
-      captureWithoutLocation(call);
-    }
-  }
-
-  private void getLocationAndCapture(PluginCall call) {
-    if (fusedLocationClient == null) {
-      fusedLocationClient = LocationServices.getFusedLocationProviderClient(
-        getContext()
-      );
-    }
-    fusedLocationClient
-      .getLastLocation()
-      .addOnSuccessListener(getActivity(), location -> {
-        lastLocation = location;
-        proceedWithCapture(call, lastLocation);
-      })
-      .addOnFailureListener(e -> {
-        Logger.error("Failed to get location: " + e.getMessage());
-        proceedWithCapture(call, null);
-      });
-  }
-
-  private void captureWithoutLocation(PluginCall call) {
-    proceedWithCapture(call, null);
-  }
-
-  private void proceedWithCapture(PluginCall call, Location location) {
-    bridge.saveCall(call);
-    captureCallbackId = call.getCallbackId();
-
-    Integer quality = Objects.requireNonNull(call.getInt("quality", 85));
-    final boolean saveToGallery = call.getBoolean("saveToGallery", false);
-    Integer width = call.getInt("width");
-    Integer height = call.getInt("height");
-
-    cameraXView.capturePhoto(quality, saveToGallery, width, height, location);
-  }
-
-  @PluginMethod
-  public void captureSample(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    bridge.saveCall(call);
-    snapshotCallbackId = call.getCallbackId();
-    Integer quality = Objects.requireNonNull(call.getInt("quality", 85));
-    cameraXView.captureSample(quality);
-  }
-
-  @PluginMethod
-  public void stop(final PluginCall call) {
-    bridge
-      .getActivity()
-      .runOnUiThread(() -> {
-        getBridge()
-          .getActivity()
-          .setRequestedOrientation(previousOrientationRequest);
-
-        // Disable and clear orientation listener
-        if (orientationListener != null) {
-          orientationListener.disable();
-          orientationListener = null;
-          lastOrientation = Configuration.ORIENTATION_UNDEFINED;
-        }
-
-        // Remove any rotation overlay if present
-        if (rotationOverlay != null && rotationOverlay.getParent() != null) {
-          ((ViewGroup) rotationOverlay.getParent()).removeView(rotationOverlay);
-          rotationOverlay = null;
-        }
-
-        if (cameraXView != null) {
-          boolean willDefer = false;
-          try {
-            willDefer = cameraXView.isCapturing();
-          } catch (Exception ignored) {}
-          if (cameraXView.isRunning()) {
-            cameraXView.stopSession();
-          }
-          // Only drop the reference if no deferred stop is pending
-          if (!willDefer) {
-            cameraXView = null;
-          }
-        }
-        // Restore original window background if modified earlier
-        if (originalWindowBackground != null) {
-          try {
-            getBridge()
-              .getActivity()
-              .getWindow()
-              .setBackgroundDrawable(originalWindowBackground);
-          } catch (Exception ignored) {}
-          originalWindowBackground = null;
-        }
-        call.resolve();
-      });
-  }
-
-  @PluginMethod
-  public void getSupportedFlashModes(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    List<String> supportedFlashModes = cameraXView.getSupportedFlashModes();
-    JSArray jsonFlashModes = new JSArray();
-    for (String mode : supportedFlashModes) {
-      jsonFlashModes.put(mode);
-    }
-    JSObject jsObject = new JSObject();
-    jsObject.put("result", jsonFlashModes);
-    call.resolve(jsObject);
-  }
-
-  @PluginMethod
-  public void setFlashMode(PluginCall call) {
-    String flashMode = call.getString("flashMode");
-    if (flashMode == null || flashMode.isEmpty()) {
-      call.reject("flashMode required parameter is missing");
-      return;
-    }
-    cameraXView.setFlashMode(flashMode);
-    call.resolve();
-  }
-
-  @PluginMethod
-  public void getAvailableDevices(PluginCall call) {
-    List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(
-      getContext()
-    );
-    JSArray devicesArray = new JSArray();
-    for (CameraDevice device : devices) {
-      JSObject deviceJson = new JSObject();
-      deviceJson.put("deviceId", device.getDeviceId());
-      deviceJson.put("label", device.getLabel());
-      deviceJson.put("position", device.getPosition());
-      JSArray lensesArray = new JSArray();
-      for (com.ahm.capacitor.camera.preview.model.LensInfo lens : device.getLenses()) {
-        JSObject lensJson = new JSObject();
-        lensJson.put("focalLength", lens.getFocalLength());
-        lensJson.put("deviceType", lens.getDeviceType());
-        lensJson.put("baseZoomRatio", lens.getBaseZoomRatio());
-        lensJson.put("digitalZoom", lens.getDigitalZoom());
-        lensesArray.put(lensJson);
-      }
-      deviceJson.put("lenses", lensesArray);
-      deviceJson.put("minZoom", device.getMinZoom());
-      deviceJson.put("maxZoom", device.getMaxZoom());
-      devicesArray.put(deviceJson);
-    }
-    JSObject result = new JSObject();
-    result.put("devices", devicesArray);
-    call.resolve(result);
-  }
-
-  @PluginMethod
-  public void getZoom(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    ZoomFactors zoomFactors = cameraXView.getZoomFactors();
-    JSObject result = new JSObject();
-    result.put("min", zoomFactors.getMin());
-    result.put("max", zoomFactors.getMax());
-    result.put("current", zoomFactors.getCurrent());
-    call.resolve(result);
-  }
-
-  @PluginMethod
-  public void getZoomButtonValues(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    // Build a sorted set to dedupe and order ascending
-    java.util.Set<Double> sorted = new java.util.TreeSet<>();
-    sorted.add(1.0);
-    sorted.add(2.0);
-
-    // Try to detect ultra-wide to include its min zoom (often 0.5)
-    try {
-      List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(
-        getContext()
-      );
-      ZoomFactors zoomFactors = cameraXView.getZoomFactors();
-      boolean hasUltraWide = false;
-      boolean hasTelephoto = false;
-      float minUltra = 0.5f;
-
-      for (CameraDevice device : devices) {
-        for (com.ahm.capacitor.camera.preview.model.LensInfo lens : device.getLenses()) {
-          if ("ultraWide".equals(lens.getDeviceType())) {
-            hasUltraWide = true;
-            // Use overall minZoom for that device as the button value to represent UW
-            minUltra = Math.max(minUltra, zoomFactors.getMin());
-          } else if ("telephoto".equals(lens.getDeviceType())) {
-            hasTelephoto = true;
-          }
-        }
-      }
-      if (hasUltraWide) {
-        sorted.add((double) minUltra);
-      }
-      if (hasTelephoto) {
-        sorted.add(3.0);
-      }
-    } catch (Exception ignored) {
-      // Ignore and keep defaults
-    }
-
-    JSObject result = new JSObject();
-    JSArray values = new JSArray();
-    for (Double v : sorted) {
-      values.put(v);
-    }
-    result.put("values", values);
-    call.resolve(result);
-  }
-
-  @PluginMethod
-  public void setZoom(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    Float level = call.getFloat("level");
-    if (level == null) {
-      call.reject("level parameter is required");
-      return;
-    }
-    try {
-      cameraXView.setZoom(level);
-      call.resolve();
-    } catch (Exception e) {
-      call.reject("Failed to set zoom: " + e.getMessage());
-    }
-  }
-
-  @PluginMethod
-  public void setFocus(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    Float x = call.getFloat("x");
-    Float y = call.getFloat("y");
-    if (x == null || y == null) {
-      call.reject("x and y parameters are required");
-      return;
-    }
-    // Reject if values are outside 0-1 range
-    if (x < 0f || x > 1f || y < 0f || y > 1f) {
-      call.reject("Focus coordinates must be between 0 and 1");
-      return;
-    }
-
-    getActivity()
-      .runOnUiThread(() -> {
-        try {
-          cameraXView.setFocus(x, y);
-          call.resolve();
-        } catch (Exception e) {
-          call.reject("Failed to set focus: " + e.getMessage());
-        }
-      });
-  }
-
-  @PluginMethod
-  public void setDeviceId(PluginCall call) {
-    String deviceId = call.getString("deviceId");
-    if (deviceId == null || deviceId.isEmpty()) {
-      call.reject("deviceId parameter is required");
-      return;
-    }
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    cameraXView.switchToDevice(deviceId);
-    call.resolve();
-  }
-
-  @PluginMethod
-  public void getSupportedPictureSizes(final PluginCall call) {
-    JSArray supportedPictureSizesResult = new JSArray();
-    List<Size> rearSizes = CameraXView.getSupportedPictureSizes("rear");
-    JSObject rear = new JSObject();
-    rear.put("facing", "rear");
-    JSArray rearSizesJs = new JSArray();
-    for (Size size : rearSizes) {
-      JSObject sizeJs = new JSObject();
-      sizeJs.put("width", size.getWidth());
-      sizeJs.put("height", size.getHeight());
-      rearSizesJs.put(sizeJs);
-    }
-    rear.put("supportedPictureSizes", rearSizesJs);
-    supportedPictureSizesResult.put(rear);
-
-    List<Size> frontSizes = CameraXView.getSupportedPictureSizes("front");
-    JSObject front = new JSObject();
-    front.put("facing", "front");
-    JSArray frontSizesJs = new JSArray();
-    for (Size size : frontSizes) {
-      JSObject sizeJs = new JSObject();
-      sizeJs.put("width", size.getWidth());
-      sizeJs.put("height", size.getHeight());
-      frontSizesJs.put(sizeJs);
-    }
-    front.put("supportedPictureSizes", frontSizesJs);
-    supportedPictureSizesResult.put(front);
-
-    JSObject ret = new JSObject();
-    ret.put("supportedPictureSizes", supportedPictureSizesResult);
-    call.resolve(ret);
-  }
-
-  @PluginMethod
-  public void setOpacity(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    Float opacity = call.getFloat("opacity", 1.0f);
-    cameraXView.setOpacity(opacity);
-    call.resolve();
-  }
-
-  @PluginMethod
-  public void getHorizontalFov(PluginCall call) {
-    // CameraX does not provide a simple way to get FoV.
-    // This would require Camera2 interop to access camera characteristics.
-    // Returning a default/estimated value.
-    JSObject ret = new JSObject();
-    ret.put("result", 60.0); // A common default FoV
-    call.resolve(ret);
-  }
-
-  @PluginMethod
-  public void getDeviceId(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    JSObject ret = new JSObject();
-    ret.put("deviceId", cameraXView.getCurrentDeviceId());
-    call.resolve(ret);
-  }
-
-  @PluginMethod
-  public void getFlashMode(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    JSObject ret = new JSObject();
-    ret.put("flashMode", cameraXView.getFlashMode());
-    call.resolve(ret);
-  }
-
-  @PluginMethod
-  public void isRunning(PluginCall call) {
-    boolean running = cameraXView != null && cameraXView.isRunning();
-    JSObject jsObject = new JSObject();
-    jsObject.put("isRunning", running);
-    call.resolve(jsObject);
-  }
-
-  @PermissionCallback
-  private void handleCameraPermissionResult(PluginCall call) {
-    if (
-      PermissionState.GRANTED.equals(
-        getPermissionState(CAMERA_ONLY_PERMISSION_ALIAS)
-      ) ||
-      PermissionState.GRANTED.equals(
-        getPermissionState(CAMERA_WITH_AUDIO_PERMISSION_ALIAS)
-      )
-    ) {
-      startCamera(call);
-    } else {
-      call.reject("Permission failed");
-    }
-  }
-
-  private void startCamera(final PluginCall call) {
-    String positionParam = call.getString("position");
-    String originalDeviceId = call.getString("deviceId");
-    String deviceId = originalDeviceId; // Use a mutable variable
-
-    final String position = (positionParam == null ||
-        positionParam.isEmpty() ||
-        "rear".equals(positionParam) ||
-        "back".equals(positionParam))
-      ? "back"
-      : "front";
-    // Use -1 as default to indicate centering is needed when x/y not provided
-    final Integer xParam = call.getInt("x");
-    final Integer yParam = call.getInt("y");
-    final int x = xParam != null ? xParam : -1;
-    final int y = yParam != null ? yParam : -1;
-
-    Log.d("CameraPreview", "========================");
-    Log.d("CameraPreview", "CAMERA POSITION TRACKING START:");
-    Log.d(
-      "CameraPreview",
-      "1. RAW PARAMS - xParam: " + xParam + ", yParam: " + yParam
-    );
-    Log.d(
-      "CameraPreview",
-      "2. AFTER DEFAULT - x: " +
-      x +
-      " (center=" +
-      (x == -1) +
-      "), y: " +
-      y +
-      " (center=" +
-      (y == -1) +
-      ")"
-    );
-    final int width = call.getInt("width", 0);
-    final int height = call.getInt("height", 0);
-    final int paddingBottom = call.getInt("paddingBottom", 0);
-    final boolean toBack = Boolean.TRUE.equals(call.getBoolean("toBack", true));
-    final boolean storeToFile = Boolean.TRUE.equals(
-      call.getBoolean("storeToFile", false)
-    );
-    final boolean enableOpacity = Boolean.TRUE.equals(
-      call.getBoolean("enableOpacity", false)
-    );
-    final boolean enableZoom = Boolean.TRUE.equals(
-      call.getBoolean("enableZoom", false)
-    );
-    final boolean disableExifHeaderStripping = Boolean.TRUE.equals(
-      call.getBoolean("disableExifHeaderStripping", false)
-    );
-    final boolean lockOrientation = Boolean.TRUE.equals(
-      call.getBoolean("lockAndroidOrientation", false)
-    );
-    final boolean disableAudio = Boolean.TRUE.equals(
-      call.getBoolean("disableAudio", true)
-    );
-    this.lastDisableAudio = disableAudio;
-    final String aspectRatio = call.getString("aspectRatio", "4:3");
-    final String gridMode = call.getString("gridMode", "none");
-    final String positioning = call.getString("positioning", "top");
-    final float initialZoomLevel = call.getFloat("initialZoomLevel", 1.0f);
-    final boolean disableFocusIndicator = call.getBoolean(
-      "disableFocusIndicator",
-      false
-    );
-    final boolean enableVideoMode = Boolean.TRUE.equals(
-      call.getBoolean("enableVideoMode", false)
-    );
-    final String videoQuality = call.getString("videoQuality");
-
-    // Check for conflict between aspectRatio and size
-    if (
-      call.getData().has("aspectRatio") &&
-      (call.getData().has("width") || call.getData().has("height"))
-    ) {
-      call.reject(
-        "Cannot set both aspectRatio and size (width/height). Use setPreviewSize after start."
-      );
-      return;
-    }
-
-    float targetZoom = initialZoomLevel;
-    // Check if the selected device is a physical ultra-wide
-    if (originalDeviceId != null) {
-      List<CameraDevice> devices = CameraXView.getAvailableDevicesStatic(
-        getContext()
-      );
-      for (CameraDevice device : devices) {
+      if (data.length >= 8) {
+        // Check for PNG signature (89 50 4E 47 0D 0A 1A 0A)
         if (
-          originalDeviceId.equals(device.getDeviceId()) && !device.isLogical()
+          data[0] == (byte) 0x89 &&
+          data[1] == 0x50 &&
+          data[2] == 0x4E &&
+          data[3] == 0x47
         ) {
-          for (LensInfo lens : device.getLenses()) {
-            if ("ultraWide".equals(lens.getDeviceType())) {
-              Log.d(
-                "CameraPreview",
-                "Ultra-wide lens selected. Targeting 0.5x zoom on logical camera."
-              );
-              targetZoom = 0.5f;
-              // Force the use of the logical camera by clearing the specific deviceId
-              deviceId = null;
-              break;
-            }
-          }
+          extension = ".png";
+          mimeType = "image/png";
         }
-        if (deviceId == null) break; // Exit outer loop once we've made our decision
+        // Check for JPEG signature (FF D8 FF)
+        else if (
+          data[0] == (byte) 0xFF &&
+          data[1] == (byte) 0xD8 &&
+          data[2] == (byte) 0xFF
+        ) {
+          extension = ".jpg";
+          mimeType = "image/jpeg";
+        }
+        // Check for WebP signature (RIFF ... WEBP)
+        else if (
+          data[0] == 0x52 &&
+          data[1] == 0x49 &&
+          data[2] == 0x46 &&
+          data[3] == 0x46 &&
+          data.length >= 12 &&
+          data[8] == 0x57 &&
+          data[9] == 0x45 &&
+          data[10] == 0x42 &&
+          data[11] == 0x50
+        ) {
+          extension = ".webp";
+          mimeType = "image/webp";
+        }
+      }
+
+      File photo = new File(
+        Environment.getExternalStoragePublicDirectory(
+          Environment.DIRECTORY_PICTURES
+        ),
+        "IMG_" +
+        new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(
+          new java.util.Date()
+        ) +
+        extension
+      );
+      FileOutputStream fos = new FileOutputStream(photo);
+      fos.write(data);
+      fos.close();
+
+      // Notify the gallery of the new image
+      MediaScannerConnection.scanFile(
+        this.context,
+        new String[] { photo.getAbsolutePath() },
+        new String[] { mimeType },
+        null
+      );
+    } catch (IOException e) {
+      Log.e(TAG, "Error saving image to gallery", e);
+    }
+  }
+
+  public void startSession(CameraSessionConfiguration config) {
+    this.sessionConfig = config;
+    cameraExecutor = Executors.newSingleThreadExecutor();
+    mainExecutor.execute(() -> {
+      lifecycleRegistry.setCurrentState(Lifecycle.State.STARTED);
+      setupCamera();
+    });
+  }
+
+  public void stopSession() {
+    // If a capture is in progress, defer heavy teardown until it completes.
+    synchronized (captureLock) {
+      if (isCapturingPhoto) {
+        stopRequested = true;
+        // Hide/detach the preview immediately so UI can close, but keep camera running
+        if (!previewDetachedOnDeferredStop) {
+          mainExecutor.execute(() -> {
+            try {
+              if (previewContainer != null) {
+                ViewGroup parent = (ViewGroup) previewContainer.getParent();
+                if (parent != null) {
+                  parent.removeView(previewContainer);
+                }
+              }
+              previewDetachedOnDeferredStop = true;
+            } catch (Exception ignored) {}
+          });
+        }
+        return;
       }
     }
 
-    previousOrientationRequest = getBridge()
-      .getActivity()
-      .getRequestedOrientation();
-    cameraXView = new CameraXView(getContext(), getBridge().getWebView());
-    cameraXView.setListener(this);
+    performImmediateStop();
+  }
 
-    String finalDeviceId = deviceId;
-    float finalTargetZoom = targetZoom;
-    getBridge()
-      .getActivity()
-      .runOnUiThread(() -> {
-        // Ensure transparent background when preview is behind the WebView (Android 10 fix)
-        if (toBack) {
+  private void performImmediateStop() {
+    isRunning = false;
+    // Cancel any ongoing focus operation when stopping session
+    if (currentFocusFuture != null && !currentFocusFuture.isDone()) {
+      currentFocusFuture.cancel(true);
+    }
+    currentFocusFuture = null;
+
+    mainExecutor.execute(() -> {
+      try {
+        lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
+        if (cameraProvider != null) {
+          cameraProvider.unbindAll();
+        }
+        lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
+        if (cameraExecutor != null) {
+          cameraExecutor.shutdown();
+        }
+        removePreviewView();
+      } catch (Exception e) {
+        Log.w(TAG, "performImmediateStop: error during stop", e);
+      } finally {
+        stopRequested = false;
+        previewDetachedOnDeferredStop = false;
+        if (listener != null) {
           try {
-            if (originalWindowBackground == null) {
-              originalWindowBackground = getBridge()
-                .getActivity()
-                .getWindow()
-                .getDecorView()
-                .getBackground();
-            }
-            getBridge()
-              .getActivity()
-              .getWindow()
-              .setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            listener.onCameraStopped();
           } catch (Exception ignored) {}
         }
-        DisplayMetrics metrics = getBridge()
-          .getActivity()
-          .getResources()
-          .getDisplayMetrics();
-        if (lockOrientation) {
-          getBridge()
-            .getActivity()
-            .setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED);
-        }
+      }
+    });
+  }
 
-        // Debug: Let's check all the positioning information
-        ViewGroup webViewParent = (ViewGroup) getBridge()
-          .getWebView()
-          .getParent();
-
-        // Get webview position in different coordinate systems
-        int[] webViewLocationInWindow = new int[2];
-        int[] webViewLocationOnScreen = new int[2];
-        getBridge().getWebView().getLocationInWindow(webViewLocationInWindow);
-        getBridge().getWebView().getLocationOnScreen(webViewLocationOnScreen);
-
-        int webViewLeft = getBridge().getWebView().getLeft();
-        int webViewTop = getBridge().getWebView().getTop();
-
-        // Check parent position too
-        int[] parentLocationInWindow = new int[2];
-        int[] parentLocationOnScreen = new int[2];
-        webViewParent.getLocationInWindow(parentLocationInWindow);
-        webViewParent.getLocationOnScreen(parentLocationOnScreen);
-
-        // Calculate pixel ratio
-        float pixelRatio = metrics.density;
-
-        // The key insight: JavaScript coordinates are relative to the WebView's viewport
-        // If the WebView is positioned below the status bar (webViewLocationOnScreen[1] > 0),
-        // we need to add that offset when placing native views
-        int webViewTopInset = webViewLocationOnScreen[1];
-        boolean isEdgeToEdgeActive = webViewLocationOnScreen[1] > 0;
-
-        // Log all the positioning information for debugging
-        Log.d("CameraPreview", "WebView Position Debug:");
-        Log.d("CameraPreview", "  - webView.getTop(): " + webViewTop);
-        Log.d("CameraPreview", "  - webView.getLeft(): " + webViewLeft);
-        Log.d(
-          "CameraPreview",
-          "  - webView locationInWindow: (" +
-          webViewLocationInWindow[0] +
-          ", " +
-          webViewLocationInWindow[1] +
-          ")"
-        );
-        Log.d(
-          "CameraPreview",
-          "  - webView locationOnScreen: (" +
-          webViewLocationOnScreen[0] +
-          ", " +
-          webViewLocationOnScreen[1] +
-          ")"
-        );
-        Log.d(
-          "CameraPreview",
-          "  - parent locationInWindow: (" +
-          parentLocationInWindow[0] +
-          ", " +
-          parentLocationInWindow[1] +
-          ")"
-        );
-        Log.d(
-          "CameraPreview",
-          "  - parent locationOnScreen: (" +
-          parentLocationOnScreen[0] +
-          ", " +
-          parentLocationOnScreen[1] +
-          ")"
-        );
-
-        // Check if WebView has margins
-        View webView = getBridge().getWebView();
-        ViewGroup.LayoutParams webViewLayoutParams = webView.getLayoutParams();
-        if (webViewLayoutParams instanceof ViewGroup.MarginLayoutParams) {
-          ViewGroup.MarginLayoutParams marginParams =
-            (ViewGroup.MarginLayoutParams) webViewLayoutParams;
-          Log.d(
-            "CameraPreview",
-            "  - webView margins: left=" +
-            marginParams.leftMargin +
-            ", top=" +
-            marginParams.topMargin +
-            ", right=" +
-            marginParams.rightMargin +
-            ", bottom=" +
-            marginParams.bottomMargin
-          );
-        }
-
-        // Check WebView padding
-        Log.d(
-          "CameraPreview",
-          "  - webView padding: left=" +
-          webView.getPaddingLeft() +
-          ", top=" +
-          webView.getPaddingTop() +
-          ", right=" +
-          webView.getPaddingRight() +
-          ", bottom=" +
-          webView.getPaddingBottom()
-        );
-
-        Log.d("CameraPreview", "  - Using webViewTopInset: " + webViewTopInset);
-        Log.d("CameraPreview", "  - isEdgeToEdgeActive: " + isEdgeToEdgeActive);
-
-        // Calculate position - center if x or y is -1
-        int computedX;
-        int computedY;
-
-        // Calculate dimensions first
-        int computedWidth = width != 0
-          ? (int) (width * pixelRatio)
-          : getBridge().getWebView().getWidth();
-        int computedHeight = height != 0
-          ? (int) (height * pixelRatio)
-          : getBridge().getWebView().getHeight();
-        computedHeight -= (int) (paddingBottom * pixelRatio);
-
-        Log.d("CameraPreview", "========================");
-        Log.d("CameraPreview", "POSITIONING CALCULATIONS:");
-        Log.d(
-          "CameraPreview",
-          "1. INPUT - x: " +
-          x +
-          ", y: " +
-          y +
-          ", width: " +
-          width +
-          ", height: " +
-          height
-        );
-        Log.d("CameraPreview", "2. PIXEL RATIO: " + pixelRatio);
-        Log.d(
-          "CameraPreview",
-          "3. SCREEN - width: " +
-          metrics.widthPixels +
-          ", height: " +
-          metrics.heightPixels
-        );
-        Log.d(
-          "CameraPreview",
-          "4. WEBVIEW - width: " +
-          getBridge().getWebView().getWidth() +
-          ", height: " +
-          getBridge().getWebView().getHeight()
-        );
-        Log.d(
-          "CameraPreview",
-          "5. COMPUTED DIMENSIONS - width: " +
-          computedWidth +
-          ", height: " +
-          computedHeight
-        );
-
-        if (x == -1) {
-          // Center horizontally
-          int screenWidth = metrics.widthPixels;
-          computedX = (screenWidth - computedWidth) / 2;
-          Log.d(
-            "CameraPreview",
-            "Centering horizontally: screenWidth=" +
-            screenWidth +
-            ", computedWidth=" +
-            computedWidth +
-            ", computedX=" +
-            computedX
-          );
-        } else {
-          computedX = (int) (x * pixelRatio);
-          Log.d(
-            "CameraPreview",
-            "Using provided X position: " +
-            x +
-            " * " +
-            pixelRatio +
-            " = " +
-            computedX
-          );
-        }
-
-        if (y == -1) {
-          // Position vertically based on positioning parameter
-          int screenHeight = metrics.heightPixels;
-
-          switch (positioning) {
-            case "top":
-              computedY = 0;
-              Log.d("CameraPreview", "Positioning at top: computedY=0");
-              break;
-            case "bottom":
-              computedY = screenHeight - computedHeight;
-              Log.d(
-                "CameraPreview",
-                "Positioning at bottom: screenHeight=" +
-                screenHeight +
-                ", computedHeight=" +
-                computedHeight +
-                ", computedY=" +
-                computedY
-              );
-              break;
-            case "center":
-            default:
-              // Center vertically
-              if (isEdgeToEdgeActive) {
-                // When WebView is offset from top, center within the available space
-                // The camera should be centered in the full screen, not just the WebView area
-                computedY = (screenHeight - computedHeight) / 2;
-                Log.d(
-                  "CameraPreview",
-                  "Centering vertically with WebView offset: screenHeight=" +
-                  screenHeight +
-                  ", webViewTop=" +
-                  webViewTopInset +
-                  ", computedHeight=" +
-                  computedHeight +
-                  ", computedY=" +
-                  computedY
-                );
-              } else {
-                // Normal mode - use full screen height
-                computedY = (screenHeight - computedHeight) / 2;
-                Log.d(
-                  "CameraPreview",
-                  "Centering vertically (normal): screenHeight=" +
-                  screenHeight +
-                  ", computedHeight=" +
-                  computedHeight +
-                  ", computedY=" +
-                  computedY
-                );
-              }
-              break;
-          }
-        } else {
-          computedY = (int) (y * pixelRatio);
-          // If edge-to-edge is active, JavaScript Y is relative to WebView content area
-          // We need to add the inset to get absolute screen position
-          if (isEdgeToEdgeActive) {
-            computedY += webViewTopInset;
-            Log.d(
-              "CameraPreview",
-              "Edge-to-edge adjustment: Y position " +
-              (int) (y * pixelRatio) +
-              " + inset " +
-              webViewTopInset +
-              " = " +
-              computedY
+  private void setupCamera() {
+    ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
+      ProcessCameraProvider.getInstance(context);
+    cameraProviderFuture.addListener(
+      () -> {
+        try {
+          cameraProvider = cameraProviderFuture.get();
+          setupPreviewView();
+          bindCameraUseCases();
+        } catch (Exception e) {
+          if (listener != null) {
+            listener.onCameraStartError(
+              "Error initializing camera: " + e.getMessage()
             );
           }
-          Log.d(
-            "CameraPreview",
-            "Using provided Y position: " +
-            y +
-            " * " +
-            pixelRatio +
-            " = " +
-            computedY +
-            (isEdgeToEdgeActive ? " (adjusted for edge-to-edge)" : "")
-          );
         }
-
-        Log.d(
-          "CameraPreview",
-          "2b. EDGE-TO-EDGE - " +
-          (isEdgeToEdgeActive
-              ? "ACTIVE (inset=" + webViewTopInset + ")"
-              : "INACTIVE")
-        );
-        Log.d(
-          "CameraPreview",
-          "3. COMPUTED POSITION - x=" + computedX + ", y=" + computedY
-        );
-        Log.d(
-          "CameraPreview",
-          "4. COMPUTED SIZE - width=" +
-          computedWidth +
-          ", height=" +
-          computedHeight
-        );
-        Log.d("CameraPreview", "=== COORDINATE DEBUG ===");
-        Log.d(
-          "CameraPreview",
-          "WebView getLeft/getTop: (" + webViewLeft + ", " + webViewTop + ")"
-        );
-        Log.d(
-          "CameraPreview",
-          "WebView locationInWindow: (" +
-          webViewLocationInWindow[0] +
-          ", " +
-          webViewLocationInWindow[1] +
-          ")"
-        );
-        Log.d(
-          "CameraPreview",
-          "WebView locationOnScreen: (" +
-          webViewLocationOnScreen[0] +
-          ", " +
-          webViewLocationOnScreen[1] +
-          ")"
-        );
-        Log.d(
-          "CameraPreview",
-          "Parent locationInWindow: (" +
-          parentLocationInWindow[0] +
-          ", " +
-          parentLocationInWindow[1] +
-          ")"
-        );
-        Log.d(
-          "CameraPreview",
-          "Parent locationOnScreen: (" +
-          parentLocationOnScreen[0] +
-          ", " +
-          parentLocationOnScreen[1] +
-          ")"
-        );
-        Log.d(
-          "CameraPreview",
-          "Parent class: " + webViewParent.getClass().getSimpleName()
-        );
-        Log.d(
-          "CameraPreview",
-          "Requested position (logical): (" + x + ", " + y + ")"
-        );
-        Log.d("CameraPreview", "Pixel ratio: " + pixelRatio);
-        Log.d(
-          "CameraPreview",
-          "Final computed position (no offset): (" +
-          computedX +
-          ", " +
-          computedY +
-          ")"
-        );
-        Log.d("CameraPreview", "5. IS_CENTERED - " + (x == -1 || y == -1));
-        Log.d("CameraPreview", "========================");
-
-        // Pass along whether we're centering so CameraXView knows not to add insets
-        boolean isCentered = (x == -1 || y == -1);
-
-        CameraSessionConfiguration config = new CameraSessionConfiguration(
-          finalDeviceId,
-          position,
-          computedX,
-          computedY,
-          computedWidth,
-          computedHeight,
-          paddingBottom,
-          toBack,
-          storeToFile,
-          enableOpacity,
-          enableZoom,
-          disableExifHeaderStripping,
-          disableAudio,
-          1.0f,
-          aspectRatio,
-          gridMode,
-          disableFocusIndicator,
-          enableVideoMode,
-          videoQuality
-        );
-        config.setTargetZoom(finalTargetZoom);
-        config.setCentered(isCentered);
-
-        bridge.saveCall(call);
-        cameraStartCallbackId = call.getCallbackId();
-        cameraXView.startSession(config);
-
-        // Setup orientation listener to mirror iOS screenResize emission
-        if (orientationListener == null) {
-          lastOrientation = getContext()
-            .getResources()
-            .getConfiguration()
-            .orientation;
-          lastOrientationStr = getDeviceOrientationString();
-          orientationListener = new OrientationEventListener(getContext()) {
-            @Override
-            public void onOrientationChanged(int orientation) {
-              if (orientation == ORIENTATION_UNKNOWN) return;
-              int current = getContext()
-                .getResources()
-                .getConfiguration()
-                .orientation;
-              String currentStr = getDeviceOrientationString();
-              if (
-                current != lastOrientation ||
-                !Objects.equals(currentStr, lastOrientationStr)
-              ) {
-                lastOrientation = current;
-                lastOrientationStr = currentStr;
-                // Post to next frame so WebView has updated bounds before we recompute layout
-                getBridge()
-                  .getActivity()
-                  .getWindow()
-                  .getDecorView()
-                  .post(() -> handleOrientationChange());
-              }
-            }
-          };
-          if (orientationListener.canDetectOrientation()) {
-            orientationListener.enable();
-          }
-        }
-      });
+      },
+      mainExecutor
+    );
   }
 
-  private void handleOrientationChange() {
-    if (cameraXView == null || !cameraXView.isRunning()) return;
+  private void setupPreviewView() {
+    if (previewView != null) {
+      removePreviewView();
+    }
+    if (sessionConfig.isToBack()) {
+      webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+    }
 
-    Log.d(
-      TAG,
-      "======================== ORIENTATION CHANGE DETECTED ========================"
+    // Create a container to hold both the preview and grid overlay
+    previewContainer = new FrameLayout(context);
+    // Ensure container can receive touch events
+    previewContainer.setClickable(true);
+    previewContainer.setFocusable(true);
+
+    // Disable any potential drawing artifacts that might cause 1px offset
+    previewContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+    // Ensure no clip bounds that might cause visual offset
+    previewContainer.setClipChildren(false);
+    previewContainer.setClipToPadding(false);
+
+    // Create and setup the preview view
+    previewView = new PreviewView(context);
+    // Match iOS behavior: FIT when no aspect ratio, FILL when aspect ratio is set
+    String initialAspectRatio = sessionConfig != null
+      ? sessionConfig.getAspectRatio()
+      : null;
+    previewView.setScaleType(
+      (initialAspectRatio == null || initialAspectRatio.isEmpty())
+        ? PreviewView.ScaleType.FIT_CENTER
+        : PreviewView.ScaleType.FILL_CENTER
+    );
+    // Also make preview view touchable as backup
+    previewView.setClickable(true);
+    previewView.setFocusable(true);
+
+    // Add touch listener to both container and preview view for maximum compatibility
+    View.OnTouchListener touchListener = new View.OnTouchListener() {
+      @Override
+      public boolean onTouch(View v, MotionEvent event) {
+        Log.d(
+          TAG,
+          "onTouch: " +
+          v.getClass().getSimpleName() +
+          " received touch event: " +
+          event.getAction() +
+          " at (" +
+          event.getX() +
+          ", " +
+          event.getY() +
+          ")"
+        );
+
+        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+          float x = event.getX() / v.getWidth();
+          float y = event.getY() / v.getHeight();
+
+          Log.d(
+            TAG,
+            "onTouch: Touch detected at raw coords (" +
+            event.getX() +
+            ", " +
+            event.getY() +
+            "), view size: " +
+            v.getWidth() +
+            "x" +
+            v.getHeight() +
+            ", normalized: (" +
+            x +
+            ", " +
+            y +
+            ")"
+          );
+
+          try {
+            // Trigger focus with indicator
+            setFocus(x, y);
+          } catch (Exception e) {
+            Log.e(TAG, "Error during tap-to-focus: " + e.getMessage(), e);
+          }
+          return true;
+        }
+        return false;
+      }
+    };
+
+    previewContainer.setOnTouchListener(touchListener);
+    previewView.setOnTouchListener(touchListener);
+
+    previewContainer.addView(
+      previewView,
+      new FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        FrameLayout.LayoutParams.MATCH_PARENT
+      )
     );
 
-    // Get comprehensive display and orientation information
-    android.util.DisplayMetrics metrics = getContext()
-      .getResources()
-      .getDisplayMetrics();
-    int screenWidthPx = metrics.widthPixels;
-    int screenHeightPx = metrics.heightPixels;
-    float density = metrics.density;
+    // Create and setup the grid overlay
+    gridOverlayView = new GridOverlayView(context);
+    // Make grid overlay not intercept touch events
+    gridOverlayView.setClickable(false);
+    gridOverlayView.setFocusable(false);
+    previewContainer.addView(
+      gridOverlayView,
+      new FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        FrameLayout.LayoutParams.MATCH_PARENT
+      )
+    );
+    // Set grid mode after adding to container to ensure proper layout
+    gridOverlayView.post(() -> {
+      String currentGridMode = sessionConfig.getGridMode();
+      Log.d(TAG, "setupPreviewView: Setting grid mode to: " + currentGridMode);
+      gridOverlayView.setGridMode(currentGridMode);
+    });
+
+    // Add a layout listener to update grid bounds when preview view changes size
+    previewView.addOnLayoutChangeListener(
+      (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+        if (
+          left != oldLeft ||
+          top != oldTop ||
+          right != oldRight ||
+          bottom != oldBottom
+        ) {
+          Log.d(TAG, "PreviewView layout changed, updating grid bounds");
+          updateGridOverlayBounds();
+        }
+      }
+    );
+
+    ViewGroup parent = (ViewGroup) webView.getParent();
+    if (parent != null) {
+      FrameLayout.LayoutParams layoutParams = calculatePreviewLayoutParams();
+      parent.addView(previewContainer, layoutParams);
+      if (sessionConfig.isToBack()) webView.bringToFront();
+
+      // Log the actual position after layout
+      previewContainer.post(() -> {
+        Log.d(TAG, "========================");
+        Log.d(TAG, "ACTUAL CAMERA VIEW POSITION (after layout):");
+        Log.d(
+          TAG,
+          "Container position - Left: " +
+          previewContainer.getLeft() +
+          ", Top: " +
+          previewContainer.getTop() +
+          ", Right: " +
+          previewContainer.getRight() +
+          ", Bottom: " +
+          previewContainer.getBottom()
+        );
+        Log.d(
+          TAG,
+          "Container size - Width: " +
+          previewContainer.getWidth() +
+          ", Height: " +
+          previewContainer.getHeight()
+        );
+
+        // Get parent info
+        ViewGroup containerParent = (ViewGroup) previewContainer.getParent();
+        if (containerParent != null) {
+          Log.d(
+            TAG,
+            "Parent class: " + containerParent.getClass().getSimpleName()
+          );
+          Log.d(
+            TAG,
+            "Parent size - Width: " +
+            containerParent.getWidth() +
+            ", Height: " +
+            containerParent.getHeight()
+          );
+        }
+        Log.d(TAG, "========================");
+      });
+    }
+  }
+
+  private FrameLayout.LayoutParams calculatePreviewLayoutParams() {
+    // sessionConfig already contains pixel-converted coordinates with webview offsets applied
+    int x = sessionConfig.getX();
+    int y = sessionConfig.getY();
+    int width = sessionConfig.getWidth();
+    int height = sessionConfig.getHeight();
+    String aspectRatio = sessionConfig.getAspectRatio();
+
+    // Get comprehensive display information
+    int screenWidthPx, screenHeightPx;
+    float density;
+
+    // Get density using DisplayMetrics (available on all API levels)
+    WindowManager windowManager = (WindowManager) this.context.getSystemService(
+        Context.WINDOW_SERVICE
+      );
+    DisplayMetrics displayMetrics = new DisplayMetrics();
+    windowManager.getDefaultDisplay().getMetrics(displayMetrics);
+    density = displayMetrics.density;
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      // API 30+ (Android 11+) - use WindowMetrics for screen dimensions
+      WindowMetrics metrics = windowManager.getCurrentWindowMetrics();
+      Rect bounds = metrics.getBounds();
+      screenWidthPx = bounds.width();
+      screenHeightPx = bounds.height();
+    } else {
+      // API < 30 - use legacy DisplayMetrics for screen dimensions
+      screenWidthPx = displayMetrics.widthPixels;
+      screenHeightPx = displayMetrics.heightPixels;
+    }
+
     int screenWidthDp = (int) (screenWidthPx / density);
     int screenHeightDp = (int) (screenHeightPx / density);
 
-    int current = getContext().getResources().getConfiguration().orientation;
-    Log.d(TAG, "New orientation: " + current + " (1=PORTRAIT, 2=LANDSCAPE)");
+    // Get WebView dimensions
+    int webViewWidth = webView != null ? webView.getWidth() : 0;
+    int webViewHeight = webView != null ? webView.getHeight() : 0;
+
+    // Get parent dimensions
+    ViewGroup parent = (ViewGroup) webView.getParent();
+    int parentWidth = parent != null ? parent.getWidth() : 0;
+    int parentHeight = parent != null ? parent.getHeight() : 0;
+
+    Log.d(
+      TAG,
+      "======================== CALCULATE PREVIEW LAYOUT PARAMS ========================"
+    );
     Log.d(
       TAG,
       "Screen dimensions - Pixels: " +
@@ -1270,846 +607,3561 @@ public class CameraPreview
       ", Density: " +
       density
     );
-
-    // Get WebView dimensions before rotation
-    WebView webView = getBridge().getWebView();
-    int webViewWidth = webView.getWidth();
-    int webViewHeight = webView.getHeight();
     Log.d(TAG, "WebView dimensions: " + webViewWidth + "x" + webViewHeight);
-
-    // Get current preview bounds before rotation
-    int[] oldBounds = cameraXView.getCurrentPreviewBounds();
+    Log.d(TAG, "Parent dimensions: " + parentWidth + "x" + parentHeight);
     Log.d(
       TAG,
-      "Current preview bounds before rotation: x=" +
-      oldBounds[0] +
-      ", y=" +
-      oldBounds[1] +
-      ", width=" +
-      oldBounds[2] +
-      ", height=" +
-      oldBounds[3]
+      "SessionConfig values - x:" +
+      x +
+      " y:" +
+      y +
+      " width:" +
+      width +
+      " height:" +
+      height +
+      " aspectRatio:" +
+      aspectRatio +
+      " isCentered:" +
+      sessionConfig.isCentered()
     );
 
-    getBridge()
-      .getActivity()
-      .runOnUiThread(() -> {
-        // Create and show a black full-screen overlay during rotation
-        ViewGroup rootView = (ViewGroup) getBridge()
-          .getActivity()
-          .getWindow()
-          .getDecorView()
-          .getRootView();
+    // Apply aspect ratio if specified
+    if (
+      aspectRatio != null &&
+      !aspectRatio.isEmpty() &&
+      sessionConfig.isCentered()
+    ) {
+      String[] ratios = aspectRatio.split(":");
+      if (ratios.length == 2) {
+        try {
+          // Match iOS logic exactly
+          double ratioWidth = Double.parseDouble(ratios[0]);
+          double ratioHeight = Double.parseDouble(ratios[1]);
+          boolean isPortrait =
+            context.getResources().getConfiguration().orientation ==
+            Configuration.ORIENTATION_PORTRAIT;
 
-        // Remove any existing overlay
-        if (rotationOverlay != null && rotationOverlay.getParent() != null) {
-          ((ViewGroup) rotationOverlay.getParent()).removeView(rotationOverlay);
-        }
-
-        // Create new black overlay
-        rotationOverlay = new View(getContext());
-        rotationOverlay.setBackgroundColor(Color.BLACK);
-        ViewGroup.LayoutParams overlayParams = new ViewGroup.LayoutParams(
-          ViewGroup.LayoutParams.MATCH_PARENT,
-          ViewGroup.LayoutParams.MATCH_PARENT
-        );
-        rotationOverlay.setLayoutParams(overlayParams);
-        rootView.addView(rotationOverlay);
-
-        // Reapply current aspect ratio to recompute layout, then emit screenResize
-        String ar = cameraXView.getAspectRatio();
-        Log.d(TAG, "Reapplying aspect ratio: " + ar);
-
-        // Re-get dimensions after potential layout pass
-        android.util.DisplayMetrics newMetrics = getContext()
-          .getResources()
-          .getDisplayMetrics();
-        int newScreenWidthPx = newMetrics.widthPixels;
-        int newScreenHeightPx = newMetrics.heightPixels;
-        int newWebViewWidth = webView.getWidth();
-        int newWebViewHeight = webView.getHeight();
-
-        Log.d(
-          TAG,
-          "New screen dimensions after rotation: " +
-          newScreenWidthPx +
-          "x" +
-          newScreenHeightPx
-        );
-        Log.d(
-          TAG,
-          "New WebView dimensions after rotation: " +
-          newWebViewWidth +
-          "x" +
-          newWebViewHeight
-        );
-
-        // Force aspect ratio recalculation on orientation change
-        cameraXView.forceAspectRatioRecalculation(ar, null, null, () -> {
-          int[] bounds = cameraXView.getCurrentPreviewBounds();
           Log.d(
             TAG,
-            "New bounds after orientation change: x=" +
-            bounds[0] +
-            ", y=" +
-            bounds[1] +
-            ", width=" +
-            bounds[2] +
+            "Aspect ratio parsing - Original: " +
+            aspectRatio +
+            " (width=" +
+            ratioWidth +
             ", height=" +
-            bounds[3]
+            ratioHeight +
+            ")"
           );
           Log.d(
             TAG,
-            "Bounds change: deltaX=" +
-            (bounds[0] - oldBounds[0]) +
-            ", deltaY=" +
-            (bounds[1] - oldBounds[1]) +
-            ", deltaWidth=" +
-            (bounds[2] - oldBounds[2]) +
-            ", deltaHeight=" +
-            (bounds[3] - oldBounds[3])
+            "Device orientation: " + (isPortrait ? "PORTRAIT" : "LANDSCAPE")
           );
 
-          JSObject data = new JSObject();
-          data.put("x", bounds[0]);
-          data.put("y", bounds[1]);
-          data.put("width", bounds[2]);
-          data.put("height", bounds[3]);
-          notifyListeners("screenResize", data);
-
-          // Also emit orientationChange with a unified string value matching iOS
-          String o = getDeviceOrientationString();
-          JSObject oData = new JSObject();
-          oData.put("orientation", o);
-          notifyListeners("orientationChange", oData);
-
-          // Don't remove the overlay here - wait for camera to fully start
-          // The overlay will be removed after a delay to ensure camera is stable
-          if (rotationOverlay != null && rotationOverlay.getParent() != null) {
-            // Shorter delay for faster transition
-            int delay = "4:3".equals(ar) ? 200 : 150;
-            rotationOverlay.postDelayed(
-              () -> {
-                if (
-                  rotationOverlay != null && rotationOverlay.getParent() != null
-                ) {
-                  rotationOverlay
-                    .animate()
-                    .alpha(0f)
-                    .setDuration(100) // Faster fade out
-                    .withEndAction(() -> {
-                      if (
-                        rotationOverlay != null &&
-                        rotationOverlay.getParent() != null
-                      ) {
-                        ((ViewGroup) rotationOverlay.getParent()).removeView(
-                            rotationOverlay
-                          );
-                        rotationOverlay = null;
-                      }
-                    })
-                    .start();
-                }
-              },
-              delay
-            );
-          }
+          // iOS: let ratio = !isPortrait ? ratioParts[0] / ratioParts[1] : ratioParts[1] / ratioParts[0]
+          double ratio = !isPortrait
+            ? (ratioWidth / ratioHeight)
+            : (ratioHeight / ratioWidth);
 
           Log.d(
             TAG,
-            "================================================================================"
+            "Computed ratio: " +
+            ratio +
+            " (iOS formula: " +
+            (!isPortrait ? "width/height" : "height/width") +
+            ")"
           );
-        });
-      });
-  }
 
-  /**
-   * Compute a canonical orientation string matching iOS values:
-   * "portrait", "portrait-upside-down", "landscape-left", "landscape-right", or "unknown".
-   * Uses display rotation when available, with a fallback to configuration orientation.
-   */
-  private String getDeviceOrientationString() {
-    try {
-      int rotation = -1;
-      // Try to obtain display rotation in a backward/forward-compatible way
-      if (android.os.Build.VERSION.SDK_INT >= 30) {
-        android.view.Display display = getBridge().getActivity().getDisplay();
-        if (display != null) {
-          rotation = display.getRotation();
-        }
-      } else {
-        android.view.Display display = getBridge()
-          .getActivity()
-          .getWindowManager()
-          .getDefaultDisplay();
-        if (display != null) {
-          rotation = display.getRotation();
-        }
-      }
+          // For centered mode with aspect ratio, calculate maximum size that fits
+          int availableWidth = screenWidthPx;
+          int availableHeight = screenHeightPx;
 
-      if (rotation == android.view.Surface.ROTATION_0) {
-        return "portrait";
-      } else if (rotation == android.view.Surface.ROTATION_90) {
-        return "landscape-right";
-      } else if (rotation == android.view.Surface.ROTATION_180) {
-        return "portrait-upside-down";
-      } else if (rotation == android.view.Surface.ROTATION_270) {
-        return "landscape-left";
-      }
-
-      // Fallback to configuration if rotation unavailable
-      int orientation = getContext()
-        .getResources()
-        .getConfiguration()
-        .orientation;
-      if (orientation == Configuration.ORIENTATION_PORTRAIT) return "portrait";
-      if (
-        orientation == Configuration.ORIENTATION_LANDSCAPE
-      ) return "landscape-right"; // default, avoid generic
-      return "unknown";
-    } catch (Throwable t) {
-      Log.w(TAG, "Failed to get precise orientation, falling back: " + t);
-      int orientation = getContext()
-        .getResources()
-        .getConfiguration()
-        .orientation;
-      if (orientation == Configuration.ORIENTATION_PORTRAIT) return "portrait";
-      if (
-        orientation == Configuration.ORIENTATION_LANDSCAPE
-      ) return "landscape-right"; // default, avoid generic
-      return "unknown";
-    }
-  }
-
-  @Override
-  public void onPictureTaken(String base64, JSONObject exif) {
-    PluginCall pluginCall = bridge.getSavedCall(captureCallbackId);
-    if (pluginCall == null) {
-      Log.e("CameraPreview", "onPictureTaken: captureCallbackId is null");
-      return;
-    }
-    JSObject result = new JSObject();
-    result.put("value", base64);
-    result.put("exif", exif);
-    pluginCall.resolve(result);
-    bridge.releaseCall(pluginCall);
-  }
-
-  @Override
-  public void onPictureTakenError(String message) {
-    PluginCall pluginCall = bridge.getSavedCall(captureCallbackId);
-    if (pluginCall == null) {
-      Log.e("CameraPreview", "onPictureTakenError: captureCallbackId is null");
-      return;
-    }
-    pluginCall.reject(message);
-    bridge.releaseCall(pluginCall);
-  }
-
-  @Override
-  public void onCameraStopped() {
-    // Ensure reference is cleared once underlying CameraXView has fully stopped
-    cameraXView = null;
-  }
-
-  private JSObject getViewSize(
-    double x,
-    double y,
-    double width,
-    double height
-  ) {
-    JSObject ret = new JSObject();
-    // Return values with proper rounding to avoid gaps
-    // For positions (x, y): ceil to avoid gaps at top/left
-    // For dimensions (width, height): floor to avoid gaps at bottom/right
-    ret.put("x", Math.ceil(x));
-    ret.put("y", Math.ceil(y));
-    ret.put("width", Math.floor(width));
-    ret.put("height", Math.floor(height));
-    return ret;
-  }
-
-  @Override
-  public void onCameraStarted(int width, int height, int x, int y) {
-    PluginCall call = bridge.getSavedCall(cameraStartCallbackId);
-    if (call != null) {
-      // Convert pixel values back to logical units
-      DisplayMetrics metrics = getBridge()
-        .getActivity()
-        .getResources()
-        .getDisplayMetrics();
-      float pixelRatio = metrics.density;
-
-      // When WebView is offset from the top (e.g., below status bar),
-      // we need to convert between JavaScript coordinates (relative to WebView)
-      // and native coordinates (relative to screen)
-      WebView webView = getBridge().getWebView();
-      int webViewTopInset = 0;
-      boolean isEdgeToEdgeActive = false;
-      if (webView != null) {
-        int[] location = new int[2];
-        webView.getLocationOnScreen(location);
-        webViewTopInset = location[1];
-        isEdgeToEdgeActive = webViewTopInset > 0;
-      }
-
-      // Only convert to relative position if edge-to-edge is active
-      int relativeY = isEdgeToEdgeActive ? (y - webViewTopInset) : y;
-
-      Log.d("CameraPreview", "========================");
-      Log.d("CameraPreview", "CAMERA STARTED - POSITION RETURNED:");
-      Log.d(
-        "CameraPreview",
-        "7. RETURNED (pixels) - x=" +
-        x +
-        ", y=" +
-        y +
-        ", width=" +
-        width +
-        ", height=" +
-        height
-      );
-      Log.d(
-        "CameraPreview",
-        "8. EDGE-TO-EDGE - " + (isEdgeToEdgeActive ? "ACTIVE" : "INACTIVE")
-      );
-      Log.d("CameraPreview", "9. WEBVIEW INSET - " + webViewTopInset);
-      Log.d(
-        "CameraPreview",
-        "10. RELATIVE Y - " +
-        relativeY +
-        " (y=" +
-        y +
-        (isEdgeToEdgeActive ? " - inset=" + webViewTopInset : " unchanged") +
-        ")"
-      );
-      Log.d(
-        "CameraPreview",
-        "11. RETURNED (logical) - x=" +
-        (x / pixelRatio) +
-        ", y=" +
-        (relativeY / pixelRatio) +
-        ", width=" +
-        (width / pixelRatio) +
-        ", height=" +
-        (height / pixelRatio)
-      );
-      Log.d("CameraPreview", "12. PIXEL RATIO - " + pixelRatio);
-      Log.d("CameraPreview", "========================");
-
-      // Calculate logical values with proper rounding to avoid sub-pixel issues
-      double logicalWidth = width / pixelRatio;
-      double logicalHeight = height / pixelRatio;
-      double logicalX = x / pixelRatio;
-      double logicalY = relativeY / pixelRatio;
-
-      JSObject result = getViewSize(
-        logicalX,
-        logicalY,
-        logicalWidth,
-        logicalHeight
-      );
-
-      // Log exact calculations to debug one-pixel difference
-      Log.d("CameraPreview", "========================");
-      Log.d("CameraPreview", "FINAL POSITION CALCULATIONS:");
-      Log.d(
-        "CameraPreview",
-        "Pixel values: x=" +
-        x +
-        ", y=" +
-        relativeY +
-        ", width=" +
-        width +
-        ", height=" +
-        height
-      );
-      Log.d("CameraPreview", "Pixel ratio: " + pixelRatio);
-      Log.d(
-        "CameraPreview",
-        "Logical values (exact): x=" +
-        logicalX +
-        ", y=" +
-        logicalY +
-        ", width=" +
-        logicalWidth +
-        ", height=" +
-        logicalHeight
-      );
-      Log.d(
-        "CameraPreview",
-        "Logical values (rounded): x=" +
-        Math.round(logicalX) +
-        ", y=" +
-        Math.round(logicalY) +
-        ", width=" +
-        Math.round(logicalWidth) +
-        ", height=" +
-        Math.round(logicalHeight)
-      );
-
-      // Check if previewContainer has any padding or margin that might cause offset
-      if (cameraXView != null) {
-        View previewContainer = cameraXView.getPreviewContainer();
-        if (previewContainer != null) {
           Log.d(
-            "CameraPreview",
-            "PreviewContainer padding: left=" +
-            previewContainer.getPaddingLeft() +
-            ", top=" +
-            previewContainer.getPaddingTop() +
-            ", right=" +
-            previewContainer.getPaddingRight() +
-            ", bottom=" +
-            previewContainer.getPaddingBottom()
+            TAG,
+            "Available space for preview: " +
+            availableWidth +
+            "x" +
+            availableHeight
           );
-          ViewGroup.LayoutParams params = previewContainer.getLayoutParams();
-          if (params instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams marginParams =
-              (ViewGroup.MarginLayoutParams) params;
-            Log.d(
-              "CameraPreview",
-              "PreviewContainer margins: left=" +
-              marginParams.leftMargin +
-              ", top=" +
-              marginParams.topMargin +
-              ", right=" +
-              marginParams.rightMargin +
-              ", bottom=" +
-              marginParams.bottomMargin
-            );
+
+          // Calculate maximum size that fits the aspect ratio in available space
+          double maxWidthByHeight = availableHeight * ratio;
+          double maxHeightByWidth = availableWidth / ratio;
+
+          Log.d(
+            TAG,
+            "Aspect ratio calculations - maxWidthByHeight: " +
+            maxWidthByHeight +
+            ", maxHeightByWidth: " +
+            maxHeightByWidth
+          );
+
+          if (maxWidthByHeight <= availableWidth) {
+            // Height is the limiting factor
+            width = (int) maxWidthByHeight;
+            height = availableHeight;
+            Log.d(TAG, "Height-limited sizing: " + width + "x" + height);
+          } else {
+            // Width is the limiting factor
+            width = availableWidth;
+            height = (int) maxHeightByWidth;
+            Log.d(TAG, "Width-limited sizing: " + width + "x" + height);
           }
+
+          // Center the preview
+          x = (availableWidth - width) / 2;
+          y = (availableHeight - height) / 2;
+
+          Log.d(TAG, "Auto-centered position: x=" + x + ", y=" + y);
+        } catch (NumberFormatException e) {
+          Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
         }
       }
-      Log.d("CameraPreview", "========================");
-
-      // Log what we're returning
-      Log.d(
-        "CameraPreview",
-        "Returning to JS - x: " +
-        logicalX +
-        " (from " +
-        logicalX +
-        "), y: " +
-        logicalY +
-        " (from " +
-        logicalY +
-        "), width: " +
-        logicalWidth +
-        " (from " +
-        logicalWidth +
-        "), height: " +
-        logicalHeight +
-        " (from " +
-        logicalHeight +
-        ")"
-      );
-
-      call.resolve(result);
-      bridge.releaseCall(call);
-      cameraStartCallbackId = null; // Prevent re-use
-    }
-  }
-
-  @Override
-  public void onSampleTaken(String result) {
-    // Handle sample taken if needed
-    Log.i("CameraPreview", "Sample taken: " + result);
-  }
-
-  @Override
-  public void onSampleTakenError(String message) {
-    // Handle sample taken error if needed
-    Log.e("CameraPreview", "Sample taken error: " + message);
-  }
-
-  @Override
-  public void onCameraStartError(String message) {
-    PluginCall call = bridge.getSavedCall(cameraStartCallbackId);
-    if (call != null) {
-      call.reject(message);
-      bridge.releaseCall(call);
-      cameraStartCallbackId = null;
-    }
-  }
-
-  @PluginMethod
-  public void setAspectRatio(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    String aspectRatio = call.getString("aspectRatio", "4:3");
-    Float x = call.getFloat("x");
-    Float y = call.getFloat("y");
-
-    getActivity()
-      .runOnUiThread(() -> {
-        cameraXView.setAspectRatio(aspectRatio, x, y, () -> {
-          // Return the actual preview bounds after layout and camera operations are complete
-          int[] bounds = cameraXView.getCurrentPreviewBounds();
-          JSObject ret = new JSObject();
-          ret.put("x", bounds[0]);
-          ret.put("y", bounds[1]);
-          ret.put("width", bounds[2]);
-          ret.put("height", bounds[3]);
-          call.resolve(ret);
-        });
-      });
-  }
-
-  @PluginMethod
-  public void getAspectRatio(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    String aspectRatio = cameraXView.getAspectRatio();
-    JSObject ret = new JSObject();
-    ret.put("aspectRatio", aspectRatio);
-    call.resolve(ret);
-  }
-
-  @PluginMethod
-  public void setGridMode(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    String gridMode = call.getString("gridMode", "none");
-    getActivity()
-      .runOnUiThread(() -> {
-        cameraXView.setGridMode(gridMode);
-        call.resolve();
-      });
-  }
-
-  @PluginMethod
-  public void getGridMode(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-    JSObject ret = new JSObject();
-    ret.put("gridMode", cameraXView.getGridMode());
-    call.resolve(ret);
-  }
-
-  @PluginMethod
-  public void getPreviewSize(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
     }
 
-    // Convert pixel values back to logical units
-    DisplayMetrics metrics = getBridge()
-      .getActivity()
-      .getResources()
-      .getDisplayMetrics();
-    float pixelRatio = metrics.density;
-
-    JSObject ret = new JSObject();
-    // Use same rounding strategy as start method
-    double x = Math.ceil(cameraXView.getPreviewX() / pixelRatio);
-    double y = Math.ceil(cameraXView.getPreviewY() / pixelRatio);
-    double width = Math.floor(cameraXView.getPreviewWidth() / pixelRatio);
-    double height = Math.floor(cameraXView.getPreviewHeight() / pixelRatio);
-
-    Log.d(
-      "CameraPreview",
-      "getPreviewSize: x=" +
-      x +
-      ", y=" +
-      y +
-      ", width=" +
-      width +
-      ", height=" +
+    FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
+      width,
       height
     );
-    ret.put("x", x);
-    ret.put("y", y);
-    ret.put("width", width);
-    ret.put("height", height);
-    call.resolve(ret);
+
+    // The X and Y positions passed from CameraPreview already include webView insets
+    // when edge-to-edge is active, so we don't need to add them again here
+    layoutParams.leftMargin = x;
+    layoutParams.topMargin = y;
+
+    Log.d(
+      TAG,
+      "Final layout params - Margins: left=" +
+      layoutParams.leftMargin +
+      ", top=" +
+      layoutParams.topMargin +
+      ", Size: " +
+      width +
+      "x" +
+      height
+    );
+    Log.d(
+      TAG,
+      "================================================================================"
+    );
+
+    return layoutParams;
   }
 
-  @PluginMethod
-  public void setPreviewSize(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
+  private void removePreviewView() {
+    if (previewContainer != null) {
+      ViewGroup parent = (ViewGroup) previewContainer.getParent();
+      if (parent != null) {
+        parent.removeView(previewContainer);
+      }
+      previewContainer = null;
     }
-
-    // Get values from call - null values will become 0
-    Integer xParam = call.getInt("x");
-    Integer yParam = call.getInt("y");
-    Integer widthParam = call.getInt("width");
-    Integer heightParam = call.getInt("height");
-
-    // Apply pixel ratio conversion to non-null values
-    DisplayMetrics metrics = getBridge()
-      .getActivity()
-      .getResources()
-      .getDisplayMetrics();
-    float pixelRatio = metrics.density;
-
-    // Check if edge-to-edge mode is active
-    WebView webView = getBridge().getWebView();
-    int webViewTopInset = 0;
-    boolean isEdgeToEdgeActive = false;
-    if (webView != null) {
-      int[] location = new int[2];
-      webView.getLocationOnScreen(location);
-      webViewTopInset = location[1];
-      isEdgeToEdgeActive = webViewTopInset > 0;
+    if (previewView != null) {
+      previewView = null;
     }
-
-    int x = (xParam != null && xParam > 0) ? (int) (xParam * pixelRatio) : 0;
-    int y = (yParam != null && yParam > 0) ? (int) (yParam * pixelRatio) : 0;
-
-    // Add edge-to-edge inset to Y if active
-    if (isEdgeToEdgeActive && y > 0) {
-      y += webViewTopInset;
+    if (gridOverlayView != null) {
+      gridOverlayView = null;
     }
-    int width = (widthParam != null && widthParam > 0)
-      ? (int) (widthParam * pixelRatio)
-      : 0;
-    int height = (heightParam != null && heightParam > 0)
-      ? (int) (heightParam * pixelRatio)
-      : 0;
+    if (focusIndicatorView != null) {
+      focusIndicatorView = null;
+    }
+    webView.setBackgroundColor(android.graphics.Color.WHITE);
+  }
 
-    cameraXView.setPreviewSize(x, y, width, height, () -> {
-      // Return the actual preview bounds after layout operations are complete
-      int[] bounds = cameraXView.getCurrentPreviewBounds();
-      JSObject ret = new JSObject();
-      ret.put("x", bounds[0]);
-      ret.put("y", bounds[1]);
-      ret.put("width", bounds[2]);
-      ret.put("height", bounds[3]);
-      call.resolve(ret);
+  // Helper: map our string quality to CameraX QualitySelector with graceful fallbacks
+  private QualitySelector buildQualitySelector(String q) {
+    String quality = (q == null) ? "" : q.trim().toLowerCase(Locale.US);
+    try {
+      switch (quality) {
+        case "max":
+          return QualitySelector.from(HIGHEST);
+        case "uhd":
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(UHD, FHD, HD, SD),
+            FallbackStrategy.lowerQualityOrHigherThan(UHD)
+          );
+        case "fhd":
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(FHD, HD, SD, UHD),
+            FallbackStrategy.lowerQualityOrHigherThan(FHD)
+          );
+        case "hd":
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(HD, SD, FHD, UHD),
+            FallbackStrategy.lowerQualityOrHigherThan(HD)
+          );
+        case "sd":
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(SD, HD, FHD, UHD),
+            FallbackStrategy.higherQualityOrLowerThan(SD)
+          );
+        case "low":
+          return QualitySelector.from(LOWEST);
+        default:
+          // Sensible Android default if not specified: FHD with graceful fallback
+          return QualitySelector.fromOrderedList(
+            Arrays.asList(FHD, HD, SD),
+            FallbackStrategy.higherQualityOrLowerThan(FHD)
+          );
+      }
+    } catch (Throwable t) {
+      // Safety net: never crash due to quality mapping
+      return QualitySelector.fromOrderedList(
+        Arrays.asList(FHD, HD, SD),
+        FallbackStrategy.higherQualityOrLowerThan(FHD)
+      );
+    }
+  }
+
+  // Allow overriding preferred video quality at runtime (e.g. per startRecordVideo call)
+  public void updateVideoQuality(String newQuality) {
+    if (sessionConfig == null) return;
+
+    // Recreate sessionConfig preserving everything but quality
+    sessionConfig = new com.ahm.capacitor.camera.preview.model.CameraSessionConfiguration(
+      sessionConfig.getDeviceId(),
+      sessionConfig.getPosition(),
+      sessionConfig.getX(),
+      sessionConfig.getY(),
+      sessionConfig.getWidth(),
+      sessionConfig.getHeight(),
+      sessionConfig.getPaddingBottom(),
+      sessionConfig.getToBack(),
+      sessionConfig.getStoreToFile(),
+      sessionConfig.getEnableOpacity(),
+      sessionConfig.getEnableZoom(),
+      sessionConfig.getDisableExifHeaderStripping(),
+      sessionConfig.getDisableAudio(),
+      sessionConfig.getZoomFactor(),
+      sessionConfig.getAspectRatio(),
+      sessionConfig.getGridMode(),
+      sessionConfig.getDisableFocusIndicator(),
+      sessionConfig.isVideoModeEnabled(),
+      newQuality
+    );
+
+    // If we're already bound with videoCapture, rebind with the updated quality
+    if (isRunning && videoCapture != null && cameraProvider != null && previewView != null && currentRecording == null) {
+      try {
+        QualitySelector qualitySelector = buildQualitySelector(newQuality);
+        Recorder recorder = new Recorder.Builder()
+          .setQualitySelector(qualitySelector)
+          .build();
+        VideoCapture<Recorder> newVideoCapture = VideoCapture.withOutput(recorder);
+
+        // Rebind use cases with the new video capture
+        Preview preview = previewUseCase != null ? previewUseCase : new Preview.Builder().build();
+        cameraProvider.unbindAll();
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+        if (imageCapture == null) {
+          imageCapture = new ImageCapture.Builder().build();
+        }
+        camera = cameraProvider.bindToLifecycle(this, currentCameraSelector, preview, imageCapture, newVideoCapture);
+        videoCapture = newVideoCapture;
+        currentVideoQualitySelector = qualitySelector;
+        Quality resolved = resolveQualityForCamera(currentVideoQualitySelector, camera);
+        Log.d(TAG, "updateVideoQuality: requested='" + newQuality + "' resolved='" + qualityToString(resolved) + "'");
+      } catch (Exception e) {
+        Log.w(TAG, "updateVideoQuality: Failed to rebind with new quality: " + e.getMessage());
+      }
+    }
+  }
+
+  // Pretty print Quality enum for logs
+private static String qualityToString(Quality q) {
+    if (q == null) return "none";
+    if (UHD.equals(q)) {
+        return "uhd (2160p)";
+    } else if (FHD.equals(q)) {
+        return "fhd (1080p)";
+    } else if (HD.equals(q)) {
+        return "hd (720p)";
+    } else if (SD.equals(q)) {
+        return "sd (480p)";
+    } else if (HIGHEST.equals(q)) {
+        return "max (highest available)";
+    } else if (LOWEST.equals(q)) {
+        return "low (lowest available)";
+    } else {
+        return q.toString().toLowerCase(java.util.Locale.US);
+    }
+}
+
+  @OptIn(markerClass = ExperimentalCamera2Interop.class)
+  private void bindCameraUseCases() {
+    if (cameraProvider == null) return;
+    mainExecutor.execute(() -> {
+      try {
+        Log.d(
+          TAG,
+          "Building camera selector with deviceId: " +
+          sessionConfig.getDeviceId() +
+          " and position: " +
+          sessionConfig.getPosition()
+        );
+        currentCameraSelector = buildCameraSelector();
+
+        ResolutionSelector.Builder resolutionSelectorBuilder =
+          new ResolutionSelector.Builder()
+            .setResolutionStrategy(
+              ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY
+            );
+
+        if (sessionConfig.getAspectRatio() != null) {
+          int aspectRatio;
+          if ("16:9".equals(sessionConfig.getAspectRatio())) {
+            aspectRatio = AspectRatio.RATIO_16_9;
+          } else { // "4:3"
+            aspectRatio = AspectRatio.RATIO_4_3;
+          }
+          resolutionSelectorBuilder.setAspectRatioStrategy(
+            new AspectRatioStrategy(
+              aspectRatio,
+              AspectRatioStrategy.FALLBACK_RULE_AUTO
+            )
+          );
+        }
+
+        ResolutionSelector resolutionSelector =
+          resolutionSelectorBuilder.build();
+
+        int rotation = previewView != null && previewView.getDisplay() != null
+          ? previewView.getDisplay().getRotation()
+          : android.view.Surface.ROTATION_0;
+
+        Preview preview = new Preview.Builder()
+          .setResolutionSelector(resolutionSelector)
+          .setTargetRotation(rotation)
+          .build();
+        // Keep reference to preview use case for later re-binding (e.g., when enabling video)
+        previewUseCase = preview;
+        imageCapture = new ImageCapture.Builder()
+          .setResolutionSelector(resolutionSelector)
+          .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+          .setFlashMode(currentFlashMode)
+          .setTargetRotation(rotation)
+          .build();
+        sampleImageCapture = imageCapture;
+
+        // Only setup VideoCapture if enableVideoMode is true
+        if (sessionConfig.isVideoModeEnabled()) {
+          QualitySelector qualitySelector = buildQualitySelector(sessionConfig.getVideoQuality());
+          Recorder recorder = new Recorder.Builder()
+            .setQualitySelector(qualitySelector)
+            .build();
+          videoCapture = VideoCapture.withOutput(recorder);
+          currentVideoQualitySelector = qualitySelector;
+        }
+
+        // Unbind any existing use cases and bind new ones
+        cameraProvider.unbindAll();
+
+        // Re-set the surface provider after unbinding to ensure the preview
+        // is connected and video frames are captured correctly
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+        // Bind with or without video capture based on enableVideoMode
+        if (sessionConfig.isVideoModeEnabled() && videoCapture != null) {
+          camera = cameraProvider.bindToLifecycle(
+            this,
+            currentCameraSelector,
+            preview,
+            imageCapture,
+            videoCapture
+          );
+        } else {
+          camera = cameraProvider.bindToLifecycle(
+            this,
+            currentCameraSelector,
+            preview,
+            imageCapture
+          );
+        }
+
+        // Log details about the active camera
+        Log.d(TAG, "Use cases bound. Inspecting active camera and use cases.");
+        CameraInfo cameraInfo = camera.getCameraInfo();
+        Log.d(
+          TAG,
+          "Bound Camera ID: " + Camera2CameraInfo.from(cameraInfo).getCameraId()
+        );
+
+        // Log zoom state
+        ZoomState zoomState = cameraInfo.getZoomState().getValue();
+        if (zoomState != null) {
+          Log.d(
+            TAG,
+            "Active Zoom State: " +
+            "min=" +
+            zoomState.getMinZoomRatio() +
+            ", " +
+            "max=" +
+            zoomState.getMaxZoomRatio() +
+            ", " +
+            "current=" +
+            zoomState.getZoomRatio()
+          );
+        }
+
+        // Log physical cameras of the active camera
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+          Set<CameraInfo> physicalCameras = cameraInfo.getPhysicalCameraInfos();
+          Log.d(
+            TAG,
+            "Active camera has " + physicalCameras.size() + " physical cameras."
+          );
+          for (CameraInfo physical : physicalCameras) {
+            Log.d(
+              TAG,
+              "  - Physical camera ID: " +
+              Camera2CameraInfo.from(physical).getCameraId()
+            );
+          }
+        }
+
+        // Log resolution info
+        ResolutionInfo previewResolution = preview.getResolutionInfo();
+        if (previewResolution != null) {
+          currentPreviewResolution = previewResolution.getResolution();
+          Log.d(TAG, "Preview resolution: " + currentPreviewResolution);
+
+          // Log the actual aspect ratio of the selected resolution
+          if (currentPreviewResolution != null) {
+            double actualRatio =
+              (double) currentPreviewResolution.getWidth() /
+              (double) currentPreviewResolution.getHeight();
+            Log.d(
+              TAG,
+              "Actual preview aspect ratio: " +
+              actualRatio +
+              " (width=" +
+              currentPreviewResolution.getWidth() +
+              ", height=" +
+              currentPreviewResolution.getHeight() +
+              ")"
+            );
+
+            // Compare with requested ratio
+            if ("4:3".equals(sessionConfig.getAspectRatio())) {
+              double expectedRatio = 4.0 / 3.0;
+              double difference = Math.abs(actualRatio - expectedRatio);
+              Log.d(
+                TAG,
+                "4:3 ratio check - Expected: " +
+                expectedRatio +
+                ", Actual: " +
+                actualRatio +
+                ", Difference: " +
+                difference
+              );
+            } else if ("16:9".equals(sessionConfig.getAspectRatio())) {
+              double expectedRatio = 16.0 / 9.0;
+              double difference = Math.abs(actualRatio - expectedRatio);
+              Log.d(
+                TAG,
+                "16:9 ratio check - Expected: " +
+                expectedRatio +
+                ", Actual: " +
+                actualRatio +
+                ", Difference: " +
+                difference
+              );
+            }
+          }
+        }
+        ResolutionInfo imageCaptureResolution =
+          imageCapture.getResolutionInfo();
+        if (imageCaptureResolution != null) {
+          Log.d(
+            TAG,
+            "Image capture resolution: " +
+            imageCaptureResolution.getResolution()
+          );
+        }
+
+        // Update scale type based on aspect ratio whenever (re)binding
+        String ar = sessionConfig != null
+          ? sessionConfig.getAspectRatio()
+          : null;
+        previewView.setScaleType(
+          (ar == null || ar.isEmpty())
+            ? PreviewView.ScaleType.FIT_CENTER
+            : PreviewView.ScaleType.FILL_CENTER
+        );
+
+        // Set initial zoom if specified, prioritizing targetZoom over default zoomFactor
+        float initialZoom = sessionConfig.getTargetZoom() != 1.0f
+          ? sessionConfig.getTargetZoom()
+          : sessionConfig.getZoomFactor();
+        if (initialZoom != 1.0f) {
+          Log.d(TAG, "Applying initial zoom of " + initialZoom);
+
+          // Validate zoom is within bounds
+          if (zoomState != null) {
+            float minZoom = zoomState.getMinZoomRatio();
+            float maxZoom = zoomState.getMaxZoomRatio();
+
+            if (initialZoom < minZoom || initialZoom > maxZoom) {
+              if (listener != null) {
+                listener.onCameraStartError(
+                  "Initial zoom level " +
+                  initialZoom +
+                  " is not available. " +
+                  "Valid range is " +
+                  minZoom +
+                  " to " +
+                  maxZoom
+                );
+                return;
+              }
+            }
+          }
+
+          setZoom(initialZoom);
+        }
+
+        isRunning = true;
+        Log.d(TAG, "bindCameraUseCases: Camera bound successfully");
+        if (listener != null) {
+          // Post the callback to ensure layout is complete
+          previewContainer.post(() -> {
+            // Return actual preview container dimensions instead of requested dimensions
+            // Get the actual camera dimensions and position
+            int actualWidth = getPreviewWidth();
+            int actualHeight = getPreviewHeight();
+            int actualX = getPreviewX();
+            int actualY = getPreviewY();
+
+            Log.d(
+              TAG,
+              "onCameraStarted callback - actualX=" +
+              actualX +
+              ", actualY=" +
+              actualY +
+              ", actualWidth=" +
+              actualWidth +
+              ", actualHeight=" +
+              actualHeight
+            );
+
+            // Update grid overlay bounds after camera is started
+            updateGridOverlayBounds();
+
+            listener.onCameraStarted(
+              actualWidth,
+              actualHeight,
+              actualX,
+              actualY
+            );
+          });
+        }
+      } catch (Exception e) {
+        if (listener != null) listener.onCameraStartError(
+          "Error binding camera: " + e.getMessage()
+        );
+      }
     });
   }
 
-  @PluginMethod
-  public void deleteFile(PluginCall call) {
-    String path = call.getString("path");
-    if (path == null || path.isEmpty()) {
-      call.reject("path parameter is required");
-      return;
-    }
-    try {
-      java.io.File f = new java.io.File(android.net.Uri.parse(path).getPath());
-      boolean deleted = f.exists() && f.delete();
-      JSObject ret = new JSObject();
-      ret.put("success", deleted);
-      call.resolve(ret);
-    } catch (Exception e) {
-      call.reject("Failed to delete file: " + e.getMessage());
-    }
-  }
+  @OptIn(markerClass = ExperimentalCamera2Interop.class)
+  private CameraSelector buildCameraSelector() {
+    CameraSelector.Builder builder = new CameraSelector.Builder();
+    final String deviceId = sessionConfig.getDeviceId();
 
-  @PluginMethod
-  public void startRecordVideo(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-
-    boolean disableAudio = call.getBoolean("disableAudio") != null
-      ? Boolean.TRUE.equals(call.getBoolean("disableAudio"))
-      : this.lastDisableAudio;
-    String permissionAlias = disableAudio
-      ? CAMERA_ONLY_PERMISSION_ALIAS
-      : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
-
-    // Optional override of quality per call
-    String requestedQuality = call.getString("videoQuality");
-    if (requestedQuality != null && !requestedQuality.isEmpty()) {
-      try {
-        cameraXView.updateVideoQuality(requestedQuality);
-      } catch (Exception ignored) {}
-    }
-
-    if (PermissionState.GRANTED.equals(getPermissionState(permissionAlias))) {
-      try {
-        cameraXView.startRecordVideo();
-        call.resolve();
-      } catch (Exception e) {
-        call.reject("Failed to start video recording: " + e.getMessage());
-      }
-    } else {
-      requestPermissionForAlias(
-        permissionAlias,
-        call,
-        "handleVideoRecordingPermissionResult"
-      );
-    }
-  }
-
-  @PluginMethod
-  public void stopRecordVideo(PluginCall call) {
-    if (cameraXView == null || !cameraXView.isRunning()) {
-      call.reject("Camera is not running");
-      return;
-    }
-
-    try {
-      bridge.saveCall(call);
-      final String cbId = call.getCallbackId();
-      cameraXView.stopRecordVideo(
-        new CameraXView.VideoRecordingCallback() {
-          @Override
-          public void onSuccess(String filePath) {
-            PluginCall saved = bridge.getSavedCall(cbId);
-            if (saved != null) {
-              JSObject result = new JSObject();
-              result.put("videoFilePath", filePath);
-              saved.resolve(result);
-              bridge.releaseCall(saved);
-            }
+    if (deviceId != null && !deviceId.isEmpty()) {
+      builder.addCameraFilter(cameraInfos -> {
+        for (CameraInfo cameraInfo : cameraInfos) {
+          if (
+            deviceId.equals(Camera2CameraInfo.from(cameraInfo).getCameraId())
+          ) {
+            return Collections.singletonList(cameraInfo);
           }
+        }
+        return Collections.emptyList();
+      });
+    } else {
+      String position = sessionConfig.getPosition();
+      int requiredFacing = "front".equals(position)
+        ? CameraSelector.LENS_FACING_FRONT
+        : CameraSelector.LENS_FACING_BACK;
+      builder.requireLensFacing(requiredFacing);
+    }
+    return builder.build();
+  }
 
-          @Override
-          public void onError(String message) {
-            PluginCall saved = bridge.getSavedCall(cbId);
-            if (saved != null) {
-              saved.reject("Failed to stop video recording: " + message);
-              bridge.releaseCall(saved);
+  private static String getCameraId(
+    androidx.camera.core.CameraInfo cameraInfo
+  ) {
+    try {
+      // Generate a stable ID based on camera characteristics
+      boolean isBack = isBackCamera(cameraInfo);
+      float minZoom = Objects.requireNonNull(
+        cameraInfo.getZoomState().getValue()
+      ).getMinZoomRatio();
+      float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
+
+      // Create a unique ID based on camera properties
+      String position = isBack ? "back" : "front";
+      return position + "_" + minZoom + "_" + maxZoom;
+    } catch (Exception e) {
+      return "unknown_camera";
+    }
+  }
+
+  private static boolean isBackCamera(
+    androidx.camera.core.CameraInfo cameraInfo
+  ) {
+    try {
+      // Check if this camera matches the back camera selector
+      CameraSelector backSelector = new CameraSelector.Builder()
+        .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+        .build();
+
+      // Try to filter cameras with back selector - if this camera is included, it's a back camera
+      List<androidx.camera.core.CameraInfo> backCameras = backSelector.filter(
+        Collections.singletonList(cameraInfo)
+      );
+      return !backCameras.isEmpty();
+    } catch (Exception e) {
+      Log.w(TAG, "Error determining camera direction, assuming back camera", e);
+      return true; // Default to back camera
+    }
+  }
+
+  public void capturePhoto(
+    int quality,
+    final boolean saveToGallery,
+    Integer width,
+    Integer height,
+    Location location
+  ) {
+    Log.d(
+      TAG,
+      "capturePhoto: Starting photo capture with quality: " +
+      quality +
+      ", width: " +
+      width +
+      ", height: " +
+      height
+    );
+
+    if (imageCapture == null) {
+      if (listener != null) {
+        listener.onPictureTakenError("Camera not ready");
+      }
+      return;
+    }
+
+    synchronized (captureLock) {
+      isCapturingPhoto = true;
+    }
+
+    File tempFile = new File(context.getCacheDir(), "temp_image.jpg");
+    ImageCapture.OutputFileOptions outputFileOptions =
+      new ImageCapture.OutputFileOptions.Builder(tempFile).build();
+
+    imageCapture.takePicture(
+      outputFileOptions,
+      cameraExecutor,
+      new ImageCapture.OnImageSavedCallback() {
+        @Override
+        public void onError(@NonNull ImageCaptureException exception) {
+          Log.e(TAG, "capturePhoto: Photo capture failed", exception);
+          if (listener != null) {
+            listener.onPictureTakenError(
+              "Photo capture failed: " + exception.getMessage()
+            );
+          }
+          // End of capture lifecycle
+          synchronized (captureLock) {
+            isCapturingPhoto = false;
+            if (stopRequested) {
+              performImmediateStop();
             }
           }
         }
-      );
-    } catch (Exception e) {
-      call.reject("Failed to stop video recording: " + e.getMessage());
-    }
-  }
 
-  @PermissionCallback
-  private void handleVideoRecordingPermissionResult(PluginCall call) {
-    // Use the persisted session value to determine which permission we requested
-    String permissionAlias = this.lastDisableAudio
-      ? CAMERA_ONLY_PERMISSION_ALIAS
-      : CAMERA_WITH_AUDIO_PERMISSION_ALIAS;
-
-    // Check if either permission is granted (mirroring handleCameraPermissionResult)
-    if (
-      PermissionState.GRANTED.equals(
-        getPermissionState(CAMERA_ONLY_PERMISSION_ALIAS)
-      ) ||
-      PermissionState.GRANTED.equals(
-        getPermissionState(CAMERA_WITH_AUDIO_PERMISSION_ALIAS)
-      )
-    ) {
-      try {
-        // Apply per-call quality if provided on the saved call
-        String requestedQuality = call.getString("videoQuality");
-        if (requestedQuality != null && !requestedQuality.isEmpty()) {
+        @Override
+        public void onImageSaved(
+          @NonNull ImageCapture.OutputFileResults output
+        ) {
           try {
-            cameraXView.updateVideoQuality(requestedQuality);
-          } catch (Exception ignored) {}
+            // Read file using FileInputStream for compatibility
+            byte[] bytes = new byte[(int) tempFile.length()];
+            java.io.FileInputStream fis = new java.io.FileInputStream(tempFile);
+            fis.read(bytes);
+            fis.close();
+
+            ExifInterface exifInterface = new ExifInterface(
+              tempFile.getAbsolutePath()
+            );
+
+            if (location != null) {
+              exifInterface.setGpsInfo(location);
+            }
+
+            JSONObject exifData = getExifData(exifInterface);
+
+            if (width != null || height != null) {
+              Bitmap bitmap = BitmapFactory.decodeByteArray(
+                bytes,
+                0,
+                bytes.length
+              );
+              Bitmap resizedBitmap = resizeBitmapToMaxDimensions(
+                bitmap,
+                width,
+                height
+              );
+              ByteArrayOutputStream stream = new ByteArrayOutputStream();
+              resizedBitmap.compress(
+                Bitmap.CompressFormat.JPEG,
+                quality,
+                stream
+              );
+              bytes = stream.toByteArray();
+
+              // Write EXIF data back to resized image
+              bytes = writeExifToImageBytes(bytes, exifInterface);
+            } else {
+              // No explicit size/ratio: crop to match current preview content
+              Bitmap originalBitmap = BitmapFactory.decodeByteArray(
+                bytes,
+                0,
+                bytes.length
+              );
+              Bitmap previewCropped = cropBitmapToMatchPreview(originalBitmap);
+              ByteArrayOutputStream stream = new ByteArrayOutputStream();
+              previewCropped.compress(
+                Bitmap.CompressFormat.JPEG,
+                quality,
+                stream
+              );
+              bytes = stream.toByteArray();
+              // Preserve EXIF
+              bytes = writeExifToImageBytes(bytes, exifInterface);
+            }
+
+            // Save to gallery asynchronously if requested
+            if (saveToGallery) {
+              final byte[] finalBytes = bytes;
+              new Thread(() -> {
+                saveImageToGallery(finalBytes);
+              }).start();
+            }
+
+            String resultValue;
+            boolean returnFileUri =
+              sessionConfig != null && sessionConfig.isStoreToFile();
+            if (returnFileUri) {
+              // Persist processed image to a file and return its URI to avoid heavy base64 bridging
+              try {
+                String fileName =
+                  "cpcp_" +
+                  new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(
+                    new java.util.Date()
+                  ) +
+                  ".jpg";
+                File outDir = context.getCacheDir();
+                File outFile = new File(outDir, fileName);
+                FileOutputStream outFos = new FileOutputStream(outFile);
+                outFos.write(bytes);
+                outFos.close();
+
+                // Return a file path; apps can convert via Capacitor.convertFileSrc on JS side
+                resultValue = outFile.getAbsolutePath();
+              } catch (IOException ioEx) {
+                Log.e(TAG, "capturePhoto: Failed to write image file", ioEx);
+                // Fallback to base64 if file write fails
+                resultValue = Base64.encodeToString(bytes, Base64.NO_WRAP);
+              }
+            } else {
+              // Backward-compatible behavior
+              resultValue = Base64.encodeToString(bytes, Base64.NO_WRAP);
+            }
+
+            tempFile.delete();
+
+            if (listener != null) {
+              listener.onPictureTaken(resultValue, exifData);
+            }
+          } catch (Exception e) {
+            Log.e(TAG, "capturePhoto: Error processing image", e);
+            if (listener != null) {
+              listener.onPictureTakenError(
+                "Error processing image: " + e.getMessage()
+              );
+            }
+          } finally {
+            // End of capture lifecycle
+            synchronized (captureLock) {
+              isCapturingPhoto = false;
+              if (stopRequested) {
+                performImmediateStop();
+              }
+            }
+          }
         }
-        cameraXView.startRecordVideo();
-        call.resolve();
-      } catch (Exception e) {
-        call.reject("Failed to start video recording: " + e.getMessage());
       }
+    );
+  }
+
+  private Bitmap resizeBitmap(Bitmap bitmap, int width, int height) {
+    return Bitmap.createScaledBitmap(bitmap, width, height, true);
+  }
+
+  private Bitmap resizeBitmapToMaxDimensions(
+    Bitmap bitmap,
+    Integer maxWidth,
+    Integer maxHeight
+  ) {
+    int originalWidth = bitmap.getWidth();
+    int originalHeight = bitmap.getHeight();
+    float originalAspectRatio = (float) originalWidth / originalHeight;
+
+    int targetWidth = originalWidth;
+    int targetHeight = originalHeight;
+
+    if (maxWidth != null && maxHeight != null) {
+      // Both dimensions specified - fit within both maximums
+      float maxAspectRatio = (float) maxWidth / maxHeight;
+      if (originalAspectRatio > maxAspectRatio) {
+        // Original is wider - fit by width
+        targetWidth = maxWidth;
+        targetHeight = (int) (maxWidth / originalAspectRatio);
+      } else {
+        // Original is taller - fit by height
+        targetWidth = (int) (maxHeight * originalAspectRatio);
+        targetHeight = maxHeight;
+      }
+    } else if (maxWidth != null) {
+      // Only width specified - maintain aspect ratio
+      targetWidth = maxWidth;
+      targetHeight = (int) (maxWidth / originalAspectRatio);
     } else {
-      call.reject("Permission denied for video recording");
+      // Only height specified - maintain aspect ratio
+      targetWidth = (int) (maxHeight * originalAspectRatio);
+      targetHeight = maxHeight;
+    }
+
+    return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true);
+  }
+
+  private JSONObject getExifData(ExifInterface exifInterface) {
+    JSONObject exifData = new JSONObject();
+    try {
+      // Add all available exif tags to a JSON object
+      for (String[] tag : EXIF_TAGS) {
+        String value = exifInterface.getAttribute(tag[0]);
+        if (value != null) {
+          exifData.put(tag[1], value);
+        }
+      }
+    } catch (Exception e) {
+      Log.e(TAG, "getExifData: Error reading exif data", e);
+    }
+    return exifData;
+  }
+
+  private static final String[][] EXIF_TAGS = new String[][] {
+    { ExifInterface.TAG_APERTURE_VALUE, "ApertureValue" },
+    { ExifInterface.TAG_ARTIST, "Artist" },
+    { ExifInterface.TAG_BITS_PER_SAMPLE, "BitsPerSample" },
+    { ExifInterface.TAG_BRIGHTNESS_VALUE, "BrightnessValue" },
+    { ExifInterface.TAG_CFA_PATTERN, "CFAPattern" },
+    { ExifInterface.TAG_COLOR_SPACE, "ColorSpace" },
+    { ExifInterface.TAG_COMPONENTS_CONFIGURATION, "ComponentsConfiguration" },
+    { ExifInterface.TAG_COMPRESSED_BITS_PER_PIXEL, "CompressedBitsPerPixel" },
+    { ExifInterface.TAG_COMPRESSION, "Compression" },
+    { ExifInterface.TAG_CONTRAST, "Contrast" },
+    { ExifInterface.TAG_COPYRIGHT, "Copyright" },
+    { ExifInterface.TAG_CUSTOM_RENDERED, "CustomRendered" },
+    { ExifInterface.TAG_DATETIME, "DateTime" },
+    { ExifInterface.TAG_DATETIME_DIGITIZED, "DateTimeDigitized" },
+    { ExifInterface.TAG_DATETIME_ORIGINAL, "DateTimeOriginal" },
+    {
+      ExifInterface.TAG_DEVICE_SETTING_DESCRIPTION,
+      "DeviceSettingDescription",
+    },
+    { ExifInterface.TAG_DIGITAL_ZOOM_RATIO, "DigitalZoomRatio" },
+    { ExifInterface.TAG_DNG_VERSION, "DNGVersion" },
+    { ExifInterface.TAG_EXIF_VERSION, "ExifVersion" },
+    { ExifInterface.TAG_EXPOSURE_BIAS_VALUE, "ExposureBiasValue" },
+    { ExifInterface.TAG_EXPOSURE_INDEX, "ExposureIndex" },
+    { ExifInterface.TAG_EXPOSURE_MODE, "ExposureMode" },
+    { ExifInterface.TAG_EXPOSURE_PROGRAM, "ExposureProgram" },
+    { ExifInterface.TAG_EXPOSURE_TIME, "ExposureTime" },
+    { ExifInterface.TAG_FILE_SOURCE, "FileSource" },
+    { ExifInterface.TAG_FLASH, "Flash" },
+    { ExifInterface.TAG_FLASHPIX_VERSION, "FlashpixVersion" },
+    { ExifInterface.TAG_FLASH_ENERGY, "FlashEnergy" },
+    { ExifInterface.TAG_FOCAL_LENGTH, "FocalLength" },
+    { ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM, "FocalLengthIn35mmFilm" },
+    {
+      ExifInterface.TAG_FOCAL_PLANE_RESOLUTION_UNIT,
+      "FocalPlaneResolutionUnit",
+    },
+    { ExifInterface.TAG_FOCAL_PLANE_X_RESOLUTION, "FocalPlaneXResolution" },
+    { ExifInterface.TAG_FOCAL_PLANE_Y_RESOLUTION, "FocalPlaneYResolution" },
+    { ExifInterface.TAG_F_NUMBER, "FNumber" },
+    { ExifInterface.TAG_GAIN_CONTROL, "GainControl" },
+    { ExifInterface.TAG_GPS_ALTITUDE, "GPSAltitude" },
+    { ExifInterface.TAG_GPS_ALTITUDE_REF, "GPSAltitudeRef" },
+    { ExifInterface.TAG_GPS_AREA_INFORMATION, "GPSAreaInformation" },
+    { ExifInterface.TAG_GPS_DATESTAMP, "GPSDateStamp" },
+    { ExifInterface.TAG_GPS_DEST_BEARING, "GPSDestBearing" },
+    { ExifInterface.TAG_GPS_DEST_BEARING_REF, "GPSDestBearingRef" },
+    { ExifInterface.TAG_GPS_DEST_DISTANCE, "GPSDestDistance" },
+    { ExifInterface.TAG_GPS_DEST_DISTANCE_REF, "GPSDestDistanceRef" },
+    { ExifInterface.TAG_GPS_DEST_LATITUDE, "GPSDestLatitude" },
+    { ExifInterface.TAG_GPS_DEST_LATITUDE_REF, "GPSDestLatitudeRef" },
+    { ExifInterface.TAG_GPS_DEST_LONGITUDE, "GPSDestLongitude" },
+    { ExifInterface.TAG_GPS_DEST_LONGITUDE_REF, "GPSDestLongitudeRef" },
+    { ExifInterface.TAG_GPS_DIFFERENTIAL, "GPSDifferential" },
+    { ExifInterface.TAG_GPS_DOP, "GPSDOP" },
+    { ExifInterface.TAG_GPS_IMG_DIRECTION, "GPSImgDirection" },
+    { ExifInterface.TAG_GPS_IMG_DIRECTION_REF, "GPSImgDirectionRef" },
+    { ExifInterface.TAG_GPS_LATITUDE, "GPSLatitude" },
+    { ExifInterface.TAG_GPS_LATITUDE_REF, "GPSLatitudeRef" },
+    { ExifInterface.TAG_GPS_LONGITUDE, "GPSLongitude" },
+    { ExifInterface.TAG_GPS_LONGITUDE_REF, "GPSLongitudeRef" },
+    { ExifInterface.TAG_GPS_MAP_DATUM, "GPSMapDatum" },
+    { ExifInterface.TAG_GPS_MEASURE_MODE, "GPSMeasureMode" },
+    { ExifInterface.TAG_GPS_PROCESSING_METHOD, "GPSProcessingMethod" },
+    { ExifInterface.TAG_GPS_SATELLITES, "GPSSatellites" },
+    { ExifInterface.TAG_GPS_SPEED, "GPSSpeed" },
+    { ExifInterface.TAG_GPS_SPEED_REF, "GPSSpeedRef" },
+    { ExifInterface.TAG_GPS_STATUS, "GPSStatus" },
+    { ExifInterface.TAG_GPS_TIMESTAMP, "GPSTimeStamp" },
+    { ExifInterface.TAG_GPS_TRACK, "GPSTrack" },
+    { ExifInterface.TAG_GPS_TRACK_REF, "GPSTrackRef" },
+    { ExifInterface.TAG_GPS_VERSION_ID, "GPSVersionID" },
+    { ExifInterface.TAG_IMAGE_DESCRIPTION, "ImageDescription" },
+    { ExifInterface.TAG_IMAGE_LENGTH, "ImageLength" },
+    { ExifInterface.TAG_IMAGE_UNIQUE_ID, "ImageUniqueID" },
+    { ExifInterface.TAG_IMAGE_WIDTH, "ImageWidth" },
+    { ExifInterface.TAG_INTEROPERABILITY_INDEX, "InteroperabilityIndex" },
+    { ExifInterface.TAG_ISO_SPEED, "ISOSpeed" },
+    { ExifInterface.TAG_ISO_SPEED_LATITUDE_YYY, "ISOSpeedLatitudeyyy" },
+    { ExifInterface.TAG_ISO_SPEED_LATITUDE_ZZZ, "ISOSpeedLatitudezzz" },
+    { ExifInterface.TAG_JPEG_INTERCHANGE_FORMAT, "JPEGInterchangeFormat" },
+    {
+      ExifInterface.TAG_JPEG_INTERCHANGE_FORMAT_LENGTH,
+      "JPEGInterchangeFormatLength",
+    },
+    { ExifInterface.TAG_LIGHT_SOURCE, "LightSource" },
+    { ExifInterface.TAG_MAKE, "Make" },
+    { ExifInterface.TAG_MAKER_NOTE, "MakerNote" },
+    { ExifInterface.TAG_MAX_APERTURE_VALUE, "MaxApertureValue" },
+    { ExifInterface.TAG_METERING_MODE, "MeteringMode" },
+    { ExifInterface.TAG_MODEL, "Model" },
+    { ExifInterface.TAG_NEW_SUBFILE_TYPE, "NewSubfileType" },
+    { ExifInterface.TAG_OECF, "OECF" },
+    { ExifInterface.TAG_OFFSET_TIME, "OffsetTime" },
+    { ExifInterface.TAG_OFFSET_TIME_DIGITIZED, "OffsetTimeDigitized" },
+    { ExifInterface.TAG_OFFSET_TIME_ORIGINAL, "OffsetTimeOriginal" },
+    { ExifInterface.TAG_ORF_ASPECT_FRAME, "ORFAspectFrame" },
+    { ExifInterface.TAG_ORF_PREVIEW_IMAGE_LENGTH, "ORFPreviewImageLength" },
+    { ExifInterface.TAG_ORF_PREVIEW_IMAGE_START, "ORFPreviewImageStart" },
+    { ExifInterface.TAG_ORF_THUMBNAIL_IMAGE, "ORFThumbnailImage" },
+    { ExifInterface.TAG_ORIENTATION, "Orientation" },
+    {
+      ExifInterface.TAG_PHOTOMETRIC_INTERPRETATION,
+      "PhotometricInterpretation",
+    },
+    { ExifInterface.TAG_PIXEL_X_DIMENSION, "PixelXDimension" },
+    { ExifInterface.TAG_PIXEL_Y_DIMENSION, "PixelYDimension" },
+    { ExifInterface.TAG_PLANAR_CONFIGURATION, "PlanarConfiguration" },
+    { ExifInterface.TAG_PRIMARY_CHROMATICITIES, "PrimaryChromaticities" },
+    {
+      ExifInterface.TAG_RECOMMENDED_EXPOSURE_INDEX,
+      "RecommendedExposureIndex",
+    },
+    { ExifInterface.TAG_REFERENCE_BLACK_WHITE, "ReferenceBlackWhite" },
+    { ExifInterface.TAG_RELATED_SOUND_FILE, "RelatedSoundFile" },
+    { ExifInterface.TAG_RESOLUTION_UNIT, "ResolutionUnit" },
+    { ExifInterface.TAG_ROWS_PER_STRIP, "RowsPerStrip" },
+    { ExifInterface.TAG_RW2_ISO, "RW2ISO" },
+    { ExifInterface.TAG_RW2_JPG_FROM_RAW, "RW2JpgFromRaw" },
+    { ExifInterface.TAG_RW2_SENSOR_BOTTOM_BORDER, "RW2SensorBottomBorder" },
+    { ExifInterface.TAG_RW2_SENSOR_LEFT_BORDER, "RW2SensorLeftBorder" },
+    { ExifInterface.TAG_RW2_SENSOR_RIGHT_BORDER, "RW2SensorRightBorder" },
+    { ExifInterface.TAG_RW2_SENSOR_TOP_BORDER, "RW2SensorTopBorder" },
+    { ExifInterface.TAG_SAMPLES_PER_PIXEL, "SamplesPerPixel" },
+    { ExifInterface.TAG_SATURATION, "Saturation" },
+    { ExifInterface.TAG_SCENE_CAPTURE_TYPE, "SceneCaptureType" },
+    { ExifInterface.TAG_SCENE_TYPE, "SceneType" },
+    { ExifInterface.TAG_SENSING_METHOD, "SensingMethod" },
+    { ExifInterface.TAG_SENSITIVITY_TYPE, "SensitivityType" },
+    { ExifInterface.TAG_SHARPNESS, "Sharpness" },
+    { ExifInterface.TAG_SHUTTER_SPEED_VALUE, "ShutterSpeedValue" },
+    { ExifInterface.TAG_SOFTWARE, "Software" },
+    {
+      ExifInterface.TAG_SPATIAL_FREQUENCY_RESPONSE,
+      "SpatialFrequencyResponse",
+    },
+    { ExifInterface.TAG_SPECTRAL_SENSITIVITY, "SpectralSensitivity" },
+    {
+      ExifInterface.TAG_STANDARD_OUTPUT_SENSITIVITY,
+      "StandardOutputSensitivity",
+    },
+    { ExifInterface.TAG_STRIP_BYTE_COUNTS, "StripByteCounts" },
+    { ExifInterface.TAG_STRIP_OFFSETS, "StripOffsets" },
+    { ExifInterface.TAG_SUBFILE_TYPE, "SubfileType" },
+    { ExifInterface.TAG_SUBJECT_AREA, "SubjectArea" },
+    { ExifInterface.TAG_SUBJECT_DISTANCE, "SubjectDistance" },
+    { ExifInterface.TAG_SUBJECT_DISTANCE_RANGE, "SubjectDistanceRange" },
+    { ExifInterface.TAG_SUBJECT_LOCATION, "SubjectLocation" },
+    { ExifInterface.TAG_SUBSEC_TIME, "SubSecTime" },
+    { ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, "SubSecTimeDigitized" },
+    { ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, "SubSecTimeOriginal" },
+    { ExifInterface.TAG_THUMBNAIL_IMAGE_LENGTH, "ThumbnailImageLength" },
+    { ExifInterface.TAG_THUMBNAIL_IMAGE_WIDTH, "ThumbnailImageWidth" },
+    { ExifInterface.TAG_TRANSFER_FUNCTION, "TransferFunction" },
+    { ExifInterface.TAG_USER_COMMENT, "UserComment" },
+    { ExifInterface.TAG_WHITE_BALANCE, "WhiteBalance" },
+    { ExifInterface.TAG_WHITE_POINT, "WhitePoint" },
+    { ExifInterface.TAG_X_RESOLUTION, "XResolution" },
+    { ExifInterface.TAG_Y_CB_CR_COEFFICIENTS, "YCbCrCoefficients" },
+    { ExifInterface.TAG_Y_CB_CR_POSITIONING, "YCbCrPositioning" },
+    { ExifInterface.TAG_Y_CB_CR_SUB_SAMPLING, "YCbCrSubSampling" },
+    { ExifInterface.TAG_Y_RESOLUTION, "YResolution" },
+  };
+
+  private byte[] writeExifToImageBytes(
+    byte[] imageBytes,
+    ExifInterface sourceExif
+  ) {
+    try {
+      // Create a temporary file to write the image with EXIF
+      File tempExifFile = File.createTempFile(
+        "temp_exif",
+        ".jpg",
+        context.getCacheDir()
+      );
+
+      // Write the image bytes to temp file
+      java.io.FileOutputStream fos = new java.io.FileOutputStream(tempExifFile);
+      fos.write(imageBytes);
+      fos.close();
+
+      // Create new ExifInterface for the temp file and copy all EXIF data
+      ExifInterface newExif = new ExifInterface(tempExifFile.getAbsolutePath());
+
+      // Copy all EXIF attributes from source to new
+      for (String[] tag : EXIF_TAGS) {
+        String value = sourceExif.getAttribute(tag[0]);
+        if (value != null) {
+          newExif.setAttribute(tag[0], value);
+        }
+      }
+
+      // Save the EXIF data
+      newExif.saveAttributes();
+
+      // Read the file back with EXIF embedded
+      byte[] result = new byte[(int) tempExifFile.length()];
+      java.io.FileInputStream fis = new java.io.FileInputStream(tempExifFile);
+      fis.read(result);
+      fis.close();
+
+      // Clean up temp file
+      tempExifFile.delete();
+
+      return result;
+    } catch (Exception e) {
+      Log.e(TAG, "writeExifToImageBytes: Error writing EXIF data", e);
+      return imageBytes; // Return original bytes if error
     }
   }
 
-  @PluginMethod
-  public void getSafeAreaInsets(PluginCall call) {
-    JSObject ret = new JSObject();
-    int orientation = getContext()
-      .getResources()
-      .getConfiguration()
-      .orientation;
+  public void captureSample(int quality) {
+    Log.d(
+      TAG,
+      "captureSample: Starting sample capture with quality: " + quality
+    );
 
-    int notchInsetPx = 0;
+    if (sampleImageCapture == null) {
+      if (listener != null) {
+        listener.onSampleTakenError("Camera not ready");
+      }
+      return;
+    }
 
+    sampleImageCapture.takePicture(
+      cameraExecutor,
+      new ImageCapture.OnImageCapturedCallback() {
+        @Override
+        public void onError(@NonNull ImageCaptureException exception) {
+          Log.e(TAG, "captureSample: Sample capture failed", exception);
+          if (listener != null) {
+            listener.onSampleTakenError(
+              "Sample capture failed: " + exception.getMessage()
+            );
+          }
+        }
+
+        @Override
+        public void onCaptureSuccess(@NonNull ImageProxy image) {
+          try {
+            // Convert ImageProxy to byte array
+            byte[] bytes = imageProxyToByteArray(image);
+            String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+
+            if (listener != null) {
+              listener.onSampleTaken(base64);
+            }
+          } catch (Exception e) {
+            Log.e(TAG, "captureSample: Error processing sample", e);
+            if (listener != null) {
+              listener.onSampleTakenError(
+                "Error processing sample: " + e.getMessage()
+              );
+            }
+          } finally {
+            image.close();
+          }
+        }
+      }
+    );
+  }
+
+  private byte[] imageProxyToByteArray(ImageProxy image) {
+    ImageProxy.PlaneProxy[] planes = image.getPlanes();
+    ByteBuffer buffer = planes[0].getBuffer();
+    byte[] bytes = new byte[buffer.remaining()];
+    buffer.get(bytes);
+    return bytes;
+  }
+
+  private Bitmap cropBitmapToMatchPreview(Bitmap image) {
+    if (previewContainer == null || previewView == null) {
+      return image;
+    }
+    int containerWidth = previewContainer.getWidth();
+    int containerHeight = previewContainer.getHeight();
+    if (containerWidth == 0 || containerHeight == 0) {
+      return image;
+    }
+    // Compute preview aspect based on actual camera content bounds
+    Rect bounds = getActualCameraBounds();
+    int previewW = Math.max(1, bounds.width());
+    int previewH = Math.max(1, bounds.height());
+    float previewRatio = (float) previewW / (float) previewH;
+
+    int imgW = image.getWidth();
+    int imgH = image.getHeight();
+    float imgRatio = (float) imgW / (float) imgH;
+
+    int targetW = imgW;
+    int targetH = imgH;
+    if (imgRatio > previewRatio) {
+      // Image wider than preview: crop width
+      targetW = Math.round(imgH * previewRatio);
+    } else if (imgRatio < previewRatio) {
+      // Image taller than preview: crop height
+      targetH = Math.round(imgW / previewRatio);
+    }
+    int x = Math.max(0, (imgW - targetW) / 2);
+    int y = Math.max(0, (imgH - targetH) / 2);
     try {
-      View decorView = getBridge().getActivity().getWindow().getDecorView();
-      WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
+      return Bitmap.createBitmap(
+        image,
+        x,
+        y,
+        Math.min(targetW, imgW - x),
+        Math.min(targetH, imgH - y)
+      );
+    } catch (Exception ignore) {
+      return image;
+    }
+  }
 
-      if (insets != null) {
-        // Get display cutout insets (notch, punch hole, etc.)
-        // this.Capacitor.Plugins.CameraPreview.getSafeAreaInsets()
-        Insets cutout = insets.getInsets(
-          WindowInsetsCompat.Type.displayCutout()
+  // not workin for xiaomi https://xiaomi.eu/community/threads/mi-11-ultra-unable-to-access-camera-lenses-in-apps-camera2-api.61456/
+  @OptIn(markerClass = ExperimentalCamera2Interop.class)
+  public static List<
+    com.ahm.capacitor.camera.preview.model.CameraDevice
+  > getAvailableDevicesStatic(Context context) {
+    Log.d(
+      TAG,
+      "getAvailableDevicesStatic: Starting CameraX device enumeration with getPhysicalCameraInfos."
+    );
+    List<com.ahm.capacitor.camera.preview.model.CameraDevice> devices =
+      new ArrayList<>();
+    try {
+      ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
+        ProcessCameraProvider.getInstance(context);
+      ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+      CameraManager cameraManager = (CameraManager) context.getSystemService(
+        Context.CAMERA_SERVICE
+      );
+
+      for (CameraInfo cameraInfo : cameraProvider.getAvailableCameraInfos()) {
+        String logicalCameraId = Camera2CameraInfo.from(
+          cameraInfo
+        ).getCameraId();
+        String position = isBackCamera(cameraInfo) ? "rear" : "front";
+
+        // Add logical camera
+        float minZoom = Objects.requireNonNull(
+          cameraInfo.getZoomState().getValue()
+        ).getMinZoomRatio();
+        float maxZoom = cameraInfo.getZoomState().getValue().getMaxZoomRatio();
+        List<LensInfo> logicalLenses = new ArrayList<>();
+        logicalLenses.add(new LensInfo(4.25f, "wideAngle", 1.0f, maxZoom));
+        devices.add(
+          new com.ahm.capacitor.camera.preview.model.CameraDevice(
+            logicalCameraId,
+            "Logical Camera (" + position + ")",
+            position,
+            logicalLenses,
+            minZoom,
+            maxZoom,
+            true
+          )
+        );
+        Log.d(
+          TAG,
+          "Found logical camera: " +
+          logicalCameraId +
+          " (" +
+          position +
+          ") with zoom " +
+          minZoom +
+          "-" +
+          maxZoom
         );
 
-        // Get system bars insets (status bar, navigation bars)
-        Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+        // Get and add physical cameras
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+          Set<CameraInfo> physicalCameraInfos =
+            cameraInfo.getPhysicalCameraInfos();
+          if (physicalCameraInfos.isEmpty()) continue;
 
-        // In portrait mode, notch is at the top
-        // In landscape mode, notch is typically at the left side (or right, but left is more common)
-        if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-          // Portrait: return top inset (notch/status bar)
-          notchInsetPx = Math.max(cutout.top, sysBars.top);
+          Log.d(
+            TAG,
+            "Logical camera " +
+            logicalCameraId +
+            " has " +
+            physicalCameraInfos.size() +
+            " physical cameras."
+          );
 
-          // If no cutout detected but we have system bars, use status bar height as fallback
-          if (cutout.top == 0 && sysBars.top > 0) {
-            notchInsetPx = sysBars.top;
+          for (CameraInfo physicalCameraInfo : physicalCameraInfos) {
+            String physicalId = Camera2CameraInfo.from(
+              physicalCameraInfo
+            ).getCameraId();
+            if (physicalId.equals(logicalCameraId)) continue; // Already added as logical
+
+            try {
+              CameraCharacteristics characteristics =
+                cameraManager.getCameraCharacteristics(physicalId);
+              String deviceType = "wideAngle";
+              float[] focalLengths = characteristics.get(
+                CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS
+              );
+              android.util.SizeF sensorSize = characteristics.get(
+                CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE
+              );
+
+              if (
+                focalLengths != null &&
+                focalLengths.length > 0 &&
+                sensorSize != null &&
+                sensorSize.getWidth() > 0
+              ) {
+                double fov =
+                  2 *
+                  Math.toDegrees(
+                    Math.atan(sensorSize.getWidth() / (2 * focalLengths[0]))
+                  );
+                if (fov > 90) deviceType = "ultraWide";
+                else if (fov < 40) deviceType = "telephoto";
+              } else if (focalLengths != null && focalLengths.length > 0) {
+                if (focalLengths[0] < 3.0f) deviceType = "ultraWide";
+                else if (focalLengths[0] > 5.0f) deviceType = "telephoto";
+              }
+
+              float physicalMinZoom = 1.0f;
+              float physicalMaxZoom = 1.0f;
+              if (
+                android.os.Build.VERSION.SDK_INT >=
+                android.os.Build.VERSION_CODES.R
+              ) {
+                android.util.Range<Float> zoomRange = characteristics.get(
+                  CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE
+                );
+                if (zoomRange != null) {
+                  physicalMinZoom = zoomRange.getLower();
+                  physicalMaxZoom = zoomRange.getUpper();
+                }
+              }
+
+              String label = "Physical " + deviceType + " (" + position + ")";
+              List<LensInfo> physicalLenses = new ArrayList<>();
+              physicalLenses.add(
+                new LensInfo(
+                  focalLengths != null ? focalLengths[0] : 4.25f,
+                  deviceType,
+                  1.0f,
+                  physicalMaxZoom
+                )
+              );
+
+              devices.add(
+                new com.ahm.capacitor.camera.preview.model.CameraDevice(
+                  physicalId,
+                  label,
+                  position,
+                  physicalLenses,
+                  physicalMinZoom,
+                  physicalMaxZoom,
+                  false
+                )
+              );
+              Log.d(
+                TAG,
+                "Found physical camera: " + physicalId + " (" + label + ")"
+              );
+            } catch (CameraAccessException e) {
+              Log.e(
+                TAG,
+                "Failed to access characteristics for physical camera " +
+                physicalId,
+                e
+              );
+            }
           }
-        } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-          // Landscape: return left inset (notch moved to side)
-          notchInsetPx = Math.max(cutout.left, sysBars.left);
-
-          // If no cutout detected but we have system bars, use left system bar as fallback
-          if (cutout.left == 0 && sysBars.left > 0) {
-            notchInsetPx = sysBars.left;
-          }
-
-          // Additional fallback: some devices might have the notch on the right in landscape
-          // If left is 0, check right side as well
-          if (notchInsetPx == 0) {
-            notchInsetPx = Math.max(cutout.right, sysBars.right);
-          }
-        } else {
-          // Unknown orientation, default to top
-          notchInsetPx = Math.max(cutout.top, sysBars.top);
         }
-      } else {
-        // Fallback to status bar height if WindowInsets are not available
-        notchInsetPx = getStatusBarHeightPx();
+      }
+      return devices;
+    } catch (Exception e) {
+      Log.e(TAG, "getAvailableDevicesStatic: Error getting devices", e);
+      return Collections.emptyList();
+    }
+  }
+
+  public static ZoomFactors getZoomFactorsStatic() {
+    try {
+      // For static method, return default zoom factors
+      // We can try to detect if ultra-wide is available by checking device list
+
+      float minZoom = 1.0f;
+      float maxZoom = 10.0f;
+
+      Log.d(
+        TAG,
+        "getZoomFactorsStatic: Final range - minZoom: " +
+        minZoom +
+        ", maxZoom: " +
+        maxZoom
+      );
+      LensInfo defaultLens = new LensInfo(4.25f, "wideAngle", 1.0f, 1.0f);
+      return new ZoomFactors(minZoom, maxZoom, 1.0f, defaultLens);
+    } catch (Exception e) {
+      Log.e(TAG, "getZoomFactorsStatic: Error getting zoom factors", e);
+      LensInfo defaultLens = new LensInfo(4.25f, "wideAngle", 1.0f, 1.0f);
+      return new ZoomFactors(1.0f, 10.0f, 1.0f, defaultLens);
+    }
+  }
+
+  public ZoomFactors getZoomFactors() {
+    if (camera == null) {
+      return getZoomFactorsStatic();
+    }
+
+    try {
+      // Get the current zoom from active camera
+      float currentZoom = Objects.requireNonNull(
+        camera.getCameraInfo().getZoomState().getValue()
+      ).getZoomRatio();
+      float minZoom = camera
+        .getCameraInfo()
+        .getZoomState()
+        .getValue()
+        .getMinZoomRatio();
+      float maxZoom = camera
+        .getCameraInfo()
+        .getZoomState()
+        .getValue()
+        .getMaxZoomRatio();
+
+      Log.d(
+        TAG,
+        "getZoomFactors: Combined range - minZoom: " +
+        minZoom +
+        ", maxZoom: " +
+        maxZoom +
+        ", currentZoom: " +
+        currentZoom
+      );
+
+      return new ZoomFactors(
+        minZoom,
+        maxZoom,
+        currentZoom,
+        getCurrentLensInfo()
+      );
+    } catch (Exception e) {
+      Log.e(TAG, "getZoomFactors: Error getting zoom factors", e);
+      return new ZoomFactors(1.0f, 1.0f, 1.0f, getCurrentLensInfo());
+    }
+  }
+
+  private LensInfo getCurrentLensInfo() {
+    if (camera == null) {
+      return new LensInfo(4.25f, "wideAngle", 1.0f, 1.0f);
+    }
+
+    try {
+      float currentZoom = Objects.requireNonNull(
+        camera.getCameraInfo().getZoomState().getValue()
+      ).getZoomRatio();
+
+      // Determine device type based on zoom capabilities
+      String deviceType = "wideAngle";
+      float baseZoomRatio = 1.0f;
+
+      float digitalZoom = currentZoom / baseZoomRatio;
+
+      return new LensInfo(4.25f, deviceType, baseZoomRatio, digitalZoom);
+    } catch (Exception e) {
+      Log.e(TAG, "getCurrentLensInfo: Error getting lens info", e);
+      return new LensInfo(4.25f, "wideAngle", 1.0f, 1.0f);
+    }
+  }
+
+  public void setZoom(float zoomRatio) throws Exception {
+    if (camera == null) {
+      throw new Exception("Camera not initialized");
+    }
+
+    Log.d(TAG, "setZoom: Requested zoom ratio: " + zoomRatio);
+
+    // Just let CameraX handle everything - it should automatically switch lenses
+    try {
+      ZoomFactors zoomFactors = getZoomFactors();
+
+      if (zoomRatio < zoomFactors.getMin()) {
+        zoomRatio = zoomFactors.getMin();
+      } else if (zoomRatio > zoomFactors.getMax()) {
+        zoomRatio = zoomFactors.getMax();
+      }
+
+      camera.getCameraControl().setZoomRatio(zoomRatio);
+      // Note: autofocus is intentionally not triggered on zoom because it's done by CameraX
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to set zoom: " + e.getMessage());
+      throw e;
+    }
+  }
+
+  public void setFocus(float x, float y) throws Exception {
+    if (camera == null) {
+      throw new Exception("Camera not initialized");
+    }
+
+    if (previewView == null) {
+      throw new Exception("Preview view not initialized");
+    }
+
+    // Validate that coordinates are within bounds (0-1 range)
+    if (x < 0f || x > 1f || y < 0f || y > 1f) {
+      Log.w(TAG, "setFocus: Coordinates out of bounds - x: " + x + ", y: " + y);
+      throw new Exception("Focus coordinates must be between 0 and 1");
+    }
+
+    // Cancel any ongoing focus operation
+    if (currentFocusFuture != null && !currentFocusFuture.isDone()) {
+      Log.d(TAG, "setFocus: Cancelling previous focus operation");
+      currentFocusFuture.cancel(true);
+    }
+
+    // Reset exposure compensation to 0 on tap-to-focus
+    try {
+      ExposureState state = camera.getCameraInfo().getExposureState();
+      Range<Integer> range = state.getExposureCompensationRange();
+      int zeroIdx = 0;
+      if (range != null && !range.contains(0)) {
+        // Choose the closest index to 0 if 0 is not available
+        zeroIdx = Math.abs(range.getLower()) < Math.abs(range.getUpper())
+          ? range.getLower()
+          : range.getUpper();
+      }
+      camera.getCameraControl().setExposureCompensationIndex(zeroIdx);
+    } catch (Exception e) {
+      Log.w(TAG, "setFocus: Failed to reset exposure compensation to 0", e);
+    }
+
+    int viewWidth = previewView.getWidth();
+    int viewHeight = previewView.getHeight();
+
+    if (viewWidth <= 0 || viewHeight <= 0) {
+      throw new Exception(
+        "Preview view has invalid dimensions: " + viewWidth + "x" + viewHeight
+      );
+    }
+
+    // Only show focus indicator after validation passes
+    float indicatorX = x * viewWidth;
+    float indicatorY = y * viewHeight;
+    showFocusIndicator(indicatorX, indicatorY);
+
+    // Create MeteringPoint using the preview view
+    MeteringPointFactory factory = previewView.getMeteringPointFactory();
+    MeteringPoint point = factory.createPoint(x * viewWidth, y * viewHeight);
+
+    // Create focus and metering action (persistent, no auto-cancel) to match iOS behavior
+    FocusMeteringAction action = new FocusMeteringAction.Builder(
+      point,
+      FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
+    )
+      .disableAutoCancel()
+      .build();
+
+    try {
+      final ListenableFuture<FocusMeteringResult> future = camera
+        .getCameraControl()
+        .startFocusAndMetering(action);
+      currentFocusFuture = future;
+
+      future.addListener(
+        () -> {
+          try {
+            FocusMeteringResult result = future.get();
+          } catch (Exception e) {
+            // Handle cancellation gracefully - this is expected when rapid taps occur
+            if (
+              e.getMessage() != null &&
+              (e
+                  .getMessage()
+                  .contains("Cancelled by another startFocusAndMetering") ||
+                e.getMessage().contains("OperationCanceledException") ||
+                e
+                  .getClass()
+                  .getSimpleName()
+                  .contains("OperationCanceledException"))
+            ) {
+              Log.d(
+                TAG,
+                "Focus operation was cancelled by a newer focus request"
+              );
+            } else {
+              Log.e(TAG, "Error during focus: " + e.getMessage());
+            }
+          } finally {
+            if (currentFocusFuture == future && currentFocusFuture.isDone()) {
+              currentFocusFuture = null;
+            }
+          }
+        },
+        ContextCompat.getMainExecutor(context)
+      );
+    } catch (Exception e) {
+      currentFocusFuture = null;
+      Log.e(TAG, "Failed to set focus: " + e.getMessage());
+      throw e;
+    }
+  }
+
+  // ===================== Exposure APIs =====================
+  public java.util.List<String> getExposureModes() {
+    return Arrays.asList("LOCK", "CONTINUOUS");
+  }
+
+  public String getExposureMode() {
+    return currentExposureMode;
+  }
+
+  @OptIn(markerClass = ExperimentalCamera2Interop.class)
+  public void setExposureMode(String mode) throws Exception {
+    if (camera == null) {
+      throw new Exception("Camera not initialized");
+    }
+    if (mode == null) {
+      throw new Exception("mode is required");
+    }
+    String normalized = mode.toUpperCase(Locale.US);
+
+    try {
+      Camera2CameraControl c2 = Camera2CameraControl.from(
+        camera.getCameraControl()
+      );
+      switch (normalized) {
+        case "LOCK": {
+          CaptureRequestOptions opts = new CaptureRequestOptions.Builder()
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, true)
+            .setCaptureRequestOption(
+              CaptureRequest.CONTROL_AE_MODE,
+              CaptureRequest.CONTROL_AE_MODE_ON
+            )
+            .build();
+          mainExecutor.execute(() -> c2.setCaptureRequestOptions(opts));
+          currentExposureMode = "LOCK";
+          break;
+        }
+        case "CONTINUOUS": {
+          CaptureRequestOptions opts = new CaptureRequestOptions.Builder()
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, false)
+            .setCaptureRequestOption(
+              CaptureRequest.CONTROL_AE_MODE,
+              CaptureRequest.CONTROL_AE_MODE_ON
+            )
+            .build();
+          mainExecutor.execute(() -> c2.setCaptureRequestOptions(opts));
+          currentExposureMode = "CONTINUOUS";
+          break;
+        }
+        default:
+          throw new Exception("Unsupported exposure mode: " + mode);
       }
     } catch (Exception e) {
-      // Final fallback
-      notchInsetPx = getStatusBarHeightPx();
+      throw e;
     }
-
-    // Convert pixels to dp for consistency with JS layout units
-    float density = getContext().getResources().getDisplayMetrics().density;
-    ret.put("orientation", orientation);
-    ret.put("top", notchInsetPx / density);
-    call.resolve(ret);
   }
 
-  private boolean approxEqualPx(int a, int b) {
-    return Math.abs(a - b) <= 2; // within 2px tolerance
+  public float[] getExposureCompensationRange() throws Exception {
+    if (camera == null) {
+      throw new Exception("Camera not initialized");
+    }
+    ExposureState state = camera.getCameraInfo().getExposureState();
+    Range<Integer> idxRange = state.getExposureCompensationRange();
+    Rational step = state.getExposureCompensationStep();
+    float evStep = step != null
+      ? (float) step.getNumerator() / (float) step.getDenominator()
+      : 1.0f;
+    float min = idxRange.getLower() * evStep;
+    float max = idxRange.getUpper() * evStep;
+    return new float[] { min, max, evStep };
   }
 
-  private int getStatusBarHeightPx() {
-    int result = 0;
-    int resourceId = getContext()
-      .getResources()
-      .getIdentifier("status_bar_height", "dimen", "android");
-    if (resourceId > 0) {
-      result = getContext().getResources().getDimensionPixelSize(resourceId);
+  public float getExposureCompensation() throws Exception {
+    if (camera == null) {
+      throw new Exception("Camera not initialized");
     }
-    return result;
+    ExposureState state = camera.getCameraInfo().getExposureState();
+    int idx = state.getExposureCompensationIndex();
+    Rational step = state.getExposureCompensationStep();
+    float evStep = step != null
+      ? (float) step.getNumerator() / (float) step.getDenominator()
+      : 1.0f;
+    return idx * evStep;
   }
 
-  private int getNavigationBarHeightPx() {
-    int result = 0;
-    int resourceId = getContext()
-      .getResources()
-      .getIdentifier("navigation_bar_height", "dimen", "android");
-    if (resourceId > 0) {
-      result = getContext().getResources().getDimensionPixelSize(resourceId);
+  public void setExposureCompensation(float ev) throws Exception {
+    if (camera == null) {
+      throw new Exception("Camera not initialized");
     }
-    return result;
+    ExposureState state = camera.getCameraInfo().getExposureState();
+    Range<Integer> idxRange = state.getExposureCompensationRange();
+    Rational step = state.getExposureCompensationStep();
+    float evStep = step != null
+      ? (float) step.getNumerator() / (float) step.getDenominator()
+      : 1.0f;
+    if (evStep <= 0f) evStep = 1.0f;
+    int idx = Math.round(ev / evStep);
+    // clamp
+    if (idx < idxRange.getLower()) idx = idxRange.getLower();
+    if (idx > idxRange.getUpper()) idx = idxRange.getUpper();
+    camera.getCameraControl().setExposureCompensationIndex(idx);
+  }
+
+  private void showFocusIndicator(float x, float y) {
+    if (disableFocusIndicator || sessionConfig.getDisableFocusIndicator()) {
+      return;
+    }
+    if (previewContainer == null) {
+      Log.w(TAG, "showFocusIndicator: previewContainer is null");
+      return;
+    }
+
+    // Check if container has been laid out
+    if (previewContainer.getWidth() == 0 || previewContainer.getHeight() == 0) {
+      Log.w(
+        TAG,
+        "showFocusIndicator: previewContainer not laid out yet, posting to run after layout"
+      );
+      previewContainer.post(() -> showFocusIndicator(x, y));
+      return;
+    }
+
+    // Remove any existing focus indicator and cancel its animation
+    if (focusIndicatorView != null) {
+      try {
+        focusIndicatorView.clearAnimation();
+      } catch (Exception ignore) {}
+      previewContainer.removeView(focusIndicatorView);
+      focusIndicatorView = null;
+    }
+
+    // Create an elegant focus indicator
+    FrameLayout container = new FrameLayout(context);
+    int size = (int) (80 * context.getResources().getDisplayMetrics().density); // match iOS size
+    FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size, size);
+
+    // Center the indicator on the touch point with bounds checking
+    int containerWidth = previewContainer.getWidth();
+    int containerHeight = previewContainer.getHeight();
+
+    params.leftMargin = Math.max(
+      0,
+      Math.min((int) (x - size / 2), containerWidth - size)
+    );
+    params.topMargin = Math.max(
+      0,
+      Math.min((int) (y - size / 2), containerHeight - size)
+    );
+
+    // iOS Camera style: square with mid-edge ticks
+    GradientDrawable border = new GradientDrawable();
+    border.setShape(GradientDrawable.RECTANGLE);
+    int stroke = (int) (2 * context.getResources().getDisplayMetrics().density);
+    border.setStroke(stroke, Color.YELLOW);
+    border.setCornerRadius(0);
+    border.setColor(Color.TRANSPARENT);
+    container.setBackground(border);
+
+    // Add 4 tiny mid-edge ticks inside the square
+    int tickLen = (int) (12 *
+      context.getResources().getDisplayMetrics().density);
+    int inset = stroke; // ticks should touch the sides
+    // Top tick (perpendicular): vertical inward from top edge
+    View topTick = new View(context);
+    FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(
+      stroke,
+      tickLen
+    );
+    topParams.leftMargin = (size - stroke) / 2;
+    topParams.topMargin = inset;
+    topTick.setLayoutParams(topParams);
+    topTick.setBackgroundColor(Color.YELLOW);
+    container.addView(topTick);
+    // Bottom tick (perpendicular): vertical inward from bottom edge
+    View bottomTick = new View(context);
+    FrameLayout.LayoutParams bottomParams = new FrameLayout.LayoutParams(
+      stroke,
+      tickLen
+    );
+    bottomParams.leftMargin = (size - stroke) / 2;
+    bottomParams.topMargin = size - inset - tickLen;
+    bottomTick.setLayoutParams(bottomParams);
+    bottomTick.setBackgroundColor(Color.YELLOW);
+    container.addView(bottomTick);
+    // Left tick (perpendicular): horizontal inward from left edge
+    View leftTick = new View(context);
+    FrameLayout.LayoutParams leftParams = new FrameLayout.LayoutParams(
+      tickLen,
+      stroke
+    );
+    leftParams.leftMargin = inset;
+    leftParams.topMargin = (size - stroke) / 2;
+    leftTick.setLayoutParams(leftParams);
+    leftTick.setBackgroundColor(Color.YELLOW);
+    container.addView(leftTick);
+    // Right tick (perpendicular): horizontal inward from right edge
+    View rightTick = new View(context);
+    FrameLayout.LayoutParams rightParams = new FrameLayout.LayoutParams(
+      tickLen,
+      stroke
+    );
+    rightParams.leftMargin = size - inset - tickLen;
+    rightParams.topMargin = (size - stroke) / 2;
+    rightTick.setLayoutParams(rightParams);
+    rightTick.setBackgroundColor(Color.YELLOW);
+    container.addView(rightTick);
+
+    focusIndicatorView = container;
+    // Bump animation token; everything after this must validate against this token
+    final long thisAnimationId = ++focusIndicatorAnimationId;
+    final View thisIndicatorView = focusIndicatorView;
+
+    // Set initial state for smooth animation (mirror iOS)
+    focusIndicatorView.setAlpha(0f);
+    focusIndicatorView.setScaleX(1.5f);
+    focusIndicatorView.setScaleY(1.5f);
+    focusIndicatorView.setVisibility(View.VISIBLE);
+
+    // Ensure container doesn't intercept touch events
+    container.setClickable(false);
+    container.setFocusable(false);
+
+    // Ensure the focus indicator has a high elevation for visibility
+    if (
+      android.os.Build.VERSION.SDK_INT >=
+      android.os.Build.VERSION_CODES.LOLLIPOP
+    ) {
+      focusIndicatorView.setElevation(10f);
+    }
+
+    // Add to container first
+    previewContainer.addView(focusIndicatorView, params);
+
+    // Fix z-ordering: ensure focus indicator is always on top
+    focusIndicatorView.bringToFront();
+
+    // Force a layout pass to ensure the view is properly positioned
+    previewContainer.requestLayout();
+
+    // First phase: fade in and scale to 1.0 over 150ms
+    focusIndicatorView
+      .animate()
+      .alpha(1f)
+      .scaleX(1f)
+      .scaleY(1f)
+      .setDuration(150)
+      .start();
+
+    // Phase 2: after 500ms, fade to 0.3 over 200ms
+    focusIndicatorView.postDelayed(
+      new Runnable() {
+        @Override
+        public void run() {
+          // Ensure this runnable belongs to the latest indicator
+          if (
+            focusIndicatorView != null &&
+            thisIndicatorView == focusIndicatorView &&
+            thisAnimationId == focusIndicatorAnimationId
+          ) {
+            focusIndicatorView
+              .animate()
+              .alpha(0.3f)
+              .setDuration(200)
+              .withEndAction(
+                new Runnable() {
+                  @Override
+                  public void run() {
+                    // Phase 3: after 200ms more, fade out to 0 and scale to 0.8 over 300ms
+                    focusIndicatorView.postDelayed(
+                      new Runnable() {
+                        @Override
+                        public void run() {
+                          if (
+                            focusIndicatorView != null &&
+                            thisIndicatorView == focusIndicatorView &&
+                            thisAnimationId == focusIndicatorAnimationId
+                          ) {
+                            focusIndicatorView
+                              .animate()
+                              .alpha(0f)
+                              .scaleX(0.8f)
+                              .scaleY(0.8f)
+                              .setDuration(300)
+                              .setInterpolator(
+                                new android.view.animation.AccelerateInterpolator()
+                              )
+                              .withEndAction(
+                                new Runnable() {
+                                  @Override
+                                  public void run() {
+                                    if (
+                                      focusIndicatorView != null &&
+                                      previewContainer != null &&
+                                      thisIndicatorView == focusIndicatorView &&
+                                      thisAnimationId ==
+                                      focusIndicatorAnimationId
+                                    ) {
+                                      try {
+                                        focusIndicatorView.clearAnimation();
+                                      } catch (Exception ignore) {}
+                                      previewContainer.removeView(
+                                        focusIndicatorView
+                                      );
+                                      focusIndicatorView = null;
+                                    }
+                                  }
+                                }
+                              );
+                          }
+                        }
+                      },
+                      200
+                    );
+                  }
+                }
+              );
+          }
+        }
+      },
+      500
+    );
+  }
+
+  public static List<Size> getSupportedPictureSizes(String facing) {
+    List<Size> sizes = new ArrayList<>();
+    try {
+      CameraSelector.Builder builder = new CameraSelector.Builder();
+      if ("front".equals(facing)) {
+        builder.requireLensFacing(CameraSelector.LENS_FACING_FRONT);
+      } else {
+        builder.requireLensFacing(CameraSelector.LENS_FACING_BACK);
+      }
+
+      // This part is complex because we need characteristics, which are not directly on CameraInfo.
+      // For now, returning a static list of common sizes.
+      // A more advanced implementation would use Camera2interop to get StreamConfigurationMap.
+      sizes.add(new Size(4032, 3024));
+      sizes.add(new Size(1920, 1080));
+      sizes.add(new Size(1280, 720));
+      sizes.add(new Size(640, 480));
+    } catch (Exception e) {
+      Log.e(TAG, "Error getting supported picture sizes", e);
+    }
+    return sizes;
+  }
+
+  public static List<String> getSupportedFlashModesStatic() {
+    try {
+      // For static method, we can return common flash modes
+      // Most modern cameras support these modes
+      return Arrays.asList("off", "on", "auto", "torch");
+    } catch (Exception e) {
+      Log.e(TAG, "getSupportedFlashModesStatic: Error getting flash modes", e);
+      return Collections.singletonList("off");
+    }
+  }
+
+  public List<String> getSupportedFlashModes() {
+    if (camera == null) {
+      return getSupportedFlashModesStatic();
+    }
+
+    try {
+      boolean hasFlash = camera.getCameraInfo().hasFlashUnit();
+      if (hasFlash) {
+        // Include torch for devices with a flash unit
+        return Arrays.asList("off", "on", "auto", "torch");
+      } else {
+        return Collections.singletonList("off");
+      }
+    } catch (Exception e) {
+      Log.e(TAG, "getSupportedFlashModes: Error getting flash modes", e);
+      return Collections.singletonList("off");
+    }
+  }
+
+  public String getFlashMode() {
+    // If torch is enabled, report torch regardless of ImageCapture flash mode
+    try {
+      if (camera != null) {
+        Integer torch = camera.getCameraInfo().getTorchState().getValue();
+        if (torch != null && torch == TorchState.ON) {
+          return "torch";
+        }
+      }
+    } catch (Exception ignore) {}
+
+    switch (currentFlashMode) {
+      case ImageCapture.FLASH_MODE_ON:
+        return "on";
+      case ImageCapture.FLASH_MODE_AUTO:
+        return "auto";
+      default:
+        return "off";
+    }
+  }
+
+  public void setFlashMode(String mode) {
+    // Handle torch separately via CameraControl
+    if ("torch".equals(mode)) {
+      try {
+        if (camera != null) {
+          camera.getCameraControl().enableTorch(true);
+        }
+      } catch (Exception e) {
+        Log.e(TAG, "setFlashMode: Failed to enable torch", e);
+      }
+      // Keep ImageCapture flash mode OFF to avoid conflicts with torch
+      currentFlashMode = ImageCapture.FLASH_MODE_OFF;
+      if (imageCapture != null) {
+        imageCapture.setFlashMode(ImageCapture.FLASH_MODE_OFF);
+      }
+      if (sampleImageCapture != null) {
+        sampleImageCapture.setFlashMode(ImageCapture.FLASH_MODE_OFF);
+      }
+      return;
+    }
+
+    // For non-torch modes, ensure torch is disabled
+    try {
+      if (camera != null) {
+        camera.getCameraControl().enableTorch(false);
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "setFlashMode: Failed to disable torch", e);
+    }
+
+    int flashMode;
+    switch (mode) {
+      case "on":
+        flashMode = ImageCapture.FLASH_MODE_ON;
+        break;
+      case "auto":
+        flashMode = ImageCapture.FLASH_MODE_AUTO;
+        break;
+      default:
+        flashMode = ImageCapture.FLASH_MODE_OFF;
+        break;
+    }
+
+    currentFlashMode = flashMode;
+
+    if (imageCapture != null) {
+      imageCapture.setFlashMode(flashMode);
+    }
+    if (sampleImageCapture != null) {
+      sampleImageCapture.setFlashMode(flashMode);
+    }
+  }
+
+  public String getCurrentDeviceId() {
+    return currentDeviceId != null ? currentDeviceId : "unknown";
+  }
+
+  @OptIn(markerClass = ExperimentalCamera2Interop.class)
+  public void switchToDevice(String deviceId) {
+    Log.d(TAG, "switchToDevice: Attempting to switch to device " + deviceId);
+
+    mainExecutor.execute(() -> {
+      try {
+        // Standard physical device selection logic...
+        List<CameraInfo> cameraInfos = cameraProvider.getAvailableCameraInfos();
+        CameraInfo targetCameraInfo = null;
+        for (CameraInfo cameraInfo : cameraInfos) {
+          if (
+            deviceId.equals(Camera2CameraInfo.from(cameraInfo).getCameraId())
+          ) {
+            targetCameraInfo = cameraInfo;
+            break;
+          }
+        }
+
+        if (targetCameraInfo != null) {
+          Log.d(
+            TAG,
+            "switchToDevice: Found matching CameraInfo for deviceId: " +
+            deviceId
+          );
+          final CameraInfo finalTarget = targetCameraInfo;
+
+          // This filter will receive a list of all cameras and must return the one we want.
+
+          currentCameraSelector = new CameraSelector.Builder()
+            .addCameraFilter(cameras -> {
+              // This filter will receive a list of all cameras and must return the one we want.
+              return Collections.singletonList(finalTarget);
+            })
+            .build();
+          currentDeviceId = deviceId;
+          bindCameraUseCases(); // Rebind with the new, highly specific selector
+        } else {
+          Log.e(
+            TAG,
+            "switchToDevice: Could not find any CameraInfo matching deviceId: " +
+            deviceId
+          );
+        }
+      } catch (Exception e) {
+        Log.e(TAG, "switchToDevice: Error switching camera", e);
+      }
+    });
+  }
+
+  public void flipCamera() {
+    Log.d(TAG, "flipCamera: Flipping camera");
+
+    // Determine current position based on session config and flip it
+    String currentPosition = sessionConfig.getPosition();
+    String newPosition = "front".equals(currentPosition) ? "rear" : "front";
+
+    Log.d(
+      TAG,
+      "flipCamera: Switching from " + currentPosition + " to " + newPosition
+    );
+
+    sessionConfig = new CameraSessionConfiguration(
+      null, // deviceId - clear device ID to force position-based selection
+      newPosition, // position
+      sessionConfig.getX(), // x
+      sessionConfig.getY(), // y
+      sessionConfig.getWidth(), // width
+      sessionConfig.getHeight(), // height
+      sessionConfig.getPaddingBottom(), // paddingBottom
+      sessionConfig.getToBack(), // toBack
+      sessionConfig.getStoreToFile(), // storeToFile
+      sessionConfig.getEnableOpacity(), // enableOpacity
+      sessionConfig.getEnableZoom(), // enableZoom
+      sessionConfig.getDisableExifHeaderStripping(), // disableExifHeaderStripping
+      sessionConfig.getDisableAudio(), // disableAudio
+      sessionConfig.getZoomFactor(), // zoomFactor
+      sessionConfig.getAspectRatio(), // aspectRatio
+      sessionConfig.getGridMode(), // gridMode
+      sessionConfig.getDisableFocusIndicator(), // disableFocusIndicator
+      sessionConfig.isVideoModeEnabled(), // enableVideoMode
+      sessionConfig.getVideoQuality() // videoQuality
+    );
+
+    // Clear current device ID to force position-based selection
+    currentDeviceId = null;
+
+    // Camera operations must run on main thread
+    cameraExecutor.execute(() -> {
+      currentCameraSelector = buildCameraSelector();
+      bindCameraUseCases();
+    });
+  }
+
+  public void setOpacity(float opacity) {
+    if (previewView != null) {
+      previewView.setAlpha(opacity);
+    }
+  }
+
+  private void updateLayoutParams() {
+    if (sessionConfig == null) return;
+
+    FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
+      sessionConfig.getWidth(),
+      sessionConfig.getHeight()
+    );
+    layoutParams.leftMargin = sessionConfig.getX();
+    layoutParams.topMargin = sessionConfig.getY();
+
+    if (sessionConfig.getAspectRatio() != null) {
+      String[] ratios = sessionConfig.getAspectRatio().split(":");
+      // For camera, use portrait orientation: 4:3 becomes 3:4, 16:9 becomes 9:16
+      float ratio = Float.parseFloat(ratios[1]) / Float.parseFloat(ratios[0]);
+      if (sessionConfig.getWidth() > 0) {
+        layoutParams.height = (int) (sessionConfig.getWidth() / ratio);
+      } else if (sessionConfig.getHeight() > 0) {
+        layoutParams.width = (int) (sessionConfig.getHeight() * ratio);
+      }
+    }
+
+    previewView.setLayoutParams(layoutParams);
+
+    if (listener != null) {
+      listener.onCameraStarted(
+        sessionConfig.getWidth(),
+        sessionConfig.getHeight(),
+        sessionConfig.getX(),
+        sessionConfig.getY()
+      );
+    }
+  }
+
+  public String getAspectRatio() {
+    if (sessionConfig != null) {
+      return sessionConfig.getAspectRatio();
+    }
+    return "4:3";
+  }
+
+  public String getGridMode() {
+    if (sessionConfig != null) {
+      return sessionConfig.getGridMode();
+    }
+    return "none";
+  }
+
+  public void setAspectRatio(String aspectRatio) {
+    setAspectRatio(aspectRatio, null, null);
+  }
+
+  public void setAspectRatio(String aspectRatio, Float x, Float y) {
+    setAspectRatio(aspectRatio, x, y, null);
+  }
+
+  public void setAspectRatio(
+    String aspectRatio,
+    Float x,
+    Float y,
+    Runnable callback
+  ) {
+    Log.d(
+      TAG,
+      "======================== SET ASPECT RATIO ========================"
+    );
+    Log.d(
+      TAG,
+      "Input parameters - aspectRatio: " +
+      aspectRatio +
+      ", x: " +
+      x +
+      ", y: " +
+      y
+    );
+
+    if (sessionConfig == null) {
+      Log.d(TAG, "SessionConfig is null, returning");
+      if (callback != null) callback.run();
+      return;
+    }
+
+    String currentAspectRatio = sessionConfig.getAspectRatio();
+
+    // Get current display information
+    DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+    int screenWidthPx = metrics.widthPixels;
+    int screenHeightPx = metrics.heightPixels;
+    boolean isPortrait =
+      context.getResources().getConfiguration().orientation ==
+      Configuration.ORIENTATION_PORTRAIT;
+
+    Log.d(
+      TAG,
+      "Current screen: " +
+      screenWidthPx +
+      "x" +
+      screenHeightPx +
+      " (" +
+      (isPortrait ? "PORTRAIT" : "LANDSCAPE") +
+      ")"
+    );
+    Log.d(TAG, "Current aspect ratio: " + currentAspectRatio);
+
+    // Don't restart camera if aspect ratio hasn't changed and no position specified
+    if (
+      aspectRatio != null &&
+      aspectRatio.equals(currentAspectRatio) &&
+      x == null &&
+      y == null
+    ) {
+      Log.d(TAG, "Aspect ratio unchanged and no position specified, skipping");
+      if (callback != null) callback.run();
+      return;
+    }
+
+    String currentGridMode = sessionConfig.getGridMode();
+    Log.d(
+      TAG,
+      "Changing aspect ratio from " + currentAspectRatio + " to " + aspectRatio
+    );
+    Log.d(TAG, "Auto-centering will be applied (matching iOS behavior)");
+
+    // Match iOS behavior: when aspect ratio changes, always auto-center
+    sessionConfig = new CameraSessionConfiguration(
+      sessionConfig.getDeviceId(),
+      sessionConfig.getPosition(),
+      -1, // Force auto-center X (iOS: self.posX = -1)
+      -1, // Force auto-center Y (iOS: self.posY = -1)
+      sessionConfig.getWidth(),
+      sessionConfig.getHeight(),
+      sessionConfig.getPaddingBottom(),
+      sessionConfig.getToBack(),
+      sessionConfig.getStoreToFile(),
+      sessionConfig.getEnableOpacity(),
+      sessionConfig.getEnableZoom(),
+      sessionConfig.getDisableExifHeaderStripping(),
+      sessionConfig.getDisableAudio(),
+      sessionConfig.getZoomFactor(),
+      aspectRatio,
+      currentGridMode,
+      sessionConfig.getDisableFocusIndicator(),
+      sessionConfig.isVideoModeEnabled(),
+      sessionConfig.getVideoQuality()
+    );
+    sessionConfig.setCentered(true);
+
+    // Update layout and rebind camera with new aspect ratio
+    if (isRunning && previewContainer != null) {
+      mainExecutor.execute(() -> {
+        // First update the UI layout - always pass null for x,y to force auto-centering (matching iOS)
+        updatePreviewLayoutForAspectRatio(aspectRatio, null, null);
+
+        // Then rebind the camera with new aspect ratio configuration
+        Log.d(
+          TAG,
+          "setAspectRatio: Rebinding camera with new aspect ratio: " +
+          aspectRatio
+        );
+        bindCameraUseCases();
+
+        // Preserve grid mode and wait for completion
+        if (gridOverlayView != null) {
+          gridOverlayView.post(() -> {
+            Log.d(
+              TAG,
+              "setAspectRatio: Re-applying grid mode: " + currentGridMode
+            );
+            gridOverlayView.setGridMode(currentGridMode);
+
+            // Wait one more frame for grid to be applied, then call callback
+            if (callback != null) {
+              gridOverlayView.post(callback);
+            }
+          });
+        } else {
+          // No grid overlay, wait one frame for layout completion then call callback
+          if (callback != null) {
+            previewContainer.post(callback);
+          }
+        }
+
+        Log.d(
+          TAG,
+          "=================================================================="
+        );
+      });
+    } else {
+      Log.d(TAG, "Camera not running, just saving configuration");
+      Log.d(
+        TAG,
+        "=================================================================="
+      );
+      if (callback != null) callback.run();
+    }
+  }
+
+  // Force aspect ratio recalculation (used during orientation changes)
+  public void forceAspectRatioRecalculation(
+    String aspectRatio,
+    Float x,
+    Float y,
+    Runnable callback
+  ) {
+    Log.d(
+      TAG,
+      "======================== FORCE ASPECT RATIO RECALCULATION ========================"
+    );
+    Log.d(
+      TAG,
+      "Input parameters - aspectRatio: " +
+      aspectRatio +
+      ", x: " +
+      x +
+      ", y: " +
+      y
+    );
+
+    if (sessionConfig == null) {
+      Log.d(TAG, "SessionConfig is null, returning");
+      if (callback != null) callback.run();
+      return;
+    }
+
+    String currentGridMode = sessionConfig.getGridMode();
+    Log.d(TAG, "Forcing aspect ratio recalculation for: " + aspectRatio);
+    Log.d(TAG, "Auto-centering will be applied (matching iOS behavior)");
+
+    // Match iOS behavior: when aspect ratio changes, always auto-center
+    sessionConfig = new CameraSessionConfiguration(
+      sessionConfig.getDeviceId(),
+      sessionConfig.getPosition(),
+      -1, // Force auto-center X (iOS: self.posX = -1)
+      -1, // Force auto-center Y (iOS: self.posY = -1)
+      sessionConfig.getWidth(),
+      sessionConfig.getHeight(),
+      sessionConfig.getPaddingBottom(),
+      sessionConfig.getToBack(),
+      sessionConfig.getStoreToFile(),
+      sessionConfig.getEnableOpacity(),
+      sessionConfig.getEnableZoom(),
+      sessionConfig.getDisableExifHeaderStripping(),
+      sessionConfig.getDisableAudio(),
+      sessionConfig.getZoomFactor(),
+      aspectRatio,
+      currentGridMode,
+      sessionConfig.getDisableFocusIndicator(),
+      sessionConfig.isVideoModeEnabled(),
+      sessionConfig.getVideoQuality()
+    );
+    sessionConfig.setCentered(true);
+
+    // Update layout and rebind camera with new aspect ratio
+    if (isRunning && previewContainer != null) {
+      mainExecutor.execute(() -> {
+        // First update the UI layout - always pass null for x,y to force auto-centering (matching iOS)
+        updatePreviewLayoutForAspectRatio(aspectRatio, null, null);
+
+        // Then rebind the camera with new aspect ratio configuration
+        Log.d(
+          TAG,
+          "forceAspectRatioRecalculation: Rebinding camera with aspect ratio: " +
+          aspectRatio
+        );
+        bindCameraUseCases();
+
+        // Preserve grid mode and wait for completion
+        if (gridOverlayView != null) {
+          gridOverlayView.post(() -> {
+            Log.d(
+              TAG,
+              "forceAspectRatioRecalculation: Re-applying grid mode: " +
+              currentGridMode
+            );
+            gridOverlayView.setGridMode(currentGridMode);
+
+            // Wait one more frame for grid to be applied, then call callback
+            if (callback != null) {
+              gridOverlayView.post(callback);
+            }
+          });
+        } else {
+          // No grid overlay, wait one frame for layout completion then call callback
+          if (callback != null) {
+            previewContainer.post(callback);
+          }
+        }
+
+        Log.d(
+          TAG,
+          "=================================================================="
+        );
+      });
+    } else {
+      Log.d(TAG, "Camera not running, just saving configuration");
+      Log.d(
+        TAG,
+        "=================================================================="
+      );
+      if (callback != null) callback.run();
+    }
+  }
+
+  public void setGridMode(String gridMode) {
+    if (sessionConfig != null) {
+      Log.d(TAG, "setGridMode: Changing grid mode to: " + gridMode);
+      sessionConfig = new CameraSessionConfiguration(
+        sessionConfig.getDeviceId(),
+        sessionConfig.getPosition(),
+        sessionConfig.getX(),
+        sessionConfig.getY(),
+        sessionConfig.getWidth(),
+        sessionConfig.getHeight(),
+        sessionConfig.getPaddingBottom(),
+        sessionConfig.getToBack(),
+        sessionConfig.getStoreToFile(),
+        sessionConfig.getEnableOpacity(),
+        sessionConfig.getEnableZoom(),
+        sessionConfig.getDisableExifHeaderStripping(),
+        sessionConfig.getDisableAudio(),
+        sessionConfig.getZoomFactor(),
+        sessionConfig.getAspectRatio(),
+        gridMode,
+        sessionConfig.getDisableFocusIndicator(),
+        sessionConfig.isVideoModeEnabled(),
+        sessionConfig.getVideoQuality()
+      );
+
+      // Update the grid overlay immediately
+      if (gridOverlayView != null) {
+        gridOverlayView.post(() -> {
+          Log.d(TAG, "setGridMode: Applying grid mode to overlay: " + gridMode);
+          gridOverlayView.setGridMode(gridMode);
+        });
+      }
+    }
+  }
+
+  public int getPreviewX() {
+    if (previewContainer == null) return 0;
+
+    // Get the container position
+    ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+    if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+      int containerX = ((ViewGroup.MarginLayoutParams) layoutParams).leftMargin;
+
+      // Get the actual camera bounds within the container
+      Rect cameraBounds = getActualCameraBounds();
+      int actualX = containerX + cameraBounds.left;
+
+      Log.d(
+        TAG,
+        "getPreviewX: containerX=" +
+        containerX +
+        ", cameraBounds.left=" +
+        cameraBounds.left +
+        ", actualX=" +
+        actualX
+      );
+
+      return actualX;
+    }
+    return previewContainer.getLeft();
+  }
+
+  public int getPreviewY() {
+    if (previewContainer == null) return 0;
+
+    // Get the container position
+    ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+    if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+      int containerY = ((ViewGroup.MarginLayoutParams) layoutParams).topMargin;
+
+      // Get the actual camera bounds within the container
+      Rect cameraBounds = getActualCameraBounds();
+      int actualY = containerY + cameraBounds.top;
+
+      Log.d(
+        TAG,
+        "getPreviewY: containerY=" +
+        containerY +
+        ", cameraBounds.top=" +
+        cameraBounds.top +
+        ", actualY=" +
+        actualY
+      );
+
+      return actualY;
+    }
+    return previewContainer.getTop();
+  }
+
+  // Get the actual camera content bounds within the PreviewView
+  private Rect getActualCameraBounds() {
+    if (previewView == null || previewContainer == null) {
+      return new Rect(0, 0, 0, 0);
+    }
+
+    // Get the container bounds
+    int containerWidth = previewContainer.getWidth();
+    int containerHeight = previewContainer.getHeight();
+
+    // Get the preview transformation info to understand how the camera is scaled/positioned
+    // For FIT_CENTER, the camera content is scaled to fit within the container
+    // This might create letterboxing (black bars) on top/bottom or left/right
+
+    // Get the actual preview resolution
+    if (currentPreviewResolution == null) {
+      // If we don't have the resolution yet, assume the container is filled
+      return new Rect(0, 0, containerWidth, containerHeight);
+    }
+
+    // CameraX delivers preview in sensor orientation (always landscape)
+    // But PreviewView internally rotates it to match device orientation
+    // So we need to swap dimensions in portrait mode
+    int cameraWidth = currentPreviewResolution.getWidth();
+    int cameraHeight = currentPreviewResolution.getHeight();
+
+    // Check if we're in portrait mode
+    boolean isPortrait =
+      context.getResources().getConfiguration().orientation ==
+      Configuration.ORIENTATION_PORTRAIT;
+
+    // Swap dimensions if in portrait mode to match how PreviewView displays it
+    if (isPortrait) {
+      int temp = cameraWidth;
+      cameraWidth = cameraHeight;
+      cameraHeight = temp;
+    }
+
+    // When we have an aspect ratio set, we use FILL_CENTER which scales to fill
+    // the container while maintaining aspect ratio, potentially cropping
+    boolean usesFillCenter =
+      sessionConfig != null && sessionConfig.getAspectRatio() != null;
+
+    // For FILL_CENTER with aspect ratio, we need to calculate the actual visible bounds
+    // The preview might extend beyond the container bounds and get clipped
+    if (usesFillCenter) {
+      // Calculate how the camera preview is scaled to fill the container
+      float widthScale = (float) containerWidth / cameraWidth;
+      float heightScale = (float) containerHeight / cameraHeight;
+      float scale = Math.max(widthScale, heightScale); // max for FILL_CENTER
+
+      // Calculate the scaled dimensions
+      int scaledWidth = Math.round(cameraWidth * scale);
+      int scaledHeight = Math.round(cameraHeight * scale);
+
+      // Calculate how much is clipped on each side
+      int excessWidth = Math.max(0, scaledWidth - containerWidth);
+      int excessHeight = Math.max(0, scaledHeight - containerHeight);
+
+      // For the actual visible bounds, we need to account for potential
+      // internal misalignment of PreviewView's SurfaceView
+      int adjustedWidth = containerWidth;
+      int adjustedHeight = containerHeight;
+
+      // Apply small adjustments for 4:3 ratio to prevent blue line
+      // This compensates for PreviewView's internal SurfaceView misalignment
+      String aspectRatio = sessionConfig != null
+        ? sessionConfig.getAspectRatio()
+        : null;
+      if ("4:3".equals(aspectRatio)) {
+        // For 4:3, reduce the reported width slightly to account for
+        // the SurfaceView drawing outside its bounds
+        adjustedWidth = containerWidth - 2;
+        adjustedHeight = containerHeight - 2;
+      }
+
+      Log.d(
+        TAG,
+        "getActualCameraBounds FILL_CENTER: container=" +
+        containerWidth +
+        "x" +
+        containerHeight +
+        ", camera=" +
+        cameraWidth +
+        "x" +
+        cameraHeight +
+        " (portrait=" +
+        isPortrait +
+        ")" +
+        ", scale=" +
+        scale +
+        ", scaled=" +
+        scaledWidth +
+        "x" +
+        scaledHeight +
+        ", excess=" +
+        excessWidth +
+        "x" +
+        excessHeight +
+        ", adjusted=" +
+        adjustedWidth +
+        "x" +
+        adjustedHeight +
+        ", ratio=" +
+        aspectRatio
+      );
+
+      // Return slightly inset bounds for 4:3 to avoid blue line
+      if ("4:3".equals(aspectRatio)) {
+        return new Rect(1, 1, adjustedWidth + 1, adjustedHeight + 1);
+      } else {
+        return new Rect(0, 0, containerWidth, containerHeight);
+      }
+    }
+
+    // For FIT_CENTER (no aspect ratio), calculate letterboxing
+    float widthScale = (float) containerWidth / cameraWidth;
+    float heightScale = (float) containerHeight / cameraHeight;
+    float scale = Math.min(widthScale, heightScale);
+
+    // Calculate the actual size of the camera content after scaling
+    int scaledWidth = Math.round(cameraWidth * scale);
+    int scaledHeight = Math.round(cameraHeight * scale);
+
+    // Calculate the offset to center the content
+    int offsetX = (containerWidth - scaledWidth) / 2;
+    int offsetY = (containerHeight - scaledHeight) / 2;
+
+    Log.d(
+      TAG,
+      "getActualCameraBounds FIT_CENTER: container=" +
+      containerWidth +
+      "x" +
+      containerHeight +
+      ", camera=" +
+      cameraWidth +
+      "x" +
+      cameraHeight +
+      " (swapped=" +
+      isPortrait +
+      ")" +
+      ", scale=" +
+      scale +
+      ", scaled=" +
+      scaledWidth +
+      "x" +
+      scaledHeight +
+      ", offset=(" +
+      offsetX +
+      "," +
+      offsetY +
+      ")"
+    );
+
+    // Return the bounds relative to the container
+    return new Rect(
+      Math.max(0, offsetX),
+      Math.max(0, offsetY),
+      Math.min(containerWidth, offsetX + scaledWidth),
+      Math.min(containerHeight, offsetY + scaledHeight)
+    );
+  }
+
+  public int getPreviewWidth() {
+    if (previewContainer == null) return 0;
+    Rect bounds = getActualCameraBounds();
+    return bounds.width();
+  }
+
+  public int getPreviewHeight() {
+    if (previewContainer == null) return 0;
+    Rect bounds = getActualCameraBounds();
+    return bounds.height();
+  }
+
+  public void setPreviewSize(int x, int y, int width, int height) {
+    setPreviewSize(x, y, width, height, null);
+  }
+
+  public void setPreviewSize(
+    int x,
+    int y,
+    int width,
+    int height,
+    Runnable callback
+  ) {
+    if (previewContainer == null) {
+      if (callback != null) callback.run();
+      return;
+    }
+
+    // Ensure this runs on the main UI thread
+    mainExecutor.execute(() -> {
+      ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+      if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+        ViewGroup.MarginLayoutParams params =
+          (ViewGroup.MarginLayoutParams) layoutParams;
+
+        // Only add insets for positioning coordinates, not for full-screen sizes
+        int webViewTopInset = getWebViewTopInset();
+        int webViewLeftInset = getWebViewLeftInset();
+
+        // Handle positioning - preserve current values if new values are not specified (negative)
+        if (x >= 0) {
+          // Don't add insets if this looks like a calculated full-screen coordinate (x=0, y=0)
+          if (x == 0 && y == 0) {
+            params.leftMargin = x;
+            Log.d(
+              TAG,
+              "setPreviewSize: Full-screen mode - keeping x=0 without insets"
+            );
+          } else {
+            params.leftMargin = x + webViewLeftInset;
+            Log.d(
+              TAG,
+              "setPreviewSize: Positioned mode - x=" +
+              x +
+              " + inset=" +
+              webViewLeftInset +
+              " = " +
+              (x + webViewLeftInset)
+            );
+          }
+        }
+        if (y >= 0) {
+          // Don't add insets if this looks like a calculated full-screen coordinate (x=0, y=0)
+          if (x == 0 && y == 0) {
+            params.topMargin = y;
+            Log.d(
+              TAG,
+              "setPreviewSize: Full-screen mode - keeping y=0 without insets"
+            );
+          } else {
+            params.topMargin = y + webViewTopInset;
+            Log.d(
+              TAG,
+              "setPreviewSize: Positioned mode - y=" +
+              y +
+              " + inset=" +
+              webViewTopInset +
+              " = " +
+              (y + webViewTopInset)
+            );
+          }
+        }
+        if (width > 0) params.width = width;
+        if (height > 0) params.height = height;
+
+        previewContainer.setLayoutParams(params);
+        previewContainer.requestLayout();
+
+        Log.d(
+          TAG,
+          "setPreviewSize: Updated to " +
+          params.width +
+          "x" +
+          params.height +
+          " at (" +
+          params.leftMargin +
+          "," +
+          params.topMargin +
+          ")"
+        );
+
+        // Update session config to reflect actual layout
+        if (sessionConfig != null) {
+          String currentAspectRatio = sessionConfig.getAspectRatio();
+
+          // Calculate aspect ratio from actual dimensions if both width and height are provided
+          String calculatedAspectRatio = currentAspectRatio;
+          if (params.width > 0 && params.height > 0) {
+            // Always use larger dimension / smaller dimension for consistent comparison
+            float ratio =
+              Math.max(params.width, params.height) /
+              (float) Math.min(params.width, params.height);
+            // Standard ratios: 16:9 ≈ 1.778, 4:3 ≈ 1.333
+            float ratio16_9 = 16f / 9f; // 1.778
+            float ratio4_3 = 4f / 3f; // 1.333
+
+            // Determine closest standard aspect ratio
+            if (Math.abs(ratio - ratio16_9) < Math.abs(ratio - ratio4_3)) {
+              calculatedAspectRatio = "16:9";
+            } else {
+              calculatedAspectRatio = "4:3";
+            }
+            Log.d(
+              TAG,
+              "setPreviewSize: Calculated aspect ratio from " +
+              params.width +
+              "x" +
+              params.height +
+              " = " +
+              calculatedAspectRatio +
+              " (normalized ratio=" +
+              ratio +
+              ")"
+            );
+          }
+
+          sessionConfig = new CameraSessionConfiguration(
+            sessionConfig.getDeviceId(),
+            sessionConfig.getPosition(),
+            params.leftMargin,
+            params.topMargin,
+            params.width,
+            params.height,
+            sessionConfig.getPaddingBottom(),
+            sessionConfig.getToBack(),
+            sessionConfig.getStoreToFile(),
+            sessionConfig.getEnableOpacity(),
+            sessionConfig.getEnableZoom(),
+            sessionConfig.getDisableExifHeaderStripping(),
+            sessionConfig.getDisableAudio(),
+            sessionConfig.getZoomFactor(),
+            calculatedAspectRatio,
+            sessionConfig.getGridMode(),
+            sessionConfig.getDisableFocusIndicator(),
+            sessionConfig.isVideoModeEnabled(),
+            sessionConfig.getVideoQuality()
+          );
+
+          // If aspect ratio changed due to size update, rebind camera
+          if (
+            isRunning &&
+            !Objects.equals(currentAspectRatio, calculatedAspectRatio)
+          ) {
+            Log.d(
+              TAG,
+              "setPreviewSize: Aspect ratio changed from " +
+              currentAspectRatio +
+              " to " +
+              calculatedAspectRatio +
+              ", rebinding camera"
+            );
+            bindCameraUseCases();
+
+            // Wait for camera rebinding to complete, then call callback
+            if (callback != null) {
+              previewContainer.post(() -> {
+                updateGridOverlayBounds();
+                previewContainer.post(callback);
+              });
+            } else {
+              previewContainer.post(() -> updateGridOverlayBounds());
+            }
+          } else {
+            // No camera rebinding needed, wait for layout to complete then call callback
+            previewContainer.post(() -> {
+              updateGridOverlayBounds();
+              if (callback != null) {
+                callback.run();
+              }
+            });
+          }
+        } else {
+          // No sessionConfig, just wait for layout then call callback
+          previewContainer.post(() -> {
+            updateGridOverlayBounds();
+            if (callback != null) {
+              callback.run();
+            }
+          });
+        }
+      } else {
+        Log.w(
+          TAG,
+          "setPreviewSize: Cannot set margins on layout params of type " +
+          layoutParams.getClass().getSimpleName()
+        );
+        // Fallback: just set width and height if specified
+        if (width > 0) layoutParams.width = width;
+        if (height > 0) layoutParams.height = height;
+        previewContainer.setLayoutParams(layoutParams);
+        previewContainer.requestLayout();
+
+        // Wait for layout then call callback
+        if (callback != null) {
+          previewContainer.post(callback);
+        }
+      }
+    });
+  }
+
+  private void updatePreviewLayoutForAspectRatio(String aspectRatio) {
+    updatePreviewLayoutForAspectRatio(aspectRatio, null, null);
+  }
+
+  private void updatePreviewLayoutForAspectRatio(
+    String aspectRatio,
+    Float x,
+    Float y
+  ) {
+    if (previewContainer == null || aspectRatio == null) return;
+
+    Log.d(
+      TAG,
+      "======================== UPDATE PREVIEW LAYOUT FOR ASPECT RATIO ========================"
+    );
+    Log.d(
+      TAG,
+      "Input parameters - aspectRatio: " +
+      aspectRatio +
+      ", x: " +
+      x +
+      ", y: " +
+      y
+    );
+
+    // Get comprehensive display information
+    WindowManager windowManager = (WindowManager) this.context.getSystemService(
+        Context.WINDOW_SERVICE
+      );
+    int screenWidthPx, screenHeightPx;
+    float density;
+
+    // Get density using DisplayMetrics (available on all API levels)
+    DisplayMetrics displayMetrics = new DisplayMetrics();
+    windowManager.getDefaultDisplay().getMetrics(displayMetrics);
+    density = displayMetrics.density;
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      // API 30+ (Android 11+) - use WindowMetrics for screen dimensions
+      WindowMetrics metrics = windowManager.getCurrentWindowMetrics();
+      Rect bounds = metrics.getBounds();
+      screenWidthPx = bounds.width();
+      screenHeightPx = bounds.height();
+    } else {
+      // API < 30 - use legacy DisplayMetrics for screen dimensions
+      screenWidthPx = displayMetrics.widthPixels;
+      screenHeightPx = displayMetrics.heightPixels;
+    }
+
+    // Get WebView dimensions
+    int webViewWidth = webView.getWidth();
+    int webViewHeight = webView.getHeight();
+
+    // Get current preview container info
+    ViewGroup.LayoutParams currentParams = previewContainer.getLayoutParams();
+    int currentWidth = currentParams != null ? currentParams.width : 0;
+    int currentHeight = currentParams != null ? currentParams.height : 0;
+    int currentX = 0;
+    int currentY = 0;
+    if (currentParams instanceof ViewGroup.MarginLayoutParams) {
+      ViewGroup.MarginLayoutParams marginParams =
+        (ViewGroup.MarginLayoutParams) currentParams;
+      currentX = marginParams.leftMargin;
+      currentY = marginParams.topMargin;
+    }
+
+    Log.d(
+      TAG,
+      "Screen dimensions: " +
+      screenWidthPx +
+      "x" +
+      screenHeightPx +
+      " pixels, density: " +
+      density
+    );
+    Log.d(TAG, "WebView dimensions: " + webViewWidth + "x" + webViewHeight);
+    Log.d(
+      TAG,
+      "Current preview position: " +
+      currentX +
+      "," +
+      currentY +
+      " size: " +
+      currentWidth +
+      "x" +
+      currentHeight
+    );
+
+    // Parse aspect ratio as width:height (e.g., 4:3 -> r=4/3)
+    String[] ratios = aspectRatio.split(":");
+    if (ratios.length != 2) {
+      Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio);
+      return;
+    }
+
+    try {
+      // Match iOS logic exactly
+      double ratioWidth = Double.parseDouble(ratios[0]);
+      double ratioHeight = Double.parseDouble(ratios[1]);
+      boolean isPortrait =
+        context.getResources().getConfiguration().orientation ==
+        Configuration.ORIENTATION_PORTRAIT;
+
+      Log.d(
+        TAG,
+        "Aspect ratio parsing - Original: " +
+        aspectRatio +
+        " (width=" +
+        ratioWidth +
+        ", height=" +
+        ratioHeight +
+        ")"
+      );
+      Log.d(
+        TAG,
+        "Device orientation: " + (isPortrait ? "PORTRAIT" : "LANDSCAPE")
+      );
+
+      // iOS: let ratio = !isPortrait ? ratioParts[0] / ratioParts[1] : ratioParts[1] / ratioParts[0]
+      double ratio = !isPortrait
+        ? (ratioWidth / ratioHeight)
+        : (ratioHeight / ratioWidth);
+
+      Log.d(
+        TAG,
+        "Computed ratio: " +
+        ratio +
+        " (iOS formula: " +
+        (!isPortrait ? "width/height" : "height/width") +
+        ")"
+      );
+
+      // Get available space from webview dimensions
+      int availableWidth = webViewWidth;
+      int availableHeight = webViewHeight;
+
+      Log.d(
+        TAG,
+        "Available space from WebView: " +
+        availableWidth +
+        "x" +
+        availableHeight
+      );
+
+      // Calculate position and size
+      int finalX, finalY, finalWidth, finalHeight;
+
+      if (x != null && y != null) {
+        // Manual positioning mode
+        int webViewTopInset = getWebViewTopInset();
+        int webViewLeftInset = getWebViewLeftInset();
+
+        Log.d(
+          TAG,
+          "Manual positioning mode - WebView insets: left=" +
+          webViewLeftInset +
+          ", top=" +
+          webViewTopInset
+        );
+
+        finalX = Math.max(
+          0,
+          Math.min(x.intValue() + webViewLeftInset, availableWidth)
+        );
+        finalY = Math.max(
+          0,
+          Math.min(y.intValue() + webViewTopInset, availableHeight)
+        );
+
+        // Calculate maximum available space from the given position
+        int maxWidth = availableWidth - finalX;
+        int maxHeight = availableHeight - finalY;
+
+        Log.d(
+          TAG,
+          "Max available space from position: " + maxWidth + "x" + maxHeight
+        );
+
+        // Calculate optimal size while maintaining aspect ratio within available space
+        finalWidth = maxWidth;
+        finalHeight = (int) (maxWidth / ratio);
+
+        if (finalHeight > maxHeight) {
+          // Height constraint is tighter, fit by height
+          finalHeight = maxHeight;
+          finalWidth = (int) (maxHeight * ratio);
+          Log.d(TAG, "Height-constrained sizing");
+        } else {
+          Log.d(TAG, "Width-limited sizing");
+        }
+
+        // Ensure final position stays within bounds
+        finalX = Math.max(0, Math.min(finalX, availableWidth - finalWidth));
+        finalY = Math.max(0, Math.min(finalY, availableHeight - finalHeight));
+      } else {
+        // Auto-center mode - match iOS behavior exactly
+        Log.d(TAG, "Auto-center mode");
+
+        // Calculate maximum size that fits the aspect ratio in available space
+        double maxWidthByHeight = availableHeight * ratio;
+        double maxHeightByWidth = availableWidth / ratio;
+
+        Log.d(
+          TAG,
+          "Aspect ratio calculations - maxWidthByHeight: " +
+          maxWidthByHeight +
+          ", maxHeightByWidth: " +
+          maxHeightByWidth
+        );
+
+        if (maxWidthByHeight <= availableWidth) {
+          // Height is the limiting factor
+          finalWidth = (int) maxWidthByHeight;
+          finalHeight = availableHeight;
+          Log.d(
+            TAG,
+            "Height-limited sizing: " + finalWidth + "x" + finalHeight
+          );
+        } else {
+          // Width is the limiting factor
+          finalWidth = availableWidth;
+          finalHeight = (int) maxHeightByWidth;
+          Log.d(TAG, "Width-limited sizing: " + finalWidth + "x" + finalHeight);
+        }
+
+        // Center the preview
+        finalX = (availableWidth - finalWidth) / 2;
+        finalY = (availableHeight - finalHeight) / 2;
+
+        Log.d(TAG, "Auto-centered position: x=" + finalX + ", y=" + finalY);
+      }
+
+      Log.d(
+        TAG,
+        "Final calculated layout - Position: (" +
+        finalX +
+        "," +
+        finalY +
+        "), Size: " +
+        finalWidth +
+        "x" +
+        finalHeight
+      );
+
+      // Calculate and log the actual displayed aspect ratio
+      double displayedRatio = (double) finalWidth / (double) finalHeight;
+      Log.d(
+        TAG,
+        "Displayed aspect ratio: " +
+        displayedRatio +
+        " (width=" +
+        finalWidth +
+        ", height=" +
+        finalHeight +
+        ")"
+      );
+
+      // Compare with expected ratio based on orientation
+      if (aspectRatio != null) {
+        String[] parts = aspectRatio.split(":");
+        if (parts.length == 2) {
+          double expectedDisplayRatio = isPortrait
+            ? (ratioHeight / ratioWidth)
+            : (ratioWidth / ratioHeight);
+          double difference = Math.abs(displayedRatio - expectedDisplayRatio);
+          Log.d(
+            TAG,
+            "Display ratio check - Expected: " +
+            expectedDisplayRatio +
+            ", Actual: " +
+            displayedRatio +
+            ", Difference: " +
+            difference +
+            " (tolerance should be < 0.01)"
+          );
+        }
+      }
+
+      // Update layout params
+      ViewGroup.LayoutParams layoutParams = previewContainer.getLayoutParams();
+      if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+        ViewGroup.MarginLayoutParams params =
+          (ViewGroup.MarginLayoutParams) layoutParams;
+        params.width = finalWidth;
+        params.height = finalHeight;
+        params.leftMargin = finalX;
+        params.topMargin = finalY;
+        previewContainer.setLayoutParams(params);
+        previewContainer.requestLayout();
+
+        Log.d(TAG, "Layout params applied successfully");
+
+        // Update grid overlay bounds after aspect ratio change
+        previewContainer.post(() -> {
+          Log.d(
+            TAG,
+            "Post-layout verification - Actual position: " +
+            previewContainer.getLeft() +
+            "," +
+            previewContainer.getTop() +
+            ", Actual size: " +
+            previewContainer.getWidth() +
+            "x" +
+            previewContainer.getHeight()
+          );
+          updateGridOverlayBounds();
+        });
+      }
+    } catch (NumberFormatException e) {
+      Log.e(TAG, "Invalid aspect ratio format: " + aspectRatio, e);
+    }
+
+    Log.d(
+      TAG,
+      "========================================================================================"
+    );
+  }
+
+  private int getWebViewTopInset() {
+    try {
+      if (webView != null) {
+        // Get the actual WebView position on screen
+        int[] location = new int[2];
+        webView.getLocationOnScreen(location);
+        return location[1]; // Y position is the top inset
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "Failed to get WebView top inset", e);
+    }
+    return 0;
+  }
+
+  private int getWebViewLeftInset() {
+    try {
+      if (webView != null) {
+        // Get the actual WebView position on screen for consistency
+        int[] location = new int[2];
+        webView.getLocationOnScreen(location);
+        return location[0]; // X position is the left inset
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "Failed to get WebView left inset", e);
+    }
+    return 0;
+  }
+
+  /**
+   * Get the current preview position and size in DP units (without insets)
+   */
+  public int[] getCurrentPreviewBounds() {
+    if (previewContainer == null) {
+      return new int[] { 0, 0, 0, 0 }; // x, y, width, height
+    }
+
+    // Get actual camera preview bounds (accounts for letterboxing/pillarboxing)
+    int actualX = getPreviewX();
+    int actualY = getPreviewY();
+    int actualWidth = getPreviewWidth();
+    int actualHeight = getPreviewHeight();
+
+    // Convert to logical pixels for JavaScript
+    DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+    float pixelRatio = metrics.density;
+
+    // Remove WebView insets from coordinates
+    int webViewTopInset = getWebViewTopInset();
+    int webViewLeftInset = getWebViewLeftInset();
+
+    // Use proper rounding strategy to avoid gaps:
+    // - For positions (x, y): floor to avoid gaps at top/left
+    // - For dimensions (width, height): ceil to avoid gaps at bottom/right
+    int x = Math.max(
+      0,
+      (int) Math.ceil((actualX - webViewLeftInset) / pixelRatio)
+    );
+    int y = Math.max(
+      0,
+      (int) Math.ceil((actualY - webViewTopInset) / pixelRatio)
+    );
+    int width = (int) Math.floor(actualWidth / pixelRatio);
+    int height = (int) Math.floor(actualHeight / pixelRatio);
+
+    // Debug logging to understand the blue line issue
+    Log.d(
+      TAG,
+      "getCurrentPreviewBounds DEBUG: " +
+      "actualBounds=(" +
+      actualX +
+      "," +
+      actualY +
+      "," +
+      actualWidth +
+      "x" +
+      actualHeight +
+      "), " +
+      "logicalBounds=(" +
+      x +
+      "," +
+      y +
+      "," +
+      width +
+      "x" +
+      height +
+      "), " +
+      "pixelRatio=" +
+      pixelRatio +
+      ", " +
+      "insets=(" +
+      webViewLeftInset +
+      "," +
+      webViewTopInset +
+      ")"
+    );
+
+    return new int[] { x, y, width, height };
+  }
+
+  private void updateGridOverlayBounds() {
+    if (gridOverlayView != null && previewView != null) {
+      // Get the actual camera bounds
+      Rect cameraBounds = getActualCameraBounds();
+
+      // Update the grid overlay with the camera bounds
+      gridOverlayView.setCameraBounds(cameraBounds);
+
+      Log.d(
+        TAG,
+        "updateGridOverlayBounds: Updated grid bounds to " +
+        cameraBounds.toString()
+      );
+    }
+  }
+
+  private void triggerAutoFocus() {
+    if (camera == null) {
+      return;
+    }
+
+    Log.d(TAG, "triggerAutoFocus: Triggering autofocus at center");
+
+    // Cancel any ongoing focus operation
+    if (currentFocusFuture != null && !currentFocusFuture.isDone()) {
+      Log.d(TAG, "triggerAutoFocus: Cancelling previous focus operation");
+      currentFocusFuture.cancel(true);
+    }
+
+    // Focus on the center of the view
+    int viewWidth = previewView.getWidth();
+    int viewHeight = previewView.getHeight();
+
+    if (viewWidth == 0 || viewHeight == 0) {
+      return;
+    }
+
+    // Create MeteringPoint at the center of the preview
+    MeteringPointFactory factory = previewView.getMeteringPointFactory();
+    MeteringPoint point = factory.createPoint(viewWidth / 2f, viewHeight / 2f);
+
+    // Create focus and metering action (persistent, no auto-cancel) to match iOS behavior
+    FocusMeteringAction action = new FocusMeteringAction.Builder(
+      point,
+      FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
+    )
+      .disableAutoCancel()
+      .build();
+
+    try {
+      currentFocusFuture = camera
+        .getCameraControl()
+        .startFocusAndMetering(action);
+      currentFocusFuture.addListener(
+        () -> {
+          try {
+            FocusMeteringResult result = currentFocusFuture.get();
+            Log.d(
+              TAG,
+              "triggerAutoFocus: Focus completed successfully: " +
+              result.isFocusSuccessful()
+            );
+          } catch (Exception e) {
+            // Handle cancellation gracefully - this is expected when rapid operations occur
+            if (
+              e.getMessage() != null &&
+              (e
+                  .getMessage()
+                  .contains("Cancelled by another startFocusAndMetering") ||
+                e.getMessage().contains("OperationCanceledException") ||
+                e
+                  .getClass()
+                  .getSimpleName()
+                  .contains("OperationCanceledException"))
+            ) {
+              Log.d(
+                TAG,
+                "triggerAutoFocus: Auto-focus was cancelled by a newer focus request"
+              );
+            } else {
+              Log.e(TAG, "triggerAutoFocus: Error during focus", e);
+            }
+          } finally {
+            // Clear the reference if this is still the current operation
+            if (currentFocusFuture != null && currentFocusFuture.isDone()) {
+              currentFocusFuture = null;
+            }
+          }
+        },
+        ContextCompat.getMainExecutor(context)
+      );
+    } catch (Exception e) {
+      currentFocusFuture = null;
+      Log.e(TAG, "triggerAutoFocus: Failed to trigger autofocus", e);
+    }
+  }
+
+  public void startRecordVideo() throws Exception {
+    if (videoCapture == null) {
+      throw new Exception("VideoCapture is not initialized");
+    }
+
+    if (currentRecording != null) {
+      throw new Exception("Video recording is already in progress");
+    }
+
+    // Create output file
+    String fileName = "video_" + System.currentTimeMillis() + ".mp4";
+    File outputDir = new File(
+      context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),
+      "CameraPreview"
+    );
+    if (!outputDir.exists()) {
+      outputDir.mkdirs();
+    }
+    currentVideoFile = new File(outputDir, fileName);
+
+    FileOutputOptions outputOptions = new FileOutputOptions.Builder(
+      currentVideoFile
+    ).build();
+
+    // Create recording event listener
+    androidx.core.util.Consumer<VideoRecordEvent> videoRecordEventListener =
+      videoRecordEvent -> {
+        if (videoRecordEvent instanceof VideoRecordEvent.Start) {
+          Log.d(TAG, "Video recording started");
+        } else if (videoRecordEvent instanceof VideoRecordEvent.Finalize) {
+          VideoRecordEvent.Finalize finalizeEvent =
+            (VideoRecordEvent.Finalize) videoRecordEvent;
+          handleRecordingFinalized(finalizeEvent);
+        }
+      };
+
+    // Start recording
+    if (sessionConfig != null && !sessionConfig.isDisableAudio()) {
+      currentRecording = videoCapture
+        .getOutput()
+        .prepareRecording(context, outputOptions)
+        .withAudioEnabled()
+        .start(
+          ContextCompat.getMainExecutor(context),
+          videoRecordEventListener
+        );
+    } else {
+      currentRecording = videoCapture
+        .getOutput()
+        .prepareRecording(context, outputOptions)
+        .start(
+          ContextCompat.getMainExecutor(context),
+          videoRecordEventListener
+        );
+    }
+
+    // Log the quality being used at the moment recording starts
+    if (currentVideoQualitySelector != null && camera != null) {
+      Quality resolved = resolveQualityForCamera(currentVideoQualitySelector, camera);
+      Log.i(TAG, "Starting video recording with quality: requested='" + (sessionConfig != null ? sessionConfig.getVideoQuality() : null) + "' resolved='" + qualityToString(resolved) + "'");
+    } else {
+      Log.i(TAG, "Starting video recording with quality: not available (video pipeline not initialized)");
+    }
+
+    Log.d(
+      TAG,
+      "Video recording started to: " + currentVideoFile.getAbsolutePath()
+    );
+  }
+
+  private void initializeVideoCapture() throws Exception {
+    if (isVideoCaptureInitializing) {
+      throw new Exception("VideoCapture initialization is already in progress");
+    }
+    if (cameraProvider == null || camera == null) {
+      throw new Exception("Camera is not initialized");
+    }
+
+    isVideoCaptureInitializing = true;
+
+    try {
+      // Get current rotation for video capture
+      int rotation = previewView != null && previewView.getDisplay() != null
+        ? previewView.getDisplay().getRotation()
+        : android.view.Surface.ROTATION_0;
+
+      // Setup VideoCapture with rotation and quality mapping
+      QualitySelector qualitySelector = buildQualitySelector(sessionConfig != null ? sessionConfig.getVideoQuality() : null);
+      Recorder recorder = new Recorder.Builder()
+        .setQualitySelector(qualitySelector)
+        .build();
+      videoCapture = VideoCapture.withOutput(recorder);
+      currentVideoQualitySelector = qualitySelector;
+
+      // Reuse the Preview use case we created during initial binding
+      Preview preview = previewUseCase;
+
+      // Rebind with video capture included
+      cameraProvider.unbindAll();
+      if (preview != null) {
+        // CRITICAL: Re-set the surface provider after unbinding
+        // Without this, the preview won't be connected to the surface and video won't be captured
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+        camera = cameraProvider.bindToLifecycle(
+          this,
+          currentCameraSelector,
+          preview,
+          imageCapture,
+          videoCapture
+        );
+
+        // Log resolved quality after binding
+        Quality resolved = resolveQualityForCamera(currentVideoQualitySelector, camera);
+        Log.i(TAG, "VideoCapture initialized with quality: requested='" + (sessionConfig != null ? sessionConfig.getVideoQuality() : null) + "' resolved='" + qualityToString(resolved) + "'");
+      } else {
+        // Shouldn't happen, but handle gracefully
+        throw new Exception("Preview use case not found");
+      }
+
+      Log.d(TAG, "VideoCapture initialized successfully");
+    } finally {
+      isVideoCaptureInitializing = false;
+    }
+  }
+
+  public void stopRecordVideo(VideoRecordingCallback callback) {
+    if (currentRecording == null) {
+      callback.onError("No video recording in progress");
+      return;
+    }
+
+    // Store the callback to use when recording is finalized
+    currentVideoCallback = callback;
+    currentRecording.stop();
+
+    Log.d(TAG, "Video recording stop requested");
+  }
+
+  private void handleRecordingFinalized(
+    VideoRecordEvent.Finalize finalizeEvent
+  ) {
+    if (!finalizeEvent.hasError()) {
+      Log.d(TAG, "Video recording completed successfully");
+      if (currentVideoCallback != null) {
+        String filePath = "file://" + currentVideoFile.getAbsolutePath();
+        currentVideoCallback.onSuccess(filePath);
+      }
+    } else {
+      Log.e(TAG, "Video recording failed: " + finalizeEvent.getError());
+      if (currentVideoCallback != null) {
+        currentVideoCallback.onError(
+          "Video recording failed: " + finalizeEvent.getError()
+        );
+      }
+    }
+
+    // Clean up
+    currentRecording = null;
+    currentVideoFile = null;
+    currentVideoCallback = null;
   }
 }
